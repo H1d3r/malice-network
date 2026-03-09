@@ -377,14 +377,22 @@ func (rpc *Server) DeleteWebsite(ctx context.Context, req *clientpb.CtrlPipeline
 	if err != nil {
 		return nil, err
 	}
-	listener.RemovePipeline(pipeline)
-	err = db.DeleteWebsite(req.Name)
-	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-		return nil, err
-	}
 
 	job, err := core.Jobs.GetByListener(req.Name, listenerID)
 	if err != nil {
+		if errors.Is(err, types.ErrNotFoundPipeline) {
+			job = &core.Job{
+				Name:     pipeline.Name,
+				Pipeline: pipeline,
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	listener.RemovePipeline(pipeline)
+	err = db.DeleteWebsite(req.Name)
+	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 		return nil, err
 	}
 
