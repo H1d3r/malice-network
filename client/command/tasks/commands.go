@@ -38,6 +38,11 @@ func Commands(con *core.Console) []*cobra.Command {
 		},
 	}
 
+	common.Bind("task_fetch", false, fetchTaskCmd, func(f *pflag.FlagSet) {
+		f.BoolP("file", "f", false, "output to file")
+		f.StringP("output", "o", "", "output file path")
+	})
+
 	fileCmd := &cobra.Command{
 		Use:   consts.CommandFiles,
 		Short: "List all downloaded files.",

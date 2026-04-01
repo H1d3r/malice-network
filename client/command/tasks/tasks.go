@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"fmt"
+	"os"
+	"encoding/json"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/client/core"
@@ -92,13 +94,37 @@ func fetchTaskByID(idStr string, con *core.Console) (*clientpb.TaskContexts, err
 }
 
 func TaskFetchCmd(cmd *cobra.Command, con *core.Console) error {
-	// 检查是否使用 --ids 参数
 	taskId := cmd.Flags().Arg(0)
+	toFile, _ := cmd.Flags().GetBool("file")
+	outputPath, _ := cmd.Flags().GetString("output")
+
 	tasksContext, err := fetchTaskByID(taskId, con)
 	if err != nil {
 		return err
 	}
+
 	sess := con.GetInteractive()
+
+	// 如果需要输出到文件
+	if toFile || outputPath != "" {
+		if outputPath == "" {
+			outputPath = fmt.Sprintf("task_%s.json", taskId)
+		}
+
+		data, err := json.MarshalIndent(tasksContext, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal task: %w", err)
+		}
+
+		if err := os.WriteFile(outputPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to write file: %w", err)
+		}
+
+		con.Log.Infof("Task output saved to: %s\n", outputPath)
+		return nil
+	}
+
+	// 默认输出到控制台
 	for _, spite := range tasksContext.Spites {
 		eachTask := &clientpb.TaskContext{
 			Task:    tasksContext.Task,
