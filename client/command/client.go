@@ -23,6 +23,7 @@ import (
 	"github.com/chainreactors/malice-network/client/command/listener"
 	"github.com/chainreactors/malice-network/client/command/mal"
 	"github.com/chainreactors/malice-network/client/command/mutant"
+	"github.com/chainreactors/malice-network/client/command/redacted"
 	"github.com/chainreactors/malice-network/client/command/pipeline"
 	"github.com/chainreactors/malice-network/client/command/sessions"
 	"github.com/chainreactors/malice-network/client/command/website"
@@ -35,7 +36,8 @@ func shouldStartConsole(cmd *cobra.Command) bool {
 func BindCommonCommands(bind BindFunc) {
 	bind(consts.GenericGroup,
 		generic.Commands,
-		ai.Commands)
+		ai.Commands,
+		redacted.Commands)
 
 	bind(consts.ManageGroup,
 		sessions.Commands,
