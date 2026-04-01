@@ -1,6 +1,3 @@
-//go:build bridge_agent_proto
-// +build bridge_agent_proto
-
 package llm
 
 import (

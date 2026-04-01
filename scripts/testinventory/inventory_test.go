@@ -44,13 +44,6 @@ func TestDetectLayer(t *testing.T) {
 			relDir:  "helper/utils/output",
 			want:    "unit",
 		},
-		{
-			name:    "other build tag",
-			path:    filepath.Join(root, "server", "internal", "llm", "provider_test.go"),
-			content: "//go:build bridge_agent_proto\n\npackage llm\n",
-			relDir:  "server/internal/llm",
-			want:    "tagged",
-		},
 	}
 
 	for _, tt := range tests {
