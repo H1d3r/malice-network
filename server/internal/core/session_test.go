@@ -2,14 +2,20 @@ package core
 
 import (
 	"context"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/consts"
+	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
+	"github.com/gookit/config/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // newTestSession creates a minimal Session for testing without DB/filesystem dependencies.
@@ -27,7 +33,7 @@ func newTestSession(id string, opts ...func(*Session)) *Session {
 				Jitter:     0.1,
 			},
 		},
-		responses:   &sync.Map{},
+		responses: &sync.Map{},
 	}
 	sess.Ctx, sess.Cancel = context.WithCancel(context.Background())
 	sess.SetLastCheckin(time.Now().Unix())
@@ -182,7 +188,100 @@ func TestSession_isAlived_NilSession(t *testing.T) {
 	}
 }
 
+func TestGetPacketLengthWithPipelineConfig(t *testing.T) {
+	withIsolatedListeners(t)
+	withIsolatedBroker(t)
+
+	config.Set(consts.ConfigMaxPacketLength, 10485760)
+	t.Cleanup(func() { config.Set(consts.ConfigMaxPacketLength, 0) })
+
+	listener := NewListener("test-lis", "10.0.0.1")
+	Listeners.Add(listener)
+	listener.AddPipeline(&clientpb.Pipeline{
+		Name:         "pipe-custom",
+		ListenerId:   "test-lis",
+		PacketLength: 2048,
+	})
+
+	sess := newTestSession("pkt-test")
+	sess.PipelineID = "pipe-custom"
+
+	got := sess.GetPacketLength()
+	if got != 2048 {
+		t.Fatalf("GetPacketLength() = %d, want 2048", got)
+	}
+}
+
+func TestGetPacketLengthFallsBackToGlobal(t *testing.T) {
+	withIsolatedListeners(t)
+	withIsolatedBroker(t)
+
+	config.Set(consts.ConfigMaxPacketLength, 10485760)
+	t.Cleanup(func() { config.Set(consts.ConfigMaxPacketLength, 0) })
+
+	listener := NewListener("test-lis2", "10.0.0.1")
+	Listeners.Add(listener)
+	listener.AddPipeline(&clientpb.Pipeline{
+		Name:       "pipe-default",
+		ListenerId: "test-lis2",
+	})
+
+	sess := newTestSession("pkt-fallback")
+	sess.PipelineID = "pipe-default"
+
+	got := sess.GetPacketLength()
+	if got != 10485760 {
+		t.Fatalf("GetPacketLength() = %d, want 10485760 (global default)", got)
+	}
+}
+
+func TestGetPacketLengthNoPipeline(t *testing.T) {
+	withIsolatedListeners(t)
+	withIsolatedBroker(t)
+
+	config.Set(consts.ConfigMaxPacketLength, 10485760)
+	t.Cleanup(func() { config.Set(consts.ConfigMaxPacketLength, 0) })
+
+	sess := newTestSession("pkt-nopipe")
+	sess.PipelineID = "nonexistent"
+
+	got := sess.GetPacketLength()
+	if got != 10485760 {
+		t.Fatalf("GetPacketLength() = %d, want 10485760 (global default)", got)
+	}
+}
+
 // ---------- Recover ----------
+
+type testServerStream struct {
+	ctx     context.Context
+	sendMsg func(m interface{}) error
+	recvMsg func(m interface{}) error
+}
+
+func (s *testServerStream) SetHeader(metadata.MD) error  { return nil }
+func (s *testServerStream) SendHeader(metadata.MD) error { return nil }
+func (s *testServerStream) SetTrailer(metadata.MD)       {}
+func (s *testServerStream) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return context.Background()
+}
+func (s *testServerStream) SendMsg(m interface{}) error {
+	if s.sendMsg != nil {
+		return s.sendMsg(m)
+	}
+	return nil
+}
+func (s *testServerStream) RecvMsg(m interface{}) error {
+	if s.recvMsg != nil {
+		return s.recvMsg(m)
+	}
+	return nil
+}
+
+var _ grpc.ServerStream = (*testServerStream)(nil)
 
 func TestSession_Recover_UsesCorrectKey(t *testing.T) {
 	sess := newTestSession("recover-1")
@@ -226,6 +325,62 @@ func TestSession_Recover_UsesCorrectKey(t *testing.T) {
 	_, ok = sess.GetResp(20)
 	if ok {
 		t.Fatal("finished task 20 should not have a response channel")
+	}
+}
+
+func TestSessionRequestWithStreamWriterReturnsErrorAfterSendFailure(t *testing.T) {
+	sess := newTestSession("stream-writer")
+	var sendCount atomic.Int32
+	streamErr := errors.New("stream down")
+	stream := &testServerStream{
+		sendMsg: func(m interface{}) error {
+			switch sendCount.Add(1) {
+			case 1:
+				return nil
+			default:
+				return streamErr
+			}
+		},
+	}
+
+	writer, respCh, err := sess.RequestWithStream(&clientpb.SpiteRequest{
+		Session: sess.ToProtobufLite(),
+		Task:    &clientpb.Task{TaskId: 9},
+		Spite:   &implantpb.Spite{Name: "start"},
+	}, stream, time.Second)
+	if err != nil {
+		t.Fatalf("RequestWithStream failed: %v", err)
+	}
+
+	if err := writer.Send(&implantpb.Spite{Name: "chunk-1"}); err != nil {
+		t.Fatalf("first writer.Send failed unexpectedly: %v", err)
+	}
+
+	deadline := time.After(2 * time.Second)
+	for {
+		err = writer.Err()
+		if errors.Is(err, streamErr) {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("writer did not record stream error, got %v", err)
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	if err := writer.Send(&implantpb.Spite{Name: "chunk-2"}); !errors.Is(err, streamErr) {
+		t.Fatalf("writer.Send error = %v, want %v", err, streamErr)
+	}
+
+	select {
+	case _, ok := <-respCh:
+		if ok {
+			t.Fatal("response channel should be closed after send failure")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for response channel to close")
 	}
 }
 

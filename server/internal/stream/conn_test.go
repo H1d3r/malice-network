@@ -59,6 +59,69 @@ func newAesCryptorPair(t *testing.T) (Cryptor, Cryptor) {
 	return enc, dec
 }
 
+func TestXorEncryptor_EncryptDecrypt(t *testing.T) {
+	key := []byte{0x0}
+	iv := []byte{0x0}
+	encryptor := NewXorEncryptor(key, iv)
+
+	plaintext := []byte("Hello, XOR encryption!")
+	reader := bytes.NewReader(plaintext)
+	writer := &bytes.Buffer{}
+
+	if err := encryptor.Encrypt(reader, writer); err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
+
+	ciphertext := writer.Bytes()
+	decReader := bytes.NewReader(ciphertext)
+	decWriter := &bytes.Buffer{}
+
+	if err := encryptor.Decrypt(decReader, decWriter); err != nil {
+		t.Fatalf("Decrypt failed: %v", err)
+	}
+
+	if !bytes.Equal(plaintext, decWriter.Bytes()) {
+		t.Fatalf("decrypted text does not match original, got: %s", decWriter.Bytes())
+	}
+}
+
+func TestAesCtrEncryptor_EncryptDecrypt(t *testing.T) {
+	key := [32]byte{
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+	}
+	iv := [16]byte{
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+	}
+
+	encryptor, err := NewAesCtrEncryptor(key, iv)
+	if err != nil {
+		t.Fatalf("failed to create AES encryptor: %v", err)
+	}
+
+	originalData := []byte("This is a secret message!")
+	reader := bytes.NewReader(originalData)
+	writer := &bytes.Buffer{}
+
+	if err := encryptor.Encrypt(reader, writer); err != nil {
+		t.Fatalf("failed to encrypt: %v", err)
+	}
+
+	decReader := bytes.NewReader(writer.Bytes())
+	decWriter := &bytes.Buffer{}
+
+	if err := encryptor.Decrypt(decReader, decWriter); err != nil {
+		t.Fatalf("failed to decrypt: %v", err)
+	}
+
+	if !bytes.Equal(originalData, decWriter.Bytes()) {
+		t.Fatalf("decrypted data does not match original, got: %s", decWriter.Bytes())
+	}
+}
+
 // TestCryptoConn_WriteRead_XOR_RoundTrip verifies XOR encrypt-then-decrypt round trip over net.Pipe.
 func TestCryptoConn_WriteRead_XOR_RoundTrip(t *testing.T) {
 	t.Parallel()

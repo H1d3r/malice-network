@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -181,16 +182,16 @@ func TestWebsite404ForMissingContent(t *testing.T) {
 
 func TestWebsiteContentTypeHeaders(t *testing.T) {
 	_, baseURL := testWebsite(t, "/", map[string]testContent{
-		"page.html":  {body: []byte("html"), contentType: "text/html"},
-		"style.css":  {body: []byte("css"), contentType: "text/css"},
-		"script.js":  {body: []byte("js"), contentType: "application/javascript"},
-		"logo.png":   {body: []byte("png"), contentType: "image/png"},
-		"noext":      {body: []byte("data"), contentType: ""},
+		"page.html": {body: []byte("html"), contentType: "text/html"},
+		"style.css": {body: []byte("css"), contentType: "text/css"},
+		"script.js": {body: []byte("js"), contentType: "application/javascript"},
+		"logo.png":  {body: []byte("png"), contentType: "image/png"},
+		"noext":     {body: []byte("data"), contentType: ""},
 	})
 
 	cases := []struct {
-		path    string
-		wantCT  string
+		path   string
+		wantCT string
 	}{
 		{"/page.html", "text/html"},
 		{"/style.css", "text/css"},
@@ -399,6 +400,37 @@ func TestWebsiteBasicAuthWrongCredentials(t *testing.T) {
 	status, _, _ = httpGetWithAuth(t, baseURL+"/secret.html", "wrong", "pass123")
 	if status != 401 {
 		t.Fatalf("wrong-user status = %d, want 401", status)
+	}
+}
+
+func TestWebsiteCheckAuthRejectsUnauthorizedHeadRequest(t *testing.T) {
+	web := &Website{defaultAuth: "admin:pass123"}
+	req := httptest.NewRequest(http.MethodHead, "http://example.com/secret.html", nil)
+	resp := httptest.NewRecorder()
+
+	allowed := web.checkAuth("", resp, req)
+	if allowed {
+		t.Fatal("checkAuth allowed request without credentials, want rejection")
+	}
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("status code = %d, want %d", resp.Code, http.StatusUnauthorized)
+	}
+	if got := resp.Header().Get("WWW-Authenticate"); got == "" {
+		t.Fatal("WWW-Authenticate header = empty, want auth challenge")
+	}
+}
+
+func TestWebsiteCheckAuthAllowsNoneOverride(t *testing.T) {
+	web := &Website{defaultAuth: "admin:pass123"}
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/public.html", nil)
+	resp := httptest.NewRecorder()
+
+	allowed := web.checkAuth("none", resp, req)
+	if !allowed {
+		t.Fatal("checkAuth denied explicit none override, want allowed")
+	}
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", resp.Code, http.StatusOK)
 	}
 }
 
