@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"os"
-	stdpath "path"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +17,6 @@ import (
 	"github.com/chainreactors/malice-network/helper/utils/output"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/testsupport"
-	"google.golang.org/grpc/metadata"
 )
 
 type mockRPCFixture struct {
@@ -32,68 +30,22 @@ type mockRPCFixture struct {
 func newMockRPCFixture(t *testing.T) *mockRPCFixture {
 	t.Helper()
 
-	h := testsupport.NewControlPlaneHarness(t)
-	mock := testsupport.NewMockImplant(t, h, h.NewTCPPipeline(t, "mock-implant-common-pipe"))
-	lib := testsupport.NewMockScenarioLibrary()
-	lib.Install(mock)
-	if err := mock.Start(); err != nil {
-		t.Fatalf("mock implant start failed: %v", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	conn, err := h.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect failed: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = conn.Close()
-	})
-
+	base := testsupport.NewMockRPCFixture(t, "mock-implant-common-pipe")
 	return &mockRPCFixture{
-		h:    h,
-		mock: mock,
-		lib:  lib,
-		rpc:  clientrpc.NewMaliceRPCClient(conn),
-		session: metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
-			"session_id", mock.SessionID,
-			"callee", consts.CalleeCMD,
-		)),
+		h:       base.H,
+		mock:    base.Mock,
+		lib:     base.Lib,
+		rpc:     base.RPC,
+		session: base.Session,
 	}
 }
 
 func waitTaskFinish(t *testing.T, rpc clientrpc.MaliceRPCClient, sessionID string, taskID uint32) *clientpb.TaskContext {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	content, err := rpc.WaitTaskFinish(ctx, &clientpb.Task{
-		SessionId: sessionID,
-		TaskId:    taskID,
-	})
-	if err != nil {
-		t.Fatalf("WaitTaskFinish(%d) failed: %v", taskID, err)
-	}
-	if content == nil || content.Task == nil || content.Spite == nil {
-		t.Fatalf("WaitTaskFinish(%d) returned incomplete content: %#v", taskID, content)
-	}
-	return content
+	return testsupport.WaitTaskFinish(t, rpc, sessionID, taskID)
 }
 
 func waitModuleRequest(t *testing.T, mock *testsupport.MockImplant, module string, before int) *clientpb.SpiteRequest {
-	t.Helper()
-
-	testsupport.WaitForCondition(t, 5*time.Second, func() bool {
-		return len(mock.RequestsByName(module)) >= before+1
-	}, "mock implant request "+module)
-
-	requests := mock.RequestsByName(module)
-	if len(requests) <= before {
-		t.Fatalf("no new request for %s after wait", module)
-	}
-	return requests[before]
+	return testsupport.WaitModuleRequest(t, mock, module, before)
 }
 
 func requireModule(t *testing.T, modules []string, want string) {
@@ -117,18 +69,7 @@ func requireAddon(t *testing.T, addons []*implantpb.Addon, want string) {
 }
 
 func normalizePath(p string) string {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return ""
-	}
-	// Normalise to forward slashes for path.Clean, then back to backslashes.
-	p = strings.ReplaceAll(p, `\`, "/")
-	p = stdpath.Clean(p)
-	p = strings.ReplaceAll(p, "/", `\`)
-	if len(p) == 2 && strings.HasSuffix(p, ":") {
-		p += `\`
-	}
-	return strings.ToLower(p)
+	return testsupport.NormalizeWindowsPath(p)
 }
 
 func requireFileInfo(t *testing.T, files []*implantpb.FileInfo, want string) {

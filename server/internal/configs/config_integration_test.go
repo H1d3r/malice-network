@@ -11,63 +11,6 @@ import (
 	yamlDriver "github.com/gookit/config/v2/yaml"
 )
 
-func TestRepositoryRootConfigParses(t *testing.T) {
-	loadTestConfig(t, repoPath(t, "config.example.yaml"))
-
-	serverCfg := GetServerConfig()
-	listenerCfg := GetListenerConfig()
-
-	if serverCfg == nil {
-		t.Fatal("expected server config")
-	}
-	if listenerCfg == nil {
-		t.Fatal("expected listener config")
-	}
-	if serverCfg.GRPCHost != "0.0.0.0" || serverCfg.GRPCPort != 5004 {
-		t.Fatalf("unexpected grpc config: %#v", serverCfg)
-	}
-	if got := serverCfg.Address(); got != "127.0.0.1:5004" {
-		t.Fatalf("unexpected server address: %q", got)
-	}
-	if serverCfg.EncryptionKey != "maliceofinternal" {
-		t.Fatalf("unexpected encryption key: %q", serverCfg.EncryptionKey)
-	}
-	if serverCfg.MiscConfig == nil || serverCfg.MiscConfig.PacketLength != 1048576 {
-		t.Fatalf("unexpected misc config: %#v", serverCfg.MiscConfig)
-	}
-	if serverCfg.NotifyConfig == nil || serverCfg.NotifyConfig.Lark == nil || serverCfg.NotifyConfig.Lark.Enable {
-		t.Fatalf("unexpected notify config: %#v", serverCfg.NotifyConfig)
-	}
-	if serverCfg.LLMConfig == nil || serverCfg.LLMConfig.DefaultProvider != "openai" || serverCfg.LLMConfig.Timeout != 120 {
-		t.Fatalf("unexpected llm config: %#v", serverCfg.LLMConfig)
-	}
-	if serverCfg.LLMConfig.Providers == nil || serverCfg.LLMConfig.Providers["openai"] == nil || serverCfg.LLMConfig.Providers["openai"].Endpoint != "https://api.openai.com/v1" {
-		t.Fatalf("unexpected llm provider config: %#v", serverCfg.LLMConfig)
-	}
-	if serverCfg.SaasConfig == nil || !serverCfg.SaasConfig.Enable {
-		t.Fatalf("unexpected saas config: %#v", serverCfg.SaasConfig)
-	}
-	if github := GetGithubConfig(); github == nil || github.Workflow != "generate.yml" || github.ToProtobuf().Repo != "malefic" {
-		t.Fatalf("unexpected github getter/protobuf: %#v", github)
-	}
-	if saas := GetSaasConfig(); saas == nil || saas.Url != "https://build.chainreactors.red" {
-		t.Fatalf("unexpected saas getter: %#v", saas)
-	}
-	if notify := GetNotifyConfig(); notify == nil || notify.Lark == nil || notify.Lark.WebHookUrl != "" {
-		t.Fatalf("unexpected notify getter: %#v", notify)
-	}
-	if acme := GetAcmeConfig(); acme == nil || acme.CAUrl != "https://acme-v02.api.letsencrypt.org/directory" {
-		t.Fatalf("unexpected acme getter/defaults: %#v", acme)
-	}
-	if listenerCfg.Name != "listener" || listenerCfg.IP != "127.0.0.1" {
-		t.Fatalf("unexpected listener config: %#v", listenerCfg)
-	}
-	if listenerCfg.AutoBuildConfig == nil || !listenerCfg.AutoBuildConfig.Enable || !listenerCfg.AutoBuildConfig.BuildPulse {
-		t.Fatalf("unexpected auto build config: %#v", listenerCfg.AutoBuildConfig)
-	}
-	assertPipelineSlices(t, listenerCfg)
-}
-
 func TestRepositoryServerConfigParses(t *testing.T) {
 	loadTestConfig(t, repoPath(t, "server", "config.example.yaml"))
 

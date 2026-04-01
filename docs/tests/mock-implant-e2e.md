@@ -124,10 +124,9 @@ first, then decide whether the mock or the implant is wrong.
 
 The current mock-implant E2E regression tests are:
 
-- `server/mock_implant_task_e2e_test.go`
+- `server/mock_implant_transport_e2e_test.go`
 - `server/mock_implant_common_rpc_e2e_test.go`
-- `server/mock_implant_state_e2e_test.go`
-- `server/mock_implant_lifecycle_edge_e2e_test.go`
+- `server/mock_implant_runtime_e2e_test.go`
 
 They now prove that:
 

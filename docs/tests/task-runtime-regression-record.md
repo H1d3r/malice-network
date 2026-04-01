@@ -215,10 +215,9 @@ The following tests were added:
 - `server/rpc/rpc_task_recovery_test.go`
   - `RecoverSession(...)` restores runtime task wiring for recovered tasks
   - `GetOrRecover(...)` binds recovered task contexts to the owning session lifecycle
-- `server/mock_implant_task_e2e_test.go`
+- `server/mock_implant_runtime_e2e_test.go`
   - `Sleep` proves single-response task completion over the real listener stream
   - realtime `Execute` proves multi-callback `WaitTaskContent` and final streaming task state
-- `server/mock_implant_lifecycle_edge_e2e_test.go`
   - dead sweep keeps a pending single-response task alive until the delayed callback arrives
   - dead sweep keeps a streaming task alive after partial output and allows the final callback to finish it
   - idle dead sessions are removed from runtime memory and recovered again by a real implant `Checkin`

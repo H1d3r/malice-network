@@ -144,8 +144,7 @@ Main implementation files:
 
 The existing mock state suites that the real tests were derived from:
 
-- [server/mock_implant_state_e2e_test.go](/D:/Programing/go/chainreactors/malice-network/server/mock_implant_state_e2e_test.go)
-- [server/mock_implant_lifecycle_edge_e2e_test.go](/D:/Programing/go/chainreactors/malice-network/server/mock_implant_lifecycle_edge_e2e_test.go)
+- [server/mock_implant_runtime_e2e_test.go](/D:/Programing/go/chainreactors/malice-network/server/mock_implant_runtime_e2e_test.go)
 
 ## Prerequisites
 
