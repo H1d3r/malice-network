@@ -13,7 +13,6 @@ import (
 	"github.com/chainreactors/IoM-go/proto/services/clientrpc"
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/malice-network/client/core"
-	"github.com/chainreactors/malice-network/helper/utils/output"
 	"github.com/kballard/go-shellquote"
 	"google.golang.org/protobuf/proto"
 
@@ -183,7 +182,17 @@ func Register(con *core.Console) {
 		},
 		"",
 		nil,
-		output.ParseResponse,
+		func(ctx *clientpb.TaskContext) (interface{}, error) {
+			if ctx == nil || ctx.Spite == nil {
+				return nil, fmt.Errorf("no response")
+			}
+			resp := ctx.Spite.GetResponse()
+			if resp != nil {
+				con.Log.Infof("%s\n", resp.GetOutput())
+				return resp.GetOutput(), nil
+			}
+			return nil, fmt.Errorf("no response")
+		},
 		nil,
 	)
 
