@@ -3,14 +3,14 @@ package tasks
 import (
 	"fmt"
 	"os"
-	"encoding/json"
+	"strconv"
+
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/chainreactors/tui"
 	"github.com/evertras/bubble-table/table"
 	"github.com/spf13/cobra"
-	"strconv"
 )
 
 func GetTasksCmd(cmd *cobra.Command, con *core.Console) error {
@@ -108,15 +108,24 @@ func TaskFetchCmd(cmd *cobra.Command, con *core.Console) error {
 	// 如果需要输出到文件
 	if toFile || outputPath != "" {
 		if outputPath == "" {
-			outputPath = fmt.Sprintf("task_%s.json", taskId)
+			outputPath = fmt.Sprintf("task_%s.txt", taskId)
 		}
 
-		data, err := json.MarshalIndent(tasksContext, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal task: %w", err)
+		var rendered []byte
+		for _, spite := range tasksContext.Spites {
+			eachTask := &clientpb.TaskContext{
+				Task:    tasksContext.Task,
+				Session: tasksContext.Session,
+				Spite:   spite,
+			}
+			text, err := core.RenderTaskOutput(eachTask)
+			if err != nil {
+				return fmt.Errorf("failed to render task output: %w", err)
+			}
+			rendered = append(rendered, []byte(text+"\n")...)
 		}
 
-		if err := os.WriteFile(outputPath, data, 0644); err != nil {
+		if err := os.WriteFile(outputPath, rendered, 0644); err != nil {
 			return fmt.Errorf("failed to write file: %w", err)
 		}
 

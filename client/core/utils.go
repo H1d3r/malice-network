@@ -133,7 +133,7 @@ func getLatestTaskID(con *Console, sessionID string) (uint32, bool, error) {
 	return latest, true, nil
 }
 
-func renderTaskOutput(taskCtx *clientpb.TaskContext) (string, error) {
+func RenderTaskOutput(taskCtx *clientpb.TaskContext) (string, error) {
 	if taskCtx == nil || taskCtx.Task == nil {
 		return "", fmt.Errorf("task context is nil")
 	}
@@ -242,7 +242,7 @@ func executeCommandWithTaskWait(con *Console, command, sessionID, callee string)
 		return "", err
 	}
 
-	rendered, err := renderTaskOutput(taskCtx)
+	rendered, err := RenderTaskOutput(taskCtx)
 	if err != nil {
 		return "", err
 	}
