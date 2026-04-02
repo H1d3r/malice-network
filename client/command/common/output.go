@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/spf13/cobra"

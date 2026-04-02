@@ -11,6 +11,8 @@ import (
 	"github.com/chainreactors/tui"
 	"github.com/evertras/bubble-table/table"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func GetTasksCmd(cmd *cobra.Command, con *core.Console) error {
@@ -100,6 +102,17 @@ func TaskFetchCmd(cmd *cobra.Command, con *core.Console) error {
 
 	tasksContext, err := fetchTaskByID(taskId, con)
 	if err != nil {
+		// 检查是否是 NotFound 错误
+		if status.Code(err) == codes.NotFound {
+			// 尝试从任务列表中查找
+			taskIdNum, _ := strconv.ParseUint(taskId, 10, 32)
+			if task := findTaskInList(con, uint32(taskIdNum)); task != nil {
+				if !task.Finished {
+					return fmt.Errorf("task %s is still running, no output available yet (progress: %d/%d)",
+						taskId, task.Cur, task.Total)
+				}
+			}
+		}
 		return err
 	}
 
@@ -143,6 +156,23 @@ func TaskFetchCmd(cmd *cobra.Command, con *core.Console) error {
 		core.HandlerTask(sess, sess.Log, eachTask, nil, consts.CalleeCMD, true)
 	}
 
+	return nil
+}
+
+func findTaskInList(con *core.Console, taskId uint32) *clientpb.Task {
+	session := con.GetInteractive()
+	tasks, err := con.Rpc.GetTasks(session.Context(), &clientpb.TaskRequest{
+		SessionId: session.SessionId,
+		All:       true,
+	})
+	if err != nil {
+		return nil
+	}
+	for _, task := range tasks.GetTasks() {
+		if task.TaskId == taskId {
+			return task
+		}
+	}
 	return nil
 }
 
