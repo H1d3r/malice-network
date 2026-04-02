@@ -13,6 +13,7 @@ import (
 	"github.com/chainreactors/IoM-go/proto/services/clientrpc"
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/malice-network/client/core"
+	"github.com/chainreactors/malice-network/helper/utils/output"
 	"github.com/kballard/go-shellquote"
 	"google.golang.org/protobuf/proto"
 
@@ -163,6 +164,40 @@ func ExecuteModule(rpc clientrpc.MaliceRPCClient, sess *client.Session, spite *i
 }
 
 func Register(con *core.Console) {
+	// execute_request: send a Body::Request to any dynamically loaded implant module
+	con.RegisterImplantFunc(
+		"execute_request",
+		func(rpc clientrpc.MaliceRPCClient, sess *client.Session, moduleName string, args []string) (*clientpb.Task, error) {
+			return rpc.ExecuteModule(sess.Context(), &implantpb.ExecuteModuleRequest{
+				Spite: &implantpb.Spite{
+					Name: moduleName,
+					Body: &implantpb.Spite_Request{
+						Request: &implantpb.Request{
+							Name: moduleName,
+							Args: args,
+						},
+					},
+				},
+				Expect: "response",
+			})
+		},
+		"",
+		nil,
+		output.ParseResponse,
+		nil,
+	)
+
+	con.AddCommandFuncHelper(
+		"execute_request",
+		"execute_request",
+		`execute_request(active(), "module_name", {"arg1", "key=value"})`,
+		[]string{
+			"session: special session",
+			"module_name: target module name",
+			"args: string array of arguments",
+		},
+		[]string{"task"})
+
 	con.RegisterServerFunc("console", func(con *core.Console) *core.Console {
 		return con
 	}, nil)
