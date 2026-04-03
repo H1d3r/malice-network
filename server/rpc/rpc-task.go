@@ -139,6 +139,66 @@ func getAllTaskContextsFromDisk(sess *core.Session, task *core.Task) (*clientpb.
 	}, nil
 }
 
+// getTaskContextFromDB fetches task context from DB + disk when session is not in memory.
+func getTaskContextFromDB(sessionID string, taskID uint32, index int32) (*clientpb.TaskContext, error) {
+	dbSess, err := db.FindSession(sessionID)
+	if err != nil || dbSess == nil {
+		return nil, types.ErrNotFoundSession
+	}
+	dbTask, err := db.GetTaskBySessionAndSeq(sessionID, taskID)
+	if err != nil {
+		return nil, types.ErrNotFoundTask
+	}
+	entries, err := readTaskSpitesFromDisk(sessionID, dbTask.Seq)
+	if err != nil || len(entries) == 0 {
+		return nil, types.ErrNotFoundTaskContent
+	}
+	var spite *implantpb.Spite
+	if index == -1 {
+		spite = entries[len(entries)-1].Spite
+	} else {
+		for _, e := range entries {
+			if e.Index == int(index) {
+				spite = e.Spite
+				break
+			}
+		}
+	}
+	if spite == nil {
+		return nil, types.ErrNotFoundTaskContent
+	}
+	return &clientpb.TaskContext{
+		Task:    dbTask.ToProtobuf(),
+		Session: dbSess.ToProtobuf(),
+		Spite:   spite,
+	}, nil
+}
+
+// getAllTaskContextFromDB fetches all task contexts from DB + disk when session is not in memory.
+func getAllTaskContextFromDB(sessionID string, taskID uint32) (*clientpb.TaskContexts, error) {
+	dbSess, err := db.FindSession(sessionID)
+	if err != nil || dbSess == nil {
+		return nil, types.ErrNotFoundSession
+	}
+	dbTask, err := db.GetTaskBySessionAndSeq(sessionID, taskID)
+	if err != nil {
+		return nil, types.ErrNotFoundTask
+	}
+	entries, err := readTaskSpitesFromDisk(sessionID, dbTask.Seq)
+	if err != nil || len(entries) == 0 {
+		return nil, types.ErrNotFoundTaskContent
+	}
+	spites := make([]*implantpb.Spite, 0, len(entries))
+	for _, e := range entries {
+		spites = append(spites, e.Spite)
+	}
+	return &clientpb.TaskContexts{
+		Task:    dbTask.ToProtobuf(),
+		Session: dbSess.ToProtobuf(),
+		Spites:  spites,
+	}, nil
+}
+
 func getTaskContext(sess *core.Session, task *core.Task, index int32) (*clientpb.TaskContext, error) {
 	var msg *implantpb.Spite
 	var ok bool
@@ -174,7 +234,12 @@ func (rpc *Server) GetTasks(ctx context.Context, req *clientpb.TaskRequest) (*cl
 	} else {
 		sess, err := core.Sessions.Get(req.SessionId)
 		if err != nil {
-			return nil, types.ErrNotFoundSession
+			// Fallback to DB when session is not in memory (e.g., dead session)
+			modelTasks, dbErr := db.ListTasksBySession(req.SessionId)
+			if dbErr != nil {
+				return nil, types.ErrNotFoundSession
+			}
+			return modelTasks.ToProtobuf(), nil
 		}
 		return sess.Tasks.ToProtobuf(), nil
 	}
@@ -198,7 +263,7 @@ func (rpc *Server) GetTaskContent(ctx context.Context, req *clientpb.Task) (*cli
 	}
 	sess, err := core.Sessions.Get(req.SessionId)
 	if err != nil {
-		return nil, types.ErrNotFoundSession
+		return getTaskContextFromDB(req.SessionId, req.TaskId, req.Need)
 	}
 	task := sess.Tasks.GetOrRecover(sess, req.TaskId)
 	if task == nil {
@@ -217,7 +282,8 @@ func (rpc *Server) WaitTaskContent(ctx context.Context, req *clientpb.Task) (*cl
 	}
 	sess, err := core.Sessions.Get(req.SessionId)
 	if err != nil {
-		return nil, types.ErrNotFoundSession
+		// Session not in memory (dead), try DB+disk directly
+		return getTaskContextFromDB(req.SessionId, req.TaskId, req.Need)
 	}
 	task := sess.Tasks.GetOrRecover(sess, req.TaskId)
 	if task == nil {
@@ -269,7 +335,8 @@ func (rpc *Server) WaitTaskFinish(ctx context.Context, req *clientpb.Task) (*cli
 	}
 	sess, err := core.Sessions.Get(req.SessionId)
 	if err != nil {
-		return nil, types.ErrNotFoundSession
+		// Session not in memory (dead), try DB+disk directly
+		return getTaskContextFromDB(req.SessionId, req.TaskId, -1)
 	}
 	task := sess.Tasks.GetOrRecover(sess, req.TaskId)
 	if task == nil {
@@ -309,7 +376,7 @@ func (rpc *Server) GetAllTaskContent(ctx context.Context, req *clientpb.Task) (*
 	}
 	sess, err := core.Sessions.Get(req.SessionId)
 	if err != nil {
-		return nil, types.ErrNotFoundSession
+		return getAllTaskContextFromDB(req.SessionId, req.TaskId)
 	}
 	task := sess.Tasks.GetOrRecover(sess, req.TaskId)
 	if task == nil {

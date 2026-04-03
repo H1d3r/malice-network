@@ -10,6 +10,7 @@ import (
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/server/internal/core"
+	"github.com/chainreactors/malice-network/server/internal/db"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"time"
@@ -67,8 +68,20 @@ func (rpc *Server) SpiteStream(stream listenerrpc.ListenerRPC_SpiteStreamServer)
 
 		sess, err := core.Sessions.Get(msg.SessionId)
 		if err != nil {
-			logs.Log.Warnf("session %s not found", msg.SessionId)
-			continue
+			// Session not in memory — try to recover from DB since the implant
+			// is actively sending data, meaning it's still alive.
+			dbSess, dbErr := db.FindSession(msg.SessionId)
+			if dbErr != nil || dbSess == nil {
+				logs.Log.Warnf("session %s not found in memory or DB", msg.SessionId)
+				continue
+			}
+			sess, err = core.RecoverSession(dbSess)
+			if err != nil {
+				logs.Log.Warnf("session %s recovery failed: %v", msg.SessionId, err)
+				continue
+			}
+			core.Sessions.Add(sess)
+			logs.Log.Importantf("session %s recovered from DB via SpiteStream", msg.SessionId)
 		}
 		sess.SetLastCheckin(time.Now().Unix())
 		if sess.MarkAlive() {

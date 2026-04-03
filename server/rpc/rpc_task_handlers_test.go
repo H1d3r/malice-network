@@ -3,14 +3,19 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/IoM-go/types"
+	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
+	"google.golang.org/protobuf/proto"
 )
 
 // ---------------------------------------------------------------------------
@@ -81,12 +86,19 @@ func TestGetTasks_EmptySessionID(t *testing.T) {
 
 func TestGetTasks_MissingSession(t *testing.T) {
 	_ = newRPCTestEnv(t)
-	_, err := (&Server{}).GetTasks(context.Background(), &clientpb.TaskRequest{
+	// Session not in memory, DB fallback returns empty task list (no error).
+	resp, err := (&Server{}).GetTasks(context.Background(), &clientpb.TaskRequest{
 		SessionId: "nonexistent",
 		All:       false,
 	})
-	if !errors.Is(err, types.ErrNotFoundSession) {
-		t.Fatalf("GetTasks(missing session) error = %v, want %v", err, types.ErrNotFoundSession)
+	if err != nil {
+		t.Fatalf("GetTasks(missing session) error = %v, want nil (DB fallback)", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response from DB fallback")
+	}
+	if len(resp.Tasks) != 0 {
+		t.Fatalf("expected 0 tasks, got %d", len(resp.Tasks))
 	}
 }
 
@@ -319,17 +331,20 @@ func TestGetTasks_SessionRemovedMidFlight(t *testing.T) {
 	// Remove session from memory.
 	core.Sessions.Remove(sess.ID)
 
-	// Request active-only tasks should now fail.
-	_, err := (&Server{}).GetTasks(context.Background(), &clientpb.TaskRequest{
+	// Request active-only tasks should now fallback to DB (no error, empty list).
+	resp, err := (&Server{}).GetTasks(context.Background(), &clientpb.TaskRequest{
 		SessionId: sess.ID,
 		All:       false,
 	})
-	if !errors.Is(err, types.ErrNotFoundSession) {
-		t.Fatalf("GetTasks after removal error = %v, want %v", err, types.ErrNotFoundSession)
+	if err != nil {
+		t.Fatalf("GetTasks after removal error = %v, want nil (DB fallback)", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response from DB fallback")
 	}
 
 	// All=true still works (DB path).
-	resp, err := (&Server{}).GetTasks(context.Background(), &clientpb.TaskRequest{
+	resp, err = (&Server{}).GetTasks(context.Background(), &clientpb.TaskRequest{
 		SessionId: sess.ID,
 		All:       true,
 	})
@@ -338,5 +353,182 @@ func TestGetTasks_SessionRemovedMidFlight(t *testing.T) {
 	}
 	if resp == nil {
 		t.Fatal("expected non-nil response from DB path")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DB Fallback: helpers
+// ---------------------------------------------------------------------------
+
+// writeTaskSpiteToDisk creates a task spite file on disk for testing DB fallback paths.
+func writeTaskSpiteToDisk(t testing.TB, sessionID string, taskSeq uint32, index int, spite *implantpb.Spite) {
+	t.Helper()
+	taskDir := filepath.Join(configs.ContextPath, sessionID, consts.TaskPath)
+	if err := os.MkdirAll(taskDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll task dir: %v", err)
+	}
+	data, err := proto.Marshal(spite)
+	if err != nil {
+		t.Fatalf("Marshal spite: %v", err)
+	}
+	fileName := fmt.Sprintf("%d_%d", taskSeq, index)
+	if err := os.WriteFile(filepath.Join(taskDir, fileName), data, 0o600); err != nil {
+		t.Fatalf("WriteFile task spite: %v", err)
+	}
+}
+
+// seedDBOnlyTask creates a session (saved to DB, removed from memory) with a task
+// and disk-persisted spite, returning the session ID and task seq.
+func seedDBOnlyTask(t testing.TB, env *rpcTestEnv, prefix string) (sessionID string, taskSeq uint32) {
+	t.Helper()
+	sessID := prefix + "-sess"
+	pipeID := prefix + "-pipe"
+	sess := env.seedSession(t, sessID, pipeID, true)
+
+	taskSeq = uint32(1)
+	taskPb := &clientpb.Task{
+		SessionId: sess.ID,
+		TaskId:    taskSeq,
+		Type:      "test-db-fallback",
+		Cur:       1,
+		Total:     1,
+	}
+	if err := db.AddTask(taskPb); err != nil {
+		t.Fatalf("AddTask: %v", err)
+	}
+
+	writeTaskSpiteToDisk(t, sess.ID, taskSeq, 0, &implantpb.Spite{
+		TaskId: taskSeq,
+		Status: &implantpb.Status{TaskId: taskSeq},
+	})
+
+	// Remove session from memory to simulate dead session.
+	core.Sessions.Remove(sess.ID)
+	return sess.ID, taskSeq
+}
+
+// ---------------------------------------------------------------------------
+// DB Fallback: GetTaskContent
+// ---------------------------------------------------------------------------
+
+func TestGetTaskContent_DBFallback(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sessID, taskSeq := seedDBOnlyTask(t, env, "gtc-dbfb")
+
+	resp, err := (&Server{}).GetTaskContent(context.Background(), &clientpb.Task{
+		SessionId: sessID,
+		TaskId:    taskSeq,
+		Need:      -1,
+	})
+	if err != nil {
+		t.Fatalf("GetTaskContent DB fallback error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if resp.Task == nil || resp.Task.TaskId != taskSeq {
+		t.Fatalf("expected task %d, got %v", taskSeq, resp.Task)
+	}
+	if resp.Session == nil || resp.Session.SessionId != sessID {
+		t.Fatalf("expected session %s, got %v", sessID, resp.Session)
+	}
+	if resp.Spite == nil {
+		t.Fatal("expected non-nil spite")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DB Fallback: GetAllTaskContent
+// ---------------------------------------------------------------------------
+
+func TestGetAllTaskContent_DBFallback(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sessID, taskSeq := seedDBOnlyTask(t, env, "gatc-dbfb")
+
+	resp, err := (&Server{}).GetAllTaskContent(context.Background(), &clientpb.Task{
+		SessionId: sessID,
+		TaskId:    taskSeq,
+	})
+	if err != nil {
+		t.Fatalf("GetAllTaskContent DB fallback error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if len(resp.Spites) != 1 {
+		t.Fatalf("expected 1 spite, got %d", len(resp.Spites))
+	}
+	if resp.Task == nil || resp.Task.TaskId != taskSeq {
+		t.Fatalf("expected task %d, got %v", taskSeq, resp.Task)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DB Fallback: WaitTaskContent
+// ---------------------------------------------------------------------------
+
+func TestWaitTaskContent_DBFallback(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sessID, taskSeq := seedDBOnlyTask(t, env, "wtc-dbfb")
+
+	resp, err := (&Server{}).WaitTaskContent(context.Background(), &clientpb.Task{
+		SessionId: sessID,
+		TaskId:    taskSeq,
+		Need:      -1,
+	})
+	if err != nil {
+		t.Fatalf("WaitTaskContent DB fallback error: %v", err)
+	}
+	if resp == nil || resp.Spite == nil {
+		t.Fatal("expected non-nil response with spite")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DB Fallback: WaitTaskFinish
+// ---------------------------------------------------------------------------
+
+func TestWaitTaskFinish_DBFallback(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sessID, taskSeq := seedDBOnlyTask(t, env, "wtf-dbfb")
+
+	resp, err := (&Server{}).WaitTaskFinish(context.Background(), &clientpb.Task{
+		SessionId: sessID,
+		TaskId:    taskSeq,
+	})
+	if err != nil {
+		t.Fatalf("WaitTaskFinish DB fallback error: %v", err)
+	}
+	if resp == nil || resp.Spite == nil {
+		t.Fatal("expected non-nil response with spite")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DB Fallback: no task on disk returns error
+// ---------------------------------------------------------------------------
+
+func TestGetTaskContent_DBFallback_NoContent(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sess := env.seedSession(t, "gtc-dbfb-nocontent", "gtc-dbfb-nocontent-pipe", true)
+
+	taskPb := &clientpb.Task{
+		SessionId: sess.ID,
+		TaskId:    1,
+		Type:      "test-no-content",
+	}
+	if err := db.AddTask(taskPb); err != nil {
+		t.Fatalf("AddTask: %v", err)
+	}
+
+	core.Sessions.Remove(sess.ID)
+
+	_, err := (&Server{}).GetTaskContent(context.Background(), &clientpb.Task{
+		SessionId: sess.ID,
+		TaskId:    1,
+		Need:      -1,
+	})
+	if !errors.Is(err, types.ErrNotFoundTaskContent) {
+		t.Fatalf("expected ErrNotFoundTaskContent, got %v", err)
 	}
 }

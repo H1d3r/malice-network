@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	errs "github.com/chainreactors/IoM-go/types"
@@ -69,7 +70,8 @@ func getTaskFromContext(req *clientpb.Context) (*core.Task, error) {
 
 	sess, err := core.Sessions.Get(sessionID)
 	if err != nil {
-		return nil, err
+		// Session not in memory (dead/offline), fall back to DB.
+		return getTaskFromDB(sessionID, req.Task.TaskId)
 	}
 
 	task := sess.Tasks.Get(req.Task.TaskId)
@@ -77,6 +79,37 @@ func getTaskFromContext(req *clientpb.Context) (*core.Task, error) {
 		return nil, errs.ErrNotFoundTask
 	}
 
+	return task, nil
+}
+
+// getTaskFromDB constructs a minimal core.Task from DB when session is not in memory.
+func getTaskFromDB(sessionID string, taskID uint32) (*core.Task, error) {
+	dbTask, err := db.GetTaskBySessionAndSeq(sessionID, taskID)
+	if err != nil {
+		return nil, errs.ErrNotFoundTask
+	}
+	task := core.FromTaskProtobuf(dbTask.ToProtobuf())
+	// Build a minimal Session so that context handlers (HandleScreenshot, etc.)
+	// can resolve the file path and bindResolvedTask can produce session metadata.
+	task.Session = &core.Session{
+		ID:             sessionID,
+		SessionContext: &client.SessionContext{},
+	}
+	// Try to enrich from DB; non-fatal if it fails.
+	if dbSess, err := db.FindSession(sessionID); err == nil && dbSess != nil {
+		task.Session.Target = dbSess.Target
+		task.Session.PipelineID = dbSess.PipelineID
+		task.Session.ListenerID = dbSess.ListenerID
+		task.Session.Name = dbSess.ProfileName
+		task.Session.Note = dbSess.Note
+		task.Session.Group = dbSess.GroupName
+		task.Session.Type = dbSess.Type
+		task.Session.RawID = dbSess.RawID
+		task.Session.CreatedAt = dbSess.CreatedAt
+		if dbSess.Data != nil {
+			task.Session.SessionContext = dbSess.Data
+		}
+	}
 	return task, nil
 }
 
