@@ -122,7 +122,6 @@ func PrintSessions(sessions map[string]*client.Session, con *core.Console, isAll
 				"Process":        processName,
 				"Sleep":          fmt.Sprintf("%s [%.1f%%]", session.Timer.Expression, session.Timer.Jitter*100),
 				"Last":           formatTimeDiff(session.LastCheckin, session.IsAlive),
-				"LastRaw":        fmt.Sprintf("%020d", session.LastCheckin),
 				"CreatedAt":      time.Unix(session.CreatedAt, 0).Format("2006-01-02 15:04"),
 			})
 		rowEntries = append(rowEntries, row)
@@ -140,10 +139,8 @@ func PrintSessions(sessions map[string]*client.Session, con *core.Console, isAll
 		table.NewColumn("PID", "PID", 7),
 		table.NewColumn("Sleep", "Sleep", 12),
 		table.NewColumn("Last", "Last", 8),
-		table.NewColumn("LastRaw", "", 0),
 		table.NewColumn("CreatedAt", "Created At", 16),
 	}, common.ShouldUseStaticOutput(con))
-	tableModel.SetAscSort("LastRaw")
 	tableModel.SetRows(rowEntries)
 	tableModel.SetMultiline()
 	tableModel.SetHandle(func() {
