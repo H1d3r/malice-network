@@ -15,17 +15,20 @@ func installTaskDBMocks() func() {
 	origGet := taskDBGetBySessionAndSeq
 	origUpdate := taskDBUpdate
 	origUpdateCur := taskDBUpdateCur
+	origUpdateTotal := taskDBUpdateTotal
 	origUpdateFinish := taskDBUpdateFinish
 
 	taskDBGetBySessionAndSeq = func(string, uint32) (*models.Task, error) { return nil, nil }
 	taskDBUpdate = func(*clientpb.Task) error { return nil }
 	taskDBUpdateCur = func(string, int) error { return nil }
+	taskDBUpdateTotal = func(string, int) error { return nil }
 	taskDBUpdateFinish = func(string) error { return nil }
 
 	return func() {
 		taskDBGetBySessionAndSeq = origGet
 		taskDBUpdate = origUpdate
 		taskDBUpdateCur = origUpdateCur
+		taskDBUpdateTotal = origUpdateTotal
 		taskDBUpdateFinish = origUpdateFinish
 	}
 }
@@ -241,5 +244,125 @@ func TestTask_ClosedFieldRaceSafe(t *testing.T) {
 
 	if !task.IsClosed() {
 		t.Fatal("task should be closed after Close()")
+	}
+}
+
+func TestUpdateTotalPersistsOnlyTotalField(t *testing.T) {
+	cleanup := installTaskDBMocks()
+	defer cleanup()
+
+	var (
+		persistedID    string
+		persistedTotal int
+		curWritten     bool
+	)
+	taskDBUpdateTotal = func(taskID string, total int) error {
+		persistedID = taskID
+		persistedTotal = total
+		return nil
+	}
+	// Ensure taskDBUpdate (which writes cur+total) is NOT called.
+	taskDBUpdate = func(pb *clientpb.Task) error {
+		curWritten = true
+		return nil
+	}
+
+	task := &Task{
+		Id:        5,
+		SessionId: "update-total-test",
+		Cur:       3,
+		Total:     1,
+	}
+
+	task.UpdateTotal(10)
+
+	if task.Total != 10 {
+		t.Fatalf("in-memory total = %d, want 10", task.Total)
+	}
+	if persistedID != task.TaskID() {
+		t.Fatalf("persisted task id = %q, want %q", persistedID, task.TaskID())
+	}
+	if persistedTotal != 10 {
+		t.Fatalf("persisted total = %d, want 10", persistedTotal)
+	}
+	if curWritten {
+		t.Fatal("UpdateTotal should not call taskDBUpdate (which writes cur)")
+	}
+}
+
+func TestUpdateTotalDoesNotRaceWithDone(t *testing.T) {
+	cleanup := installTaskDBMocks()
+	defer cleanup()
+
+	broker := newTestBroker()
+	oldBroker := EventBroker
+	EventBroker = broker
+	defer func() { EventBroker = oldBroker }()
+
+	sess := newTestSession("update-total-race")
+	sess.Ctx, sess.Cancel = context.WithCancel(context.Background())
+	defer sess.Cancel()
+
+	task := sess.NewTask("download", 1)
+
+	// Run UpdateTotal and Done concurrently.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		task.UpdateTotal(10)
+	}()
+	go func() {
+		defer wg.Done()
+		task.Done(&implantpb.Spite{TaskId: task.Id}, "chunk")
+	}()
+	wg.Wait()
+
+	cur, total := task.Progress()
+	if total != 10 {
+		t.Fatalf("total = %d, want 10", total)
+	}
+	if cur != 1 {
+		t.Fatalf("cur = %d, want 1", cur)
+	}
+}
+
+func TestFinishDoesNotOverwritePositiveTotal(t *testing.T) {
+	cleanup := installTaskDBMocks()
+	defer cleanup()
+
+	broker := newTestBroker()
+	oldBroker := EventBroker
+	EventBroker = broker
+	defer func() { EventBroker = oldBroker }()
+
+	sess := newTestSession("finish-positive-total")
+	task := &Task{
+		Id:        7,
+		Type:      "download",
+		SessionId: sess.ID,
+		Session:   sess,
+		Cur:       5,
+		Total:     10,
+		DoneCh:    make(chan bool, 1),
+	}
+	task.Ctx, task.Cancel = context.WithCancel(context.Background())
+	defer task.Cancel()
+
+	// taskDBUpdate should NOT be called when Total is already positive,
+	// because the `if t.Total < 0` branch in Finish() won't trigger.
+	var updateCalled bool
+	taskDBUpdate = func(pb *clientpb.Task) error {
+		updateCalled = true
+		return nil
+	}
+
+	task.Finish(&implantpb.Spite{TaskId: task.Id}, "done")
+
+	if task.Total != 10 {
+		t.Fatalf("total = %d, want 10 (should not be overwritten)", task.Total)
+	}
+	if updateCalled {
+		t.Fatal("Finish should not call taskDBUpdate when Total is already positive")
 	}
 }
