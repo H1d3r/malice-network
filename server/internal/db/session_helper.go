@@ -278,6 +278,13 @@ func UpdateTaskCur(taskID string, cur int) error {
 	return taskModel.UpdateCur(Session(), cur)
 }
 
+func UpdateTaskTotal(taskID string, total int) error {
+	taskModel := &models.Task{
+		ID: taskID,
+	}
+	return taskModel.UpdateTotal(Session(), total)
+}
+
 func UpdateTaskFinish(taskID string) error {
 	task, err := NewTaskQuery().WhereID(taskID).First()
 	if err != nil {

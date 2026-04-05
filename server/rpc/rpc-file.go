@@ -307,7 +307,7 @@ func (rpc *Server) Download(ctx context.Context, req *implantpb.DownloadRequest)
 		}
 		total := downloadChunkCount(int(resp.GetDownloadResponse().Size), greq.Session.GetPacketLength())
 		downloadAbs := resp.GetDownloadResponse()
-		greq.Task.Total = total
+		greq.Task.UpdateTotal(total)
 
 		finalPath, err := fileutils.SafeJoin(configs.ContextPath, filepath.Join(greq.Session.ID, consts.DownloadPath, downloadAbs.Checksum))
 		if err != nil {

@@ -26,6 +26,9 @@ var (
 	taskDBUpdateCur = func(taskID string, cur int) error {
 		return db.UpdateTaskCur(taskID, cur)
 	}
+	taskDBUpdateTotal = func(taskID string, total int) error {
+		return db.UpdateTaskTotal(taskID, total)
+	}
 	taskDBUpdateFinish = func(taskID string) error {
 		return db.UpdateTaskFinish(taskID)
 	}
@@ -216,6 +219,18 @@ func (t *Task) Publish(op string, spite *implantpb.Spite, msg string) {
 		Callee:    t.Callee,
 	})
 }
+
+// UpdateTotal sets the task's total count and persists only the total field to DB.
+// This avoids racing with Done() which updates cur independently.
+func (t *Task) UpdateTotal(total int) {
+	t.progressMu.Lock()
+	t.Total = total
+	t.progressMu.Unlock()
+	if err := taskDBUpdateTotal(t.TaskID(), total); err != nil {
+		logs.Log.Warnf("task %s: update total failed: %v", t.TaskID(), err)
+	}
+}
+
 func (t *Task) Done(spite *implantpb.Spite, msg string) {
 	t.progressMu.Lock()
 	t.Cur++
