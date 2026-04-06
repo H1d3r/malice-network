@@ -104,8 +104,10 @@ func (parser *MaleficParser) readHeader(conn io.ReadWriteCloser) (uint32, uint32
 	}
 	sessionId := ParseSid(header)
 	length := binary.LittleEndian.Uint32(header[MsgSessionEnd:])
-	if length > parser.maxPacketLen()+consts.KB*16 {
-		return 0, 0, fmt.Errorf("%w,expect: %d, recv: %d", types.ErrPacketTooLarge, parser.maxPacketLen(), length)
+	maxLen := parser.maxPacketLen()
+	if maxLen > 0 && length > maxLen+consts.KB*16 {
+		logs.Log.Warnf("[parser] large packet from session %x: %d bytes (limit %d), accepting anyway",
+			sessionId, length, maxLen)
 	}
 
 	return sessionId, length + 1, nil
@@ -115,10 +117,6 @@ func (parser *MaleficParser) ReadHeader(conn io.ReadWriteCloser) (uint32, uint32
 	sid, length, err := parser.readHeader(conn)
 	if err != nil {
 		return 0, 0, err
-	}
-	//logs.Log.Debugf("%v read packet from %s , %d bytes", sid, conn.RemoteAddr(), length)
-	if length > parser.maxPacketLen()+consts.KB*16+1 {
-		return 0, 0, fmt.Errorf("%w,expect: %d, recv: %d", types.ErrPacketTooLarge, parser.maxPacketLen(), length)
 	}
 	return sid, length, nil
 }

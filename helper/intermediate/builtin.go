@@ -530,4 +530,30 @@ format_path("C:\\Windows\\System32\\calc.exe")
 			},
 			Example: `parse_hex("0x1f04")`,
 		})
+
+	RegisterFunction("xor_bytes", func(data string, key string) (string, error) {
+		if len(key) == 0 {
+			return data, nil
+		}
+		buf := []byte(data)
+		keyBytes := []byte(key)
+		for i := range buf {
+			buf[i] ^= keyBytes[i%len(keyBytes)]
+		}
+		return string(buf), nil
+	})
+	AddHelper(
+		"xor_bytes",
+		&mals.Helper{
+			Group: EncodeGroup,
+			Short: "XOR data with a repeating key",
+			Input: []string{
+				"data: raw bytes as string",
+				"key: XOR key",
+			},
+			Output: []string{
+				"string",
+			},
+			Example: `xor_bytes(data, "mykey")`,
+		})
 }

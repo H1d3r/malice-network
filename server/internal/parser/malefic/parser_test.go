@@ -78,9 +78,16 @@ func TestMaleficParser_ReadHeader_PacketTooLarge(t *testing.T) {
 	header := buildHeader(DefaultStartDelimiter, 1, hugeLen)
 
 	buf := &rwcBuf{bytes.NewBuffer(header)}
-	_, _, err := p.ReadHeader(buf)
-	if !errors.Is(err, types.ErrPacketTooLarge) {
-		t.Fatalf("expected ErrPacketTooLarge, got %v", err)
+	sid, length, err := p.ReadHeader(buf)
+	// Large packets are now accepted with a warning, not rejected
+	if err != nil {
+		t.Fatalf("expected large packet to be accepted, got error: %v", err)
+	}
+	if sid != 1 {
+		t.Fatalf("expected session_id=1, got %d", sid)
+	}
+	if length == 0 {
+		t.Fatal("expected non-zero length")
 	}
 }
 
