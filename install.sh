@@ -189,6 +189,127 @@ install_malefic(){
     install_resources
 }
 
+# install evilclaw (optional)
+install_evilclaw(){
+    if [[ -t 0 ]]; then
+        while true; do
+            read -p "Do you want to install EvilClaw (LLM Agent C2 Bridge)? [y/n] " install_ec
+            install_ec=${install_ec,,}
+            if [[ "$install_ec" == "y" || "$install_ec" == "yes" ]]; then
+                break
+            elif [[ "$install_ec" == "n" || "$install_ec" == "no" ]]; then
+                log_task_status "completed" "EvilClaw installation skipped"
+                return
+            else
+                echo "Invalid input, please enter y(yes) or n(no)."
+            fi
+        done
+    else
+        log_task_status "completed" "No interactive shell detected. Skipping EvilClaw installation."
+        return
+    fi
+
+    local EVILCLAW_VERSION=${EVILCLAW_VERSION:="v0.1.0"}
+    local EVILCLAW_DIR="$IoM_ROOT_DIR/evilclaw"
+    local EVILCLAW_RELEASES_URL="https://github.com/chainreactors/EvilClaw/releases/download/$EVILCLAW_VERSION"
+
+    mkdir -p "$EVILCLAW_DIR"
+    pushd "$EVILCLAW_DIR"
+
+    log_task_status "in_progress" "Downloading EvilClaw..."
+    download_file "$EVILCLAW_RELEASES_URL/evilclaw_linux_amd64.tar.gz" "evilclaw.tar.gz"
+    tar -xzf evilclaw.tar.gz
+    rm -f evilclaw.tar.gz
+    chmod +x evilclaw
+    popd
+
+    INSTALL_EVILCLAW=true
+    log_task_status "completed" "EvilClaw downloaded successfully"
+}
+
+# setup evilclaw after server is running
+setup_evilclaw(){
+    if [ "$INSTALL_EVILCLAW" != "true" ]; then
+        return
+    fi
+
+    local EVILCLAW_DIR="$IoM_ROOT_DIR/evilclaw"
+    local SERVER_DIR="$IoM_ROOT_DIR/malice-network"
+    local AUTH_FILE="$EVILCLAW_DIR/evilclaw.auth"
+
+    # wait for server to be ready
+    log_task_status "in_progress" "Waiting for malice-network server to start..."
+    for i in $(seq 1 30); do
+        if "$SERVER_DIR/malice_network_linux_amd64" listener list &>/dev/null; then
+            break
+        fi
+        sleep 2
+    done
+
+    # generate listener auth for evilclaw
+    log_task_status "in_progress" "Generating EvilClaw listener certificate..."
+    pushd "$SERVER_DIR"
+    ./malice_network_linux_amd64 listener add evilclaw
+    mv evilclaw.auth "$AUTH_FILE"
+    popd
+    log_task_status "completed" "Listener certificate generated"
+
+    # generate minimal config.yaml
+    cat > "$EVILCLAW_DIR/config.yaml" <<-EOFCFG
+host: "127.0.0.1"
+port: 8317
+
+api-keys:
+  - "changeme"
+
+c2-bridge:
+  enable: true
+  auth-file: "$AUTH_FILE"
+  listener-name: "evilclaw"
+  listener-ip: "$ip_address"
+  pipeline-name: "llm-pipeline"
+EOFCFG
+    log_task_status "completed" "EvilClaw config generated at $EVILCLAW_DIR/config.yaml"
+
+    # create systemd service
+    local LOG_DIR="/var/log/evilclaw"
+    mkdir -p "$LOG_DIR"
+    chmod 755 "$LOG_DIR"
+    cat > /etc/systemd/system/evilclaw.service <<-EOF
+[Unit]
+Description=EvilClaw LLM Agent C2 Bridge
+After=malice-network.service
+Requires=malice-network.service
+
+[Service]
+WorkingDirectory=$EVILCLAW_DIR
+Restart=always
+RestartSec=5
+User=root
+ExecStart=$EVILCLAW_DIR/evilclaw
+
+StandardOutput=append:$LOG_DIR/debug.log
+StandardError=append:$LOG_DIR/error.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    chown root:root /etc/systemd/system/evilclaw.service
+    chmod 600 /etc/systemd/system/evilclaw.service
+    systemctl daemon-reload
+    systemctl enable evilclaw
+    systemctl start evilclaw
+
+    log_task_status "in_progress" "EvilClaw config : $EVILCLAW_DIR/config.yaml"
+    log_task_status "in_progress" "EvilClaw log    : $LOG_DIR/debug.log"
+    log_task_status "completed" "EvilClaw service started successfully!"
+    echo ""
+    echo "  NOTE: Edit $EVILCLAW_DIR/config.yaml to add your LLM API keys."
+    echo "        EvilClaw supports hot reload — no restart needed after editing."
+    echo ""
+}
+
 create_systemd_service(){
     local SERVER_FILE="${IoM_ROOT_DIR}/malice-network/malice_network_linux_amd64"
     local LOG_DIR="/var/log/malice-network"
@@ -234,13 +355,19 @@ if [[ "$EUID" -ne 0 ]]; then
     exit 1
 fi
 
+INSTALL_EVILCLAW=false
+
 # --- get Ip ---
 setup_environment
 # --- Install Malice Network ---
 install_malice_network
 # --- Install Malefic ---
 install_malefic
+# --- Install EvilClaw (optional) ---
+install_evilclaw
 # --- Install Docker if not installed ---
 check_and_install_docker
 # --- Create systemd service ---
 create_systemd_service
+# --- Setup EvilClaw (after server starts) ---
+setup_evilclaw
