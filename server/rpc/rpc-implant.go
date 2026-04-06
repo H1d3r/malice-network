@@ -309,12 +309,16 @@ func (rpc *Server) triggerKeyExchange(ctx context.Context, sess *core.Session) e
 		Nonce:     nonce,
 		Signature: signature,
 	}
-	sess.SecureManager.ResetCounters()
+	// Reset counter only on successful exchange — if the callback fires, the
+	// implant accepted the request and sent back its new public key. Resetting
+	// before the response arrives would swallow a failed attempt and delay the
+	// next retry by a full rotation budget (100 checkins).
 	_, err = rpc.GenericInternal(ctx, req, consts.ModuleKeyExchange, func(spite *implantpb.Spite) {
 		resp := spite.GetKeyExchangeResponse()
 		if resp == nil {
 			return
 		}
+		sess.SecureManager.ResetCounters()
 		sess.UpdateKeyPairFieldsAndPushCtrl(resp.PublicKey, keyPair.Private)
 	})
 	return err

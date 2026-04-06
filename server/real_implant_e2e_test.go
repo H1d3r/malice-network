@@ -470,6 +470,76 @@ func TestRealImplantSecureKeyExchangeE2E(t *testing.T) {
 	t.Log("secure key exchange E2E test passed: cold start → key exchange → encrypted commands")
 }
 
+// TestRealImplantFullColdStartE2E verifies key exchange works when the pipeline
+// has NO pre-shared keys at all (neither server nor implant keypair). Both sides
+// start with empty keys; the server triggers key exchange on first registration
+// and the implant generates its keypair during the exchange.
+func TestRealImplantFullColdStartE2E(t *testing.T) {
+	testsupport.RequireRealImplantEnv(t)
+
+	h := testsupport.NewControlPlaneHarness(t)
+	listenerName := fmt.Sprintf("real-fullcold-listener-%d", time.Now().UnixNano())
+	pipelineName := fmt.Sprintf("real-fullcold-pipe-%d", time.Now().UnixNano())
+
+	// Create a fully cold-start pipeline (no keys at all)
+	pipeline := testsupport.NewRealFullColdStartTCPPipeline(t, listenerName, pipelineName)
+	implant := testsupport.NewRealImplant(t, h, pipeline)
+	if err := implant.Start(t); err != nil {
+		t.Fatalf("real full-cold-start implant start failed: %v", err)
+	}
+
+	// Wait for session registration + initial key exchange
+	waitRealActiveConnection(t, implant.SessionID)
+	waitRealPostRegisterCheckin(t, implant.SessionID)
+
+	// Verify session was registered with secure mode
+	runtimeSession := mustRealRuntimeSession(t, implant.SessionID)
+	if runtimeSession.SecureManager == nil {
+		t.Fatal("session should have a SecureManager after full cold-start registration")
+	}
+
+	// Connect as admin client
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn, err := h.Connect(ctx)
+	if err != nil {
+		t.Fatalf("Connect failed: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	rpc := clientrpc.NewMaliceRPCClient(conn)
+	sessionCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+		"session_id", implant.SessionID,
+		"callee", consts.CalleeCMD,
+	))
+
+	// Enable keepalive for faster command execution
+	enableRealKeepalive(t, &realRPCFixture{
+		h: h, implant: implant, rpc: rpc, session: sessionCtx,
+	}, true)
+
+	waitRealActiveConnection(t, implant.SessionID)
+
+	// Execute pwd command — this goes through age-encrypted channel
+	pwdTask, err := rpc.Pwd(sessionCtx, &implantpb.Request{Name: consts.ModulePwd})
+	if err != nil {
+		t.Fatalf("Pwd (post full cold-start key exchange) failed: %v", err)
+	}
+	pwdContent := waitRealTaskFinish(t, rpc, implant.SessionID, pwdTask.TaskId)
+	pwdOutput := strings.TrimSpace(pwdContent.GetSpite().GetResponse().GetOutput())
+	if pwdOutput == "" {
+		t.Fatal("pwd output should not be empty after full cold-start key exchange")
+	}
+	t.Logf("pwd after full cold-start key exchange: %s", pwdOutput)
+
+	// Disable keepalive
+	enableRealKeepalive(t, &realRPCFixture{
+		h: h, implant: implant, rpc: rpc, session: sessionCtx,
+	}, false)
+
+	t.Log("full cold-start key exchange E2E test passed: no pre-shared keys → key exchange → encrypted commands")
+}
+
 // TestRealImplantTLSPipelineE2E verifies the implant can connect to a TLS-enabled
 // pipeline (self-signed cert with CA verification) and execute commands normally.
 // This tests the full certificate chain: pipeline generates CA+cert → profile

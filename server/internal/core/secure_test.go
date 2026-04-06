@@ -290,6 +290,44 @@ func TestSecureManager_CounterOverflow(t *testing.T) {
 	}
 }
 
+// TestSecureManager_EmptyKeyPairSession verifies that a SecureManager created
+// with an empty (non-nil, zero-value) KeyPair still works correctly.
+// This is the cold-start scenario where keys will be populated after exchange.
+func TestSecureManager_EmptyKeyPairSession(t *testing.T) {
+	t.Parallel()
+	sess := &Session{
+		ID:   "empty-keypair-session",
+		Type: "test",
+		SessionContext: &client.SessionContext{
+			SessionInfo: &client.SessionInfo{},
+			KeyPair:     &clientpb.KeyPair{PublicKey: "", PrivateKey: ""},
+		},
+	}
+
+	sm := NewSecureSpiteManager(sess)
+	if sm == nil {
+		t.Fatal("NewSecureSpiteManager returned nil")
+	}
+
+	// Counter operations must work normally
+	for i := 0; i < 100; i++ {
+		sm.IncrementCounter()
+	}
+	if !sm.ShouldRotateKey() {
+		t.Error("ShouldRotateKey should be true at counter=100 even with empty keys")
+	}
+
+	// UpdateKeyPair should transition to real keys
+	sm.UpdateKeyPair(&clientpb.KeyPair{
+		PublicKey:  "exchanged-pub",
+		PrivateKey: "exchanged-priv",
+	})
+	sm.ResetCounters()
+	if sm.ShouldRotateKey() {
+		t.Error("ShouldRotateKey should be false after reset")
+	}
+}
+
 // TestSecureManager_NilKeyPairSession verifies creating a SecureManager with
 // a session that has a nil KeyPair does not panic.
 func TestSecureManager_NilKeyPairSession(t *testing.T) {

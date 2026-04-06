@@ -163,6 +163,20 @@ func NewRealSecureTCPPipeline(t testing.TB, listenerName, pipelineName string) *
 	return pipeline
 }
 
+// NewRealFullColdStartTCPPipeline creates a TCP pipeline with age key exchange
+// enabled but NO pre-shared keys at all (neither server nor implant keypair).
+// Both sides start from scratch; the first key exchange establishes encryption.
+func NewRealFullColdStartTCPPipeline(t testing.TB, listenerName, pipelineName string) *clientpb.Pipeline {
+	t.Helper()
+
+	pipeline := NewRealTCPPipeline(t, listenerName, pipelineName)
+	pipeline.Secure = &clientpb.Secure{
+		Enable: true,
+		// Both keypairs intentionally left empty for full cold-start scenario
+	}
+	return pipeline
+}
+
 // NewRealTLSTCPPipeline creates a TCP pipeline with TLS enabled (self-signed cert).
 // The pipeline generates its own CA + server certificate, so the implant can
 // verify the server using the embedded CA cert.

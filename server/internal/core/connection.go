@@ -118,7 +118,11 @@ func GetKeyPairForSession(sid uint32, secureConfig *implanttypes.SecureConfig) *
 	}
 
 	if publicKey == "" && len(privateCandidates) == 0 {
-		return nil
+		// secure is enabled but no keys established yet (cold start scenario).
+		// Return an empty KeyPair so the parser enters "secure but plaintext" mode;
+		// once key exchange completes and PushCtrl syncs the new keys, the parser
+		// will pick them up on the next GetConnection / WithSecure call.
+		return &clientpb.KeyPair{}
 	}
 
 	return &clientpb.KeyPair{

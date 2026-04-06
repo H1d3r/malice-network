@@ -972,9 +972,19 @@ func (s *Session) initializeSecureManager(req *clientpb.RegisterSession) error {
 	}
 
 	if s.KeyPair == nil {
+		// Populate from pipeline pre-shared keys when available (may be empty
+		// in cold-start scenarios where no keys are distributed ahead of time).
+		pubKey := ""
+		privKey := ""
+		if pipeline.Secure.ImplantKeypair != nil {
+			pubKey = pipeline.Secure.ImplantKeypair.PublicKey
+		}
+		if pipeline.Secure.ServerKeypair != nil {
+			privKey = pipeline.Secure.ServerKeypair.PrivateKey
+		}
 		s.KeyPair = &clientpb.KeyPair{
-			PublicKey:  pipeline.Secure.ImplantKeypair.PublicKey,
-			PrivateKey: pipeline.Secure.ServerKeypair.PrivateKey,
+			PublicKey:  pubKey,
+			PrivateKey: privKey,
 		}
 	}
 
