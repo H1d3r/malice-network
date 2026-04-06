@@ -3,7 +3,7 @@ module github.com/chainreactors/malice-network
 go 1.25.0
 
 require (
-	filippo.io/age v1.2.1
+	filippo.io/age v1.3.1
 	github.com/carapace-sh/carapace v1.10.3
 	github.com/chainreactors/IoM-go v0.0.0-20251104165543-b0edd05b982e
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0
@@ -70,6 +70,7 @@ require (
 	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	dario.cat/mergo v1.0.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.5 // indirect
@@ -162,7 +163,6 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.13-0.20220915233716-71ac16282d12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
-	github.com/klauspost/reedsolomon v1.12.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -198,8 +198,6 @@ require (
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
-	github.com/templexxx/cpu v0.1.1 // indirect
-	github.com/templexxx/xorsimd v0.4.3 // indirect
 	github.com/tengattack/gluacrypto v0.0.0-20240324200146-54b58c95c255 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/twmb/murmur3 v1.1.8 // indirect
@@ -242,6 +240,7 @@ replace (
 replace (
 	github.com/chainreactors/IoM-go => ./external/IoM-go
 	github.com/chainreactors/proxyclient => github.com/chainreactors/proxyclient v1.0.3
+	github.com/chainreactors/rem => ./external/rem
 	github.com/chainreactors/tui => ./external/tui
 	github.com/reeflective/console => ./external/console
 	github.com/reeflective/readline => ./external/readline
