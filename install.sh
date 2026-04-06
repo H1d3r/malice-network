@@ -120,9 +120,8 @@ check_and_install_docker(){
 
 # install malice-network's artifacts
 install_malice_network() {
-    local MALICE_NETWORK=${MALICE_NETWORK:="v0.1.2"}
     local md="${IoM_ROOT_DIR}/malice-network"
-    local MALICE_NETWORK_RELEASES_URL=${MALICE_NETWORK_RELEASES_URL:="https://github.com/chainreactors/malice-network/releases/download/$MALICE_NETWORK"}
+    local MALICE_NETWORK_RELEASES_URL=${MALICE_NETWORK_RELEASES_URL:="https://github.com/chainreactors/malice-network/releases/latest/download"}
     local FILES=(
         "malice_network_linux_amd64"
         "iom_linux_amd64"
@@ -154,7 +153,7 @@ install_malice_network() {
 }
 # install malefic's artifacts、sourcecode
 install_malefic(){
-    local MALEFIC_VERSION=${MALEFIC_VERSION:="v0.1.2"}
+    local MALEFIC_VERSION=${MALEFIC_VERSION:="v0.3.0"}
     local MALEFIC_ROOT_DIR="$IoM_ROOT_DIR/malefic"
     
     install_source_code(){
@@ -209,9 +208,8 @@ install_evilclaw(){
         return
     fi
 
-    local EVILCLAW_VERSION=${EVILCLAW_VERSION:="v0.1.0"}
     local EVILCLAW_DIR="$IoM_ROOT_DIR/evilclaw"
-    local EVILCLAW_RELEASES_URL="https://github.com/chainreactors/EvilClaw/releases/download/$EVILCLAW_VERSION"
+    local EVILCLAW_RELEASES_URL=${EVILCLAW_RELEASES_URL:="https://github.com/chainreactors/EvilClaw/releases/latest/download"}
 
     mkdir -p "$EVILCLAW_DIR"
     pushd "$EVILCLAW_DIR"
