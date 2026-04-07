@@ -69,7 +69,7 @@ func (rpc *Server) ExecuteModule(ctx context.Context, req *implantpb.ExecuteModu
 	expect := types.MsgName(req.Expect)
 
 	// Streaming module: keep reading from the channel until context is cancelled.
-	if req.Spite.Name == "tapping" || req.Spite.Name == "poison" || req.Spite.Name == "agent" {
+	if req.Spite.Name == "tapping" || req.Spite.Name == consts.ModuleChat {
 		greq, err := newGenericRequest(ctx, req.Spite)
 		if err != nil {
 			return nil, err

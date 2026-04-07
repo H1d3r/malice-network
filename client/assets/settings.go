@@ -29,9 +29,9 @@ type Settings struct {
 // AISettings holds configuration for AI assistant integration
 type AISettings struct {
 	Enable      bool   `yaml:"enable" config:"enable" default:"false"`
-	Provider    string `yaml:"provider" config:"provider" default:"openai"` // openai, claude
-	APIKey      string `yaml:"api_key" config:"api_key" default:""`
-	Endpoint    string `yaml:"endpoint" config:"endpoint" default:"https://api.openai.com/v1"`
+	Provider    string `yaml:"provider" config:"provider" default:"openai"` // Preferred provider for agent chat/skill.
+	APIKey      string `yaml:"api_key" config:"api_key" default:""`         // Legacy local ask/analyze only.
+	Endpoint    string `yaml:"endpoint" config:"endpoint" default:"https://api.openai.com/v1"` // Legacy local ask/analyze only.
 	Model       string `yaml:"model" config:"model" default:"gpt-4"`
 	MaxTokens   int    `yaml:"max_tokens" config:"max_tokens" default:"1024"`
 	Timeout     int    `yaml:"timeout" config:"timeout" default:"30"`
@@ -177,10 +177,10 @@ func GetValidAISettings() (*AISettings, error) {
 		return nil, fmt.Errorf("failed to load settings: %w", err)
 	}
 	if settings == nil || settings.AI == nil || !settings.AI.Enable {
-		return nil, fmt.Errorf("AI is not enabled. Use 'config ai --enable --api-key <key>' to enable it")
+		return nil, fmt.Errorf("AI is not enabled. Use 'config ai enable' to enable it")
 	}
 	if settings.AI.APIKey == "" {
-		return nil, fmt.Errorf("AI API key not configured. Use 'config ai --api-key <key>' to set it")
+		return nil, fmt.Errorf("local AI API key not configured. Agent chat/skill uses server.llm in server/config.yaml; legacy local ask/analyze can use 'config ai enable --api-key <key>'")
 	}
 
 	return settings.AI, nil

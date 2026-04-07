@@ -14,7 +14,7 @@ func TestAIClientValidateUsesConfigAIHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validate to fail for disabled AI")
 	}
-	if !strings.Contains(err.Error(), "config ai --enable") {
+	if !strings.Contains(err.Error(), "config ai enable") {
 		t.Fatalf("expected config ai hint, got %q", err.Error())
 	}
 	if strings.Contains(err.Error(), "ai-config") {
@@ -33,7 +33,7 @@ func TestAIClientBuildEndpointUsesConfigAIHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected buildEndpoint to fail for empty endpoint")
 	}
-	if !strings.Contains(err.Error(), "config ai --endpoint <url>") {
+	if !strings.Contains(err.Error(), "server.llm in server/config.yaml") {
 		t.Fatalf("expected config ai hint, got %q", err.Error())
 	}
 	if strings.Contains(err.Error(), "ai-config") {

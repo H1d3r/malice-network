@@ -170,6 +170,29 @@ func TestUpdateConfigHelpersReflectInGetters(t *testing.T) {
 	}
 }
 
+func TestGetLLMConfigDefaultsAndOverrides(t *testing.T) {
+	initTestConfigRuntime(t)
+
+	got := GetLLMConfig()
+	if got == nil || got.DefaultProvider != "openai" || got.Timeout != 120 {
+		t.Fatalf("unexpected default llm config: %#v", got)
+	}
+
+	config.Set("server.llm.default_provider", "deepseek")
+	config.Set("server.llm.timeout", 45)
+	config.Set("server.llm.proxy_url", "http://127.0.0.1:7890")
+	config.Set("server.llm.providers.deepseek.endpoint", "https://api.deepseek.com/v1")
+	config.Set("server.llm.providers.deepseek.api_key", "deepseek-key")
+
+	got = GetLLMConfig()
+	if got == nil || got.DefaultProvider != "deepseek" || got.Timeout != 45 || got.ProxyURL != "http://127.0.0.1:7890" {
+		t.Fatalf("unexpected configured llm config: %#v", got)
+	}
+	if got.Providers["deepseek"] == nil || got.Providers["deepseek"].APIKey != "deepseek-key" {
+		t.Fatalf("unexpected provider overrides: %#v", got.Providers)
+	}
+}
+
 func TestPacketLengthConfigDrivesChunkingAndParserLimits(t *testing.T) {
 	configPath := writeTestFile(t, t.TempDir(), "config.yaml", ""+
 		"server:\n"+

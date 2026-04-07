@@ -13,8 +13,7 @@ Client                     Server                      Implant
   |                          |                            |
   |-- BridgeAgentChat() ---->|                            |
   |   (text, model,         |-- Spite(BridgeAgentReq) -->|
-  |    provider, api_key,    |                            |
-  |    endpoint, max_turns)  |                            |
+  |    provider, max_turns)  |                            |
   |                          |   agent loop running...    |
   |                          |                            |
   |                          |<-- Spite(BridgeLlmReq) ---|
@@ -61,9 +60,10 @@ The handler uses `StreamGenericHandler` for bidirectional streaming (same patter
 
 `server/internal/llm/provider.go` handles LLM API proxying with a three-level config resolution:
 
-1. **Request parameters** (from client's `config ai` settings, passed via `BridgeAgentRequest`)
-2. **Environment variables** (`BRIDGE_<PROVIDER>_BASE_URL`, `BRIDGE_API_KEY`, etc.)
-3. **Provider presets** (built-in base URLs for openai, openrouter, deepseek, groq, moonshot)
+1. **Request provider/model** (from client's `config ai` settings, passed via `BridgeAgentRequest`)
+2. **Server config.yaml** (`server.llm`, including per-provider endpoint/api_key/proxy_url/timeout)
+3. **Environment variables** (`BRIDGE_<PROVIDER>_BASE_URL`, `BRIDGE_API_KEY`, etc.)
+4. **Provider presets** (built-in base URLs for openai, openrouter, deepseek, groq, moonshot)
 
 ## Client Commands
 
@@ -94,17 +94,31 @@ The `depend` annotation is `bridge_agent,poison`, meaning the command is visible
 
 ## Configuration
 
-No separate configuration is needed. The `chat` command reads from the existing `config ai` settings:
+The `chat` command still reads `provider` / `model` from the existing client-side `config ai` settings:
 
 ```
 config ai --provider openai --api-key sk-xxx --endpoint https://api.openai.com/v1
 ```
 
-These values are passed through `BridgeAgentRequest` to the server, which uses them to proxy LLM calls. If the request fields are empty, the server falls back to environment variables and provider presets.
+Server-side LLM credentials and endpoints are resolved from `server.config.yaml`:
+
+```yaml
+server:
+  llm:
+    default_provider: openai
+    timeout: 120
+    proxy_url: ""
+    providers:
+      openai:
+        endpoint: https://api.openai.com/v1
+        api_key: ""
+```
+
+If the selected provider is not configured there, the server falls back to environment variables and presets.
 
 ## Module Detection
 
-The client checks `session.Modules` for the `bridge_agent` capability:
+The client now dispatches by session target rather than a separate `bridge_agent` capability:
 
 ```go
 func hasModule(sess *client.Session, name string) bool

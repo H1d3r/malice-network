@@ -79,6 +79,7 @@ type ServerConfig struct {
 	GithubConfig   *GithubConfig   `config:"github" yaml:"github"`
 	SaasConfig     *SaasConfig     `config:"saas" yaml:"saas"`
 	AcmeConfig     *AcmeConfig     `config:"acme" yaml:"acme"`
+	LLMConfig      *LLMConfig      `config:"llm" yaml:"llm"`
 	DatabaseConfig *DatabaseConfig `config:"database" yaml:"database"`
 }
 
@@ -216,6 +217,22 @@ type AcmeConfig struct {
 	CAUrl       string            `config:"ca_url" default:"https://acme-v02.api.letsencrypt.org/directory" yaml:"ca_url"`
 	Provider    string            `config:"provider" yaml:"provider"`
 	Credentials map[string]string `config:"credentials" yaml:"credentials"`
+}
+
+type LLMConfig struct {
+	DefaultProvider string                        `config:"default_provider" default:"openai" yaml:"default_provider"`
+	Endpoint        string                        `config:"endpoint" default:"" yaml:"endpoint"`
+	APIKey          string                        `config:"api_key" default:"" yaml:"api_key"`
+	ProxyURL        string                        `config:"proxy_url" default:"" yaml:"proxy_url"`
+	Timeout         int                           `config:"timeout" default:"120" yaml:"timeout"`
+	Providers       map[string]*LLMProviderConfig `config:"providers" yaml:"providers"`
+}
+
+type LLMProviderConfig struct {
+	Endpoint string `config:"endpoint" default:"" yaml:"endpoint"`
+	APIKey   string `config:"api_key" default:"" yaml:"api_key"`
+	ProxyURL string `config:"proxy_url" default:"" yaml:"proxy_url"`
+	Timeout  int    `config:"timeout" default:"0" yaml:"timeout"`
 }
 
 func (a *AcmeConfig) ToProtobuf() *clientpb.AcmeConfig {

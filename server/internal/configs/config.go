@@ -95,6 +95,28 @@ func GetSaasConfig() *SaasConfig {
 
 }
 
+func GetLLMConfig() *LLMConfig {
+	l := &LLMConfig{
+		DefaultProvider: "openai",
+		Timeout:         120,
+	}
+	err := config.MapStruct("server.llm", l)
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return l
+		}
+		logs.Log.Errorf("Failed to map llm config %s", err)
+		return l
+	}
+	if l.Timeout <= 0 {
+		l.Timeout = 120
+	}
+	if l.DefaultProvider == "" {
+		l.DefaultProvider = "openai"
+	}
+	return l
+}
+
 func GetListenerConfig() *ListenerConfig {
 	l := &ListenerConfig{}
 	err := config.MapStruct("listeners", l)

@@ -35,7 +35,7 @@ Release 中的主要二进制如下：
 
 ### 直接启动
 
-已准备 `config.yaml` 时，可直接启动：
+已从 `server/config.example.yaml` 复制出本地 `config.yaml` 后，可直接启动：
 
 ```bash
 ./malice_network_linux_amd64 -i <public-ip>
@@ -79,7 +79,7 @@ Release 中的主要二进制如下：
 
 ## 4. 默认 Listener / Pipeline 是什么
 
-当前默认 `server/config.yaml` 会启用这些基础能力：
+当前默认模板 `server/config.example.yaml` 会启用这些基础能力：
 
 - TCP pipeline: `tcp`, 默认端口 `5001`
 - HTTP pipeline: `http`, 默认端口 `8080`

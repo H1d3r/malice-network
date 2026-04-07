@@ -27,6 +27,9 @@ func TestCommandsIncludeAIConfigSubcommand(t *testing.T) {
 	if !strings.Contains(aiCmd.Example, "config ai\n") {
 		t.Fatalf("expected config ai examples, got:\n%s", aiCmd.Example)
 	}
+	if strings.Contains(aiCmd.Example, "--api-key") {
+		t.Fatalf("config ai examples should not advertise server-side credentials, got:\n%s", aiCmd.Example)
+	}
 	if strings.Contains(aiCmd.Example, "ai-config --") {
 		t.Fatalf("config ai examples should not advertise legacy alias, got:\n%s", aiCmd.Example)
 	}

@@ -99,10 +99,10 @@ type CommandSuggestion struct {
 // validate checks if the AI client is properly configured
 func (c *AIClient) validate() error {
 	if c.settings == nil || !c.settings.Enable {
-		return fmt.Errorf("AI is not enabled. Use 'config ai --enable' to enable it")
+		return fmt.Errorf("AI is not enabled. Use 'config ai enable' to enable it")
 	}
 	if c.settings.APIKey == "" {
-		return fmt.Errorf("AI API key is not configured. Use 'config ai --api-key <key>' to set it")
+		return fmt.Errorf("local AI API key is not configured. Agent chat/skill uses server.llm in server/config.yaml; legacy local ask/analyze can use 'config ai enable --api-key <key>'")
 	}
 	return nil
 }
@@ -189,7 +189,7 @@ func (c *AIClient) doRequest(ctx context.Context, endpoint string, headers map[s
 func (c *AIClient) buildEndpoint(suffix string) (string, error) {
 	base := strings.TrimSuffix(strings.TrimSpace(c.settings.Endpoint), "/")
 	if base == "" {
-		return "", fmt.Errorf("AI endpoint is not configured. Use 'config ai --endpoint <url>' to set it")
+		return "", fmt.Errorf("local AI endpoint is not configured. Agent chat/skill uses server.llm in server/config.yaml; legacy local ask/analyze can use 'config ai enable --endpoint <url>'")
 	}
 	if !strings.HasSuffix(base, suffix) {
 		return base + suffix, nil

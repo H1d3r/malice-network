@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/client/assets"
 	"github.com/chainreactors/malice-network/client/command/common"
 	"github.com/chainreactors/malice-network/client/core"
@@ -111,15 +110,11 @@ func AIEnableCmd(cmd *cobra.Command, con *core.Console) error {
 		settings.AI.OpsecCheck = opsecCheck
 	}
 
-	if settings.AI.APIKey == "" {
-		logs.Log.Warnf("AI is enabled but API key is not set. Use 'config ai enable --api-key <key>' to set it.\n")
-	}
-
 	if err := assets.SaveSettings(settings); err != nil {
 		return fmt.Errorf("failed to save settings: %w", err)
 	}
 
-	logs.Log.Importantf("AI assistant enabled\n")
+	con.Log.Importantf("AI preferences enabled\n")
 	printAIStatus(con, settings.AI)
 	return nil
 }
@@ -137,7 +132,7 @@ func AIDisableCmd(con *core.Console) error {
 		return fmt.Errorf("failed to save settings: %w", err)
 	}
 
-	logs.Log.Importantf("AI assistant disabled\n")
+	con.Log.Importantf("AI preferences disabled\n")
 	return nil
 }
 
@@ -163,16 +158,35 @@ func printAIStatus(con *core.Console, ai *assets.AISettings) {
 	}
 
 	values := map[string]string{
-		"Enabled":      enabled,
-		"Provider":     ai.Provider,
-		"Endpoint":     ai.Endpoint,
-		"Model":        ai.Model,
-		"API Key":      maskAPIKey(ai.APIKey),
-		"Max Tokens":   fmt.Sprintf("%d", ai.MaxTokens),
-		"Timeout":      fmt.Sprintf("%ds", ai.Timeout),
-		"History Size": fmt.Sprintf("%d lines", ai.HistorySize),
-		"OPSEC Check":  opsec,
+		"Enabled":                enabled,
+		"Provider":               ai.Provider,
+		"Model":                  ai.Model,
+		"Max Tokens":             fmt.Sprintf("%d", ai.MaxTokens),
+		"Timeout":                fmt.Sprintf("%ds", ai.Timeout),
+		"History Size":           fmt.Sprintf("%d lines", ai.HistorySize),
+		"OPSEC Check":            opsec,
+		"Agent LLM Pipeline":     "server/config.yaml -> server.llm",
+		"Legacy Local Endpoint":  legacyValue(ai.Endpoint),
+		"Legacy Local API Key":   maskAPIKey(ai.APIKey),
 	}
-	keys := []string{"Enabled", "Provider", "Endpoint", "Model", "API Key", "Max Tokens", "Timeout", "History Size", "OPSEC Check"}
+	keys := []string{
+		"Enabled",
+		"Provider",
+		"Model",
+		"Max Tokens",
+		"Timeout",
+		"History Size",
+		"OPSEC Check",
+		"Agent LLM Pipeline",
+		"Legacy Local Endpoint",
+		"Legacy Local API Key",
+	}
 	con.Log.Console(common.NewKVTable("AI", keys, values).View() + "\n")
+}
+
+func legacyValue(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "(not set)"
+	}
+	return v
 }

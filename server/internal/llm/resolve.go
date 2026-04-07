@@ -4,14 +4,25 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/chainreactors/malice-network/server/internal/configs"
 )
 
-type providerConfig struct {
+type providerPreset struct {
 	baseURL   string
 	apiKeyEnv string
 }
 
-var presets = map[string]providerConfig{
+type ResolvedProvider struct {
+	Provider string
+	BaseURL  string
+	APIKey   string
+	ProxyURL string
+	Timeout  time.Duration
+}
+
+var presets = map[string]providerPreset{
 	"openai":     {baseURL: "https://api.openai.com/v1", apiKeyEnv: "OPENAI_API_KEY"},
 	"openrouter": {baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY"},
 	"deepseek":   {baseURL: "https://api.deepseek.com/v1", apiKeyEnv: "DEEPSEEK_API_KEY"},
@@ -19,26 +30,35 @@ var presets = map[string]providerConfig{
 	"moonshot":   {baseURL: "https://api.moonshot.cn/v1", apiKeyEnv: "MOONSHOT_API_KEY"},
 }
 
-// ProviderOpts holds LLM provider configuration, typically from the client's config ai settings.
+// ProviderOpts holds LLM provider configuration, typically selected from client config ai.
+// Only provider/model are currently passed over RPC; endpoint/api key remain optional overrides.
 type ProviderOpts struct {
-	Provider string // "openai", "deepseek", etc.
-	APIKey   string // API key from client config ai
-	Endpoint string // LLM API base URL from client config ai
+	Provider string
+	APIKey   string
+	Endpoint string
 }
 
-// resolve determines the baseURL and apiKey to use, following a three-level fallback:
-// 1. ProviderOpts fields (from client's config ai)
-// 2. Environment variables (BRIDGE_<PROVIDER>_BASE_URL, BRIDGE_<PROVIDER>_API_KEY)
-// 3. Provider presets
-func resolve(opts ProviderOpts) (baseURL string, apiKey string, err error) {
+func resolve(opts ProviderOpts) (ResolvedProvider, error) {
+	llmCfg := configs.GetLLMConfig()
+
 	provider := strings.ToLower(strings.TrimSpace(opts.Provider))
+	if provider == "" && llmCfg != nil {
+		provider = strings.ToLower(strings.TrimSpace(llmCfg.DefaultProvider))
+	}
 	if provider == "" {
 		provider = "openai"
 	}
-	envPrefix := strings.ToUpper(strings.ReplaceAll(provider, "-", "_"))
 
-	// Resolve base URL
-	baseURL = opts.Endpoint
+	envPrefix := strings.ToUpper(strings.ReplaceAll(provider, "-", "_"))
+	providerCfg := providerConfigFor(llmCfg, provider)
+
+	baseURL := strings.TrimSpace(opts.Endpoint)
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(providerCfg.Endpoint)
+	}
+	if baseURL == "" && llmCfg != nil {
+		baseURL = strings.TrimSpace(llmCfg.Endpoint)
+	}
 	if baseURL == "" {
 		baseURL = os.Getenv("BRIDGE_" + envPrefix + "_BASE_URL")
 	}
@@ -48,11 +68,16 @@ func resolve(opts ProviderOpts) (baseURL string, apiKey string, err error) {
 		}
 	}
 	if baseURL == "" {
-		return "", "", fmt.Errorf("unknown provider %q: configure via 'config ai --endpoint' or set BRIDGE_%s_BASE_URL", provider, envPrefix)
+		return ResolvedProvider{}, fmt.Errorf("unknown provider %q: configure server.llm.providers.%s.endpoint or set BRIDGE_%s_BASE_URL", provider, provider, envPrefix)
 	}
 
-	// Resolve API key
-	apiKey = opts.APIKey
+	apiKey := strings.TrimSpace(opts.APIKey)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(providerCfg.APIKey)
+	}
+	if apiKey == "" && llmCfg != nil {
+		apiKey = strings.TrimSpace(llmCfg.APIKey)
+	}
 	if apiKey == "" {
 		apiKey = os.Getenv("BRIDGE_API_KEY")
 	}
@@ -65,9 +90,42 @@ func resolve(opts ProviderOpts) (baseURL string, apiKey string, err error) {
 		}
 	}
 	if apiKey == "" {
-		return "", "", fmt.Errorf("missing API key for provider %q: configure via 'config ai --api-key' or set BRIDGE_%s_API_KEY",
-			provider, envPrefix)
+		return ResolvedProvider{}, fmt.Errorf("missing API key for provider %q: configure server.llm.providers.%s.api_key or set BRIDGE_%s_API_KEY", provider, provider, envPrefix)
 	}
 
-	return baseURL, apiKey, nil
+	proxyURL := strings.TrimSpace(providerCfg.ProxyURL)
+	if proxyURL == "" && llmCfg != nil {
+		proxyURL = strings.TrimSpace(llmCfg.ProxyURL)
+	}
+
+	timeout := 120 * time.Second
+	if llmCfg != nil && llmCfg.Timeout > 0 {
+		timeout = time.Duration(llmCfg.Timeout) * time.Second
+	}
+	if providerCfg.Timeout > 0 {
+		timeout = time.Duration(providerCfg.Timeout) * time.Second
+	}
+
+	return ResolvedProvider{
+		Provider: provider,
+		BaseURL:  baseURL,
+		APIKey:   apiKey,
+		ProxyURL: proxyURL,
+		Timeout:  timeout,
+	}, nil
+}
+
+func providerConfigFor(cfg *configs.LLMConfig, provider string) configs.LLMProviderConfig {
+	if cfg == nil || cfg.Providers == nil {
+		return configs.LLMProviderConfig{}
+	}
+	if p := cfg.Providers[provider]; p != nil {
+		return *p
+	}
+	for name, p := range cfg.Providers {
+		if strings.EqualFold(strings.TrimSpace(name), provider) && p != nil {
+			return *p
+		}
+	}
+	return configs.LLMProviderConfig{}
 }

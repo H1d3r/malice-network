@@ -9,5 +9,9 @@ helper/intl/custom/*
 !helper/intl/custom/.gitkeep
 *.bin
 *.so
+*.auth
+*.log
 .gomodcache/
 .gocache/
+/config.yaml
+/server/config.yaml

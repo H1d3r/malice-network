@@ -68,7 +68,7 @@ server:
   config:
     certificate: null
     certificate_key: null
-    packet_length: 10485760
+    packet_length: 1048576
   enable: true
   encryption_key: maliceofinternal
   github:
@@ -79,6 +79,14 @@ server:
   grpc_host: 0.0.0.0
   grpc_port: 5004
   ip: 127.0.0.1
+  llm:
+    default_provider: openai
+    providers:
+      openai:
+        api_key: ""
+        endpoint: https://api.openai.com/v1
+    proxy_url: ""
+    timeout: 120
   notify:
     enable: false
     lark:
@@ -86,6 +94,5 @@ server:
       webhook_url: null
   saas:
     enable: true
-    url: https://build.chainreactors.red
     token: null
-
+    url: https://build.chainreactors.red

@@ -88,7 +88,7 @@ Windows 或 macOS 系统部署 Server，从 [Releases](https://github.com/chainr
 
 ### 常用配置修改
 
-`config.yaml` 是 Server 端配置文件，从 [仓库](https://github.com/chainreactors/malice-network/blob/master/server/config.yaml) 下载并放到 Server 可执行文件同级目录。
+`config.yaml` 是 Server 端本地配置文件。仓库里提交的是模板 [server/config.example.yaml](https://github.com/chainreactors/malice-network/blob/master/server/config.example.yaml)，部署时请复制为 `config.yaml` 并放到 Server 可执行文件同级目录。
 
 **修改外网 IP：**
 

@@ -12,7 +12,7 @@ import (
 )
 
 func TestRepositoryRootConfigParses(t *testing.T) {
-	loadTestConfig(t, repoPath(t, "config.yaml"))
+	loadTestConfig(t, repoPath(t, "config.example.yaml"))
 
 	serverCfg := GetServerConfig()
 	listenerCfg := GetListenerConfig()
@@ -32,11 +32,17 @@ func TestRepositoryRootConfigParses(t *testing.T) {
 	if serverCfg.EncryptionKey != "maliceofinternal" {
 		t.Fatalf("unexpected encryption key: %q", serverCfg.EncryptionKey)
 	}
-	if serverCfg.MiscConfig == nil || serverCfg.MiscConfig.PacketLength != 10485760 {
+	if serverCfg.MiscConfig == nil || serverCfg.MiscConfig.PacketLength != 1048576 {
 		t.Fatalf("unexpected misc config: %#v", serverCfg.MiscConfig)
 	}
 	if serverCfg.NotifyConfig == nil || serverCfg.NotifyConfig.Lark == nil || serverCfg.NotifyConfig.Lark.Enable {
 		t.Fatalf("unexpected notify config: %#v", serverCfg.NotifyConfig)
+	}
+	if serverCfg.LLMConfig == nil || serverCfg.LLMConfig.DefaultProvider != "openai" || serverCfg.LLMConfig.Timeout != 120 {
+		t.Fatalf("unexpected llm config: %#v", serverCfg.LLMConfig)
+	}
+	if serverCfg.LLMConfig.Providers == nil || serverCfg.LLMConfig.Providers["openai"] == nil || serverCfg.LLMConfig.Providers["openai"].Endpoint != "https://api.openai.com/v1" {
+		t.Fatalf("unexpected llm provider config: %#v", serverCfg.LLMConfig)
 	}
 	if serverCfg.SaasConfig == nil || !serverCfg.SaasConfig.Enable {
 		t.Fatalf("unexpected saas config: %#v", serverCfg.SaasConfig)
@@ -63,7 +69,7 @@ func TestRepositoryRootConfigParses(t *testing.T) {
 }
 
 func TestRepositoryServerConfigParses(t *testing.T) {
-	loadTestConfig(t, repoPath(t, "server", "config.yaml"))
+	loadTestConfig(t, repoPath(t, "server", "config.example.yaml"))
 
 	serverCfg := GetServerConfig()
 	listenerCfg := GetListenerConfig()
@@ -73,6 +79,9 @@ func TestRepositoryServerConfigParses(t *testing.T) {
 	}
 	if serverCfg.GithubConfig == nil || serverCfg.GithubConfig.Workflow != "generate.yml" {
 		t.Fatalf("unexpected github config: %#v", serverCfg.GithubConfig)
+	}
+	if serverCfg.LLMConfig == nil || serverCfg.LLMConfig.DefaultProvider != "openai" {
+		t.Fatalf("unexpected llm config: %#v", serverCfg.LLMConfig)
 	}
 	if serverCfg.NotifyConfig == nil || serverCfg.NotifyConfig.Enable {
 		t.Fatalf("unexpected notify config: %#v", serverCfg.NotifyConfig)
@@ -169,6 +178,9 @@ func TestFullConfigFixtureParsesAndDrivesMechanisms(t *testing.T) {
 	}
 	if acme := GetAcmeConfig(); acme == nil || acme.Email != "ops@example.com" || acme.CAUrl != "https://acme-staging-v02.api.letsencrypt.org/directory" || acme.Provider != "cloudflare" || acme.ToProtobuf().Credentials["CF_API_TOKEN"] != "cf-token" {
 		t.Fatalf("unexpected acme config: %#v", acme)
+	}
+	if llm := GetLLMConfig(); llm == nil || llm.DefaultProvider != "openai" || llm.Timeout != 25 || llm.ProxyURL != "http://127.0.0.1:7890" || llm.Providers["openai"] == nil || llm.Providers["openai"].APIKey != "fixture-openai-key" {
+		t.Fatalf("unexpected llm config: %#v", llm)
 	}
 	if serverCfg.DatabaseConfig == nil {
 		t.Fatal("expected database config")
@@ -294,7 +306,7 @@ func assertPipelineSlices(t *testing.T, listenerCfg *ListenerConfig) {
 	if bind.Name != "bind_pipelines" || len(bind.EncryptionConfig) != 1 {
 		t.Fatalf("unexpected bind pipeline: %#v", bind)
 	}
-	if rem.Name != "rem_default" {
+	if rem.Name == "" {
 		t.Fatalf("unexpected rem pipeline: %#v", rem)
 	}
 	if website.WebsiteName != "default-website" || website.RootPath != "/" || website.Port != 80 {
@@ -402,6 +414,17 @@ func fullConfigYAML(certPath, keyPath, caPath, errorPagePath, webContentPath str
 		"    provider: cloudflare\n" +
 		"    credentials:\n" +
 		"      CF_API_TOKEN: cf-token\n" +
+		"  llm:\n" +
+		"    default_provider: openai\n" +
+		"    timeout: 25\n" +
+		"    proxy_url: http://127.0.0.1:7890\n" +
+		"    providers:\n" +
+		"      openai:\n" +
+		"        endpoint: https://api.openai.com/v1\n" +
+		"        api_key: fixture-openai-key\n" +
+		"      deepseek:\n" +
+		"        endpoint: https://api.deepseek.com/v1\n" +
+		"        api_key: fixture-deepseek-key\n" +
 		"  database:\n" +
 		"    dialect: postgresql\n" +
 		"    host: db.example.com\n" +

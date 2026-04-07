@@ -6,15 +6,15 @@ package rpc
 import (
 	"context"
 
+	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/IoM-go/proto/implant/implantpb"
-	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/server/internal/llm"
 )
 
 // BridgeAgentChat handles the bridge agent RPC: operator -> implant -> [agent loop with LLM proxy] -> result.
-// LLM provider config is passed from the client's config ai settings via BridgeAgentRequest.
+// The client selects provider/model; endpoint/api key/proxy are resolved server-side.
 func (rpc *Server) BridgeAgentChat(ctx context.Context, req *implantpb.BridgeAgentRequest) (*clientpb.Task, error) {
 	greq, err := newGenericRequest(ctx, req)
 	if err != nil {
@@ -27,11 +27,9 @@ func (rpc *Server) BridgeAgentChat(ctx context.Context, req *implantpb.BridgeAge
 		return nil, err
 	}
 
-	// LLM config from client's config ai, passed through BridgeAgentRequest
+	// Provider selection comes from the client; server-side config resolves endpoint/api key/proxy.
 	providerOpts := llm.ProviderOpts{
 		Provider: req.GetProvider(),
-		APIKey:   req.GetApiKey(),
-		Endpoint: req.GetEndpoint(),
 	}
 
 	runTaskHandler(greq.Task, func() error {
@@ -62,10 +60,7 @@ func (rpc *Server) BridgeAgentChat(ctx context.Context, req *implantpb.BridgeAge
 					logs.Log.Infof("bridge agent tools: %v", names)
 				}
 
-				if err := types.AssertSpite(resp, types.MsgBridgeAgentResponse); err != nil {
-					greq.Task.Panic(buildErrorEvent(greq.Task, err))
-					return nil
-				}
+				resp.Name = consts.ModuleChat
 				if err := greq.HandlerSpite(resp); err != nil {
 					logs.Log.Errorf("bridge agent: handler spite error: %s", err)
 					return err

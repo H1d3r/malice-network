@@ -29,7 +29,7 @@ EvilClaw (CLIProxyAPI) 的部署与使用教程见 [evilclaw-integration.md](evi
 
 ## 3. 默认配置长什么样
 
-当前 `server/config.yaml` 默认会启用：
+当前 `server/config.example.yaml` 默认会启用：
 
 - listener 名称: `listener`
 - listener IP: `127.0.0.1`
@@ -114,7 +114,7 @@ listeners:
 
 ## 7. Auto Build
 
-Listener 还可以挂上自动构建策略，当前默认结构在 `server/config.yaml` 里已经留好了：
+Listener 还可以挂上自动构建策略，当前默认结构在 `server/config.example.yaml` 里已经留好了：
 
 ```yaml
 listeners:

@@ -78,7 +78,11 @@ analyze "getsystem failed: UAC is enabled"
 func AIConfigCommand(con *core.Console) *cobra.Command {
 	aiCmd := &cobra.Command{
 		Use:   "ai",
-		Short: "Show AI assistant configuration",
+		Short: "Show local AI preferences",
+		Long: `config ai manages local AI preferences on the client.
+Agent chat/skill uses provider/model from this local config, while endpoint/api_key/proxy
+are resolved on the server from server/config.yaml -> server.llm.
+Legacy local ask/analyze can still use local endpoint/api_key overrides if configured.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return AIShowCmd(con)
 		},
@@ -89,11 +93,11 @@ func AIConfigCommand(con *core.Console) *cobra.Command {
 // Show current AI configuration
 config ai
 
-// Enable AI with OpenAI
-config ai enable --provider openai --api-key "sk-xxx" --model gpt-4
+// Enable local preferences for server-backed agent chat/skill
+config ai enable --provider openai --model gpt-5.4
 
-// Enable AI with Claude
-config ai enable --provider claude --api-key "sk-ant-xxx" --model claude-3-opus-20240229
+// Switch local provider/model preference
+config ai enable --provider claude --model claude-3-5-sonnet
 
 // Disable AI
 config ai disable
@@ -102,7 +106,10 @@ config ai disable
 
 	enableCmd := &cobra.Command{
 		Use:   "enable",
-		Short: "Enable AI assistant",
+		Short: "Enable local AI preferences",
+		Long: `Enable local AI preferences for agent chat/skill.
+Provider/model are stored on the client. Endpoint/api_key for the agent pipeline are read
+from server/config.yaml -> server.llm. Legacy local ask/analyze can still use local overrides.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return AIEnableCmd(cmd, con)
 		},
@@ -110,10 +117,10 @@ config ai disable
 			"static": "true",
 		},
 	}
-	enableCmd.Flags().String("provider", "", "AI provider: openai or claude")
-	enableCmd.Flags().String("api-key", "", "API key for the AI provider")
-	enableCmd.Flags().String("endpoint", "", "API endpoint URL")
-	enableCmd.Flags().String("model", "", "Model name (e.g., gpt-4, claude-3-opus-20240229)")
+	enableCmd.Flags().String("provider", "", "Preferred provider for agent chat/skill: openai or claude")
+	enableCmd.Flags().String("api-key", "", "Legacy local API key for direct ask/analyze only")
+	enableCmd.Flags().String("endpoint", "", "Legacy local API endpoint for direct ask/analyze only")
+	enableCmd.Flags().String("model", "", "Preferred model name for agent chat/skill")
 	enableCmd.Flags().Int("max-tokens", 0, "Maximum tokens in response")
 	enableCmd.Flags().Int("timeout", 0, "Request timeout in seconds")
 	enableCmd.Flags().Int("history-size", 0, "Number of history lines to include as context")

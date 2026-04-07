@@ -132,7 +132,7 @@ func TestGetValidAISettingsUsesConfigAIHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected GetValidAISettings to fail when AI is disabled")
 	}
-	if !strings.Contains(err.Error(), "config ai --enable --api-key <key>") {
+	if !strings.Contains(err.Error(), "config ai enable") {
 		t.Fatalf("expected config ai hint, got %q", err.Error())
 	}
 	if strings.Contains(err.Error(), "ai-config") {

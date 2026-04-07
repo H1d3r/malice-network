@@ -8,7 +8,7 @@ import (
 	//_ "net/http/pprof"
 )
 
-//go:embed config.yaml
+//go:embed config.example.yaml
 var serverConfig []byte
 
 func main() {

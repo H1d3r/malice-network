@@ -302,16 +302,19 @@ func newTestTools() []reactTool {
 	}
 }
 
-func newTestAgent() *reactAgent {
-	baseURL, apiKey, _ := resolve(ProviderOpts{
+func newTestAgent(t *testing.T) *reactAgent {
+	t.Helper()
+
+	cfg := loadLiveTestConfig(t)
+	resolved, _ := resolve(ProviderOpts{
 		Provider: "openai",
-		APIKey:   "sk-Kdp7jXbyICmcCh7k6",
-		Endpoint: "https://wafcdn.aimeeting.store/v1",
+		APIKey:   cfg.APIKey,
+		Endpoint: cfg.BaseURL,
 	})
 	return &reactAgent{
-		baseURL:  baseURL,
-		apiKey:   apiKey,
-		model:    "gpt-5.4",
+		baseURL:  resolved.BaseURL,
+		apiKey:   resolved.APIKey,
+		model:    cfg.Model,
 		tools:    newTestTools(),
 		maxTurns: 10,
 	}
@@ -324,7 +327,7 @@ func TestReactAgent_SimpleChat(t *testing.T) {
 		t.Skip("skipping live API test in short mode")
 	}
 
-	agent := newTestAgent()
+	agent := newTestAgent(t)
 	agent.tools = nil // no tools for pure chat
 
 	text, iterations, toolCalls, err := agent.run("Say 'hello world' and nothing else.")
@@ -350,7 +353,7 @@ func TestReactAgent_SingleToolCall(t *testing.T) {
 		t.Skip("skipping live API test in short mode")
 	}
 
-	agent := newTestAgent()
+	agent := newTestAgent(t)
 
 	text, iterations, toolCalls, err := agent.run(
 		"What is the current time? Use the get_current_time tool to find out, then tell me.",
@@ -377,7 +380,7 @@ func TestReactAgent_MultiToolCall(t *testing.T) {
 		t.Skip("skipping live API test in short mode")
 	}
 
-	agent := newTestAgent()
+	agent := newTestAgent(t)
 
 	text, iterations, toolCalls, err := agent.run(
 		"Please do these two things: 1) Reverse the string 'hello' using the reverse_string tool, " +
@@ -402,7 +405,7 @@ func TestReactAgent_Calculate(t *testing.T) {
 		t.Skip("skipping live API test in short mode")
 	}
 
-	agent := newTestAgent()
+	agent := newTestAgent(t)
 
 	text, _, toolCalls, err := agent.run(
 		"Use the calculate tool to multiply 7 by 8, then tell me the result.",
@@ -507,7 +510,7 @@ Rules:
 		},
 	}
 
-	agent := newTestAgent()
+	agent := newTestAgent(t)
 	agent.tools = reconTools
 	agent.maxTurns = 15 // recon needs multiple tool calls
 
@@ -561,7 +564,7 @@ func TestReactAgent_MaxTurnsLimit(t *testing.T) {
 		t.Skip("skipping live API test in short mode")
 	}
 
-	agent := newTestAgent()
+	agent := newTestAgent(t)
 	agent.maxTurns = 1 // only 1 turn allowed
 
 	_, _, _, err := agent.run(

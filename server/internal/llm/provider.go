@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
-	"time"
 
 	"github.com/chainreactors/IoM-go/proto/implant/implantpb"
 )
@@ -19,13 +19,18 @@ import (
 // CallProvider forwards a BridgeLlmRequest to the specified LLM provider and returns BridgeLlmResponse.
 // Configuration priority: opts fields > environment variables > provider presets.
 func CallProvider(ctx context.Context, opts ProviderOpts, req *implantpb.BridgeLlmRequest) *implantpb.BridgeLlmResponse {
-	baseURL, apiKey, err := resolve(opts)
+	resolved, err := resolve(opts)
 	if err != nil {
 		return &implantpb.BridgeLlmResponse{Error: err.Error()}
 	}
 
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
-	reqCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	endpoint := strings.TrimSuffix(resolved.BaseURL, "/") + "/chat/completions"
+	client, err := newHTTPClient(resolved)
+	if err != nil {
+		return &implantpb.BridgeLlmResponse{Error: fmt.Sprintf("build http client: %s", err)}
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, resolved.Timeout)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(
 		reqCtx, "POST", endpoint, bytes.NewReader(req.GetData()),
@@ -34,9 +39,9 @@ func CallProvider(ctx context.Context, opts ProviderOpts, req *implantpb.BridgeL
 		return &implantpb.BridgeLlmResponse{Error: fmt.Sprintf("create request: %s", err)}
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	httpReq.Header.Set("Authorization", "Bearer "+resolved.APIKey)
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return &implantpb.BridgeLlmResponse{Error: fmt.Sprintf("http request: %s", err)}
 	}
@@ -63,4 +68,22 @@ func CallProvider(ctx context.Context, opts ProviderOpts, req *implantpb.BridgeL
 	}
 
 	return &implantpb.BridgeLlmResponse{Data: wrappedBytes}
+}
+
+func newHTTPClient(resolved ResolvedProvider) (*http.Client, error) {
+	if resolved.ProxyURL == "" {
+		return &http.Client{Timeout: resolved.Timeout}, nil
+	}
+
+	proxyURL, err := url.Parse(resolved.ProxyURL)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(proxyURL)
+	return &http.Client{
+		Timeout:   resolved.Timeout,
+		Transport: transport,
+	}, nil
 }
