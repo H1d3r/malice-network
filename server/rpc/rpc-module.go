@@ -54,6 +54,15 @@ func (rpc *Server) RefreshModule(ctx context.Context, req *implantpb.Request) (*
 	})
 }
 
+func (rpc *Server) UnloadModule(ctx context.Context, req *implantpb.Request) (*clientpb.Task, error) {
+	if req == nil {
+		return nil, types.ErrMissingRequestField
+	}
+	return rpc.AssertAndHandleWithSession(ctx, req, consts.ModuleUnloadModule, types.MsgListModule, func(greq *GenericRequest, spite *implantpb.Spite) {
+		applyModulesResponse(greq.Session, spite, false)
+	})
+}
+
 func (rpc *Server) Clear(ctx context.Context, req *implantpb.Request) (*clientpb.Task, error) {
 	return rpc.AssertAndHandle(ctx, req, consts.ModuleClear, types.MsgEmpty)
 }

@@ -16,76 +16,84 @@ import (
 )
 
 func Commands(con *core.Console) []*cobra.Command {
-	listModuleCmd := &cobra.Command{
-		Use:   consts.ModuleListModule,
+	moduleCmd := &cobra.Command{
+		Use:   consts.CommandModule,
+		Short: "Module management",
+	}
+
+	listCmd := &cobra.Command{
+		Use:   "list",
 		Short: "List modules",
-		// Long:  help.FormatLongHelp(consts.ModuleListModule),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return ListModulesCmd(cmd, con)
 		},
 	}
 
-	loadModuleCmd := &cobra.Command{
-		Use:   consts.ModuleLoadModule + " [module_file]",
+	loadCmd := &cobra.Command{
+		Use:   "load [module_file]",
 		Short: "Load module",
-		// Long:  help.FormatLongHelp(consts.ModuleLoadModule),duan
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return LoadModuleCmd(cmd, con)
 		},
 		Example: `load module from malefic-modules
-before loading, you can list the current modules: 
+before loading, you can list the current modules:
 ~~~
-execute_addon,exec ...
+module list
 ~~~
 then you can load module
 ~~~
-load_module --path <module_file.dll>
+module load --path <module_file.dll>
 ~~~
-you can see more modules loaded by list_module
+you can see more modules loaded by module list
 ~~~
 execute_addon,clear,ps,powershell...
 ~~~
-`}
-
-	common.BindFlag(loadModuleCmd, func(f *pflag.FlagSet) {
+`,
+	}
+	common.BindFlag(loadCmd, func(f *pflag.FlagSet) {
 		f.String("path", "", "module path")
 		f.String("modules", "", "modules list,eg: basic,extend")
 		f.StringP("bundle", "", "", "bundle name")
 		f.String("3rd", "", "build 3rd-party modules")
 		f.String("artifact", "", "exist module artifact")
 	})
-	common.BindFlagCompletions(loadModuleCmd, func(comp carapace.ActionMap) {
+	common.BindFlagCompletions(loadCmd, func(comp carapace.ActionMap) {
 		comp["path"] = carapace.ActionFiles()
 		comp["modules"] = common.ModulesCompleter()
 		comp["artifact"] = common.ModuleArtifactsCompleter(con)
 	})
-	common.BindArgCompletions(loadModuleCmd, nil,
+	common.BindArgCompletions(loadCmd, nil,
 		carapace.ActionFiles().Usage("path to the module file"))
 
-	refreshModuleCmd := &cobra.Command{
-		Use:   consts.ModuleRefreshModule,
+	unloadCmd := &cobra.Command{
+		Use:   "unload [bundle_name]",
+		Short: "Unload a module bundle by name",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return UnloadModuleCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(unloadCmd, nil,
+		common.SessionModuleCompleter(con).Usage("bundle name to unload"))
+
+	refreshCmd := &cobra.Command{
+		Use:   "refresh",
 		Short: "Refresh module",
-		// Long:  help.FormatLongHelp(consts.ModuleRefreshModule),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return RefreshModuleCmd(cmd, con)
 		},
 	}
 
 	clearCmd := &cobra.Command{
-		Use:   consts.ModuleClear,
-		Short: "Clear modules",
-		// Long:  help.FormatLongHelp(consts.ModuleClear),
+		Use:   "clear",
+		Short: "Clear all modules",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return ClearCmd(cmd, con)
 		},
 	}
 
-	return []*cobra.Command{
-		listModuleCmd,
-		loadModuleCmd,
-		refreshModuleCmd,
-		clearCmd,
-	}
+	moduleCmd.AddCommand(listCmd, loadCmd, unloadCmd, refreshCmd, clearCmd)
+	return []*cobra.Command{moduleCmd}
 }
 
 func Register(con *core.Console) {
@@ -108,17 +116,21 @@ func Register(con *core.Console) {
 			var rowEntries []table.Row
 			var row table.Row
 			tableModel := tui.NewTable([]table.Column{
-				table.NewFlexColumn("Module", "Module", 1),
-				table.NewFlexColumn("Help", "Help", 2),
+				table.NewFlexColumn("Module", "Module", 2),
+				table.NewFlexColumn("Bundle", "Bundle", 1),
+				table.NewFlexColumn("Help", "Help", 3),
 			}, true)
+			bundleMap := modules.GetBundleMap()
 			for _, module := range modules.GetModules() {
 				var short string
 				if cmd := con.CMDs[module]; cmd != nil {
 					short = cmd.Short
 				}
+				bundle := bundleMap[module]
 				row = table.NewRow(
 					table.RowData{
 						"Module": module,
+						"Bundle": bundle,
 						"Help":   short,
 					})
 				rowEntries = append(rowEntries, row)
@@ -153,6 +165,61 @@ func Register(con *core.Console) {
 		[]string{"task"})
 
 	con.RegisterImplantFunc(
+		consts.ModuleUnloadModule,
+		unloadModule,
+		"",
+		nil,
+		func(ctx *clientpb.TaskContext) (interface{}, error) {
+			resp := ctx.Spite.GetModules()
+			ctx.Session.Modules = resp.Modules
+			con.RefreshCmd(con.AddSession(ctx.Session))
+			return resp.Modules, nil
+		},
+		func(content *clientpb.TaskContext) (string, error) {
+			modules := content.Spite.GetModules()
+			remaining := modules.GetModules()
+			if len(remaining) == 0 {
+				return "All modules unloaded.", nil
+			}
+
+			var rowEntries []table.Row
+			var row table.Row
+			tableModel := tui.NewTable([]table.Column{
+				table.NewFlexColumn("Module", "Module", 2),
+				table.NewFlexColumn("Bundle", "Bundle", 1),
+				table.NewFlexColumn("Help", "Help", 3),
+			}, true)
+			bundleMap := modules.GetBundleMap()
+			for _, module := range remaining {
+				var short string
+				if cmd := con.CMDs[module]; cmd != nil {
+					short = cmd.Short
+				}
+				bundle := bundleMap[module]
+				row = table.NewRow(
+					table.RowData{
+						"Module": module,
+						"Bundle": bundle,
+						"Help":   short,
+					})
+				rowEntries = append(rowEntries, row)
+			}
+			tableModel.SetMultiline()
+			tableModel.SetRows(rowEntries)
+			return "Unloaded successfully. Remaining modules:\n" + tableModel.View(), nil
+		})
+
+	con.AddCommandFuncHelper(
+		consts.ModuleUnloadModule,
+		consts.ModuleUnloadModule,
+		consts.ModuleUnloadModule+"(active(),\"bundle_name\")",
+		[]string{
+			"session: special session",
+			"bundle: bundle name to unload",
+		},
+		[]string{"task"})
+
+	con.RegisterImplantFunc(
 		consts.ModuleRefreshModule,
 		refreshModule,
 		"",
@@ -173,7 +240,7 @@ func Register(con *core.Console) {
 		},
 		[]string{"task"})
 
-	//clear
+	// clear
 	con.RegisterImplantFunc(
 		consts.ModuleClear,
 		clearAll,

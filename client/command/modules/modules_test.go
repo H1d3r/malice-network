@@ -20,7 +20,7 @@ func TestLoadModuleFromPath(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	if err := h.Execute(consts.ModuleLoadModule, "--path", path); err != nil {
+	if err := h.Execute(consts.CommandModule, "load", "--path", path); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
@@ -45,7 +45,7 @@ func TestLoadModuleFromArtifactDownloadsThenLoads(t *testing.T) {
 		}, nil
 	})
 
-	if err := h.Execute(consts.ModuleLoadModule, "--artifact", "artifact-module.dll"); err != nil {
+	if err := h.Execute(consts.CommandModule, "load", "--artifact", "artifact-module.dll"); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
@@ -87,7 +87,7 @@ func TestLoadModuleBuildUsesSelectedModules(t *testing.T) {
 		}, nil
 	})
 
-	if err := h.Execute(consts.ModuleLoadModule, "--modules", "nano, execute_dll"); err != nil {
+	if err := h.Execute(consts.CommandModule, "load", "--modules", "nano, execute_dll"); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
@@ -139,7 +139,7 @@ func TestLoadModuleBuildUsesSelectedModules(t *testing.T) {
 func TestLoadModuleBuildUsesThirdPartySelection(t *testing.T) {
 	h := testsupport.NewHarness(t)
 
-	if err := h.Execute(consts.ModuleLoadModule, "--3rd", "rem"); err != nil {
+	if err := h.Execute(consts.CommandModule, "load", "--3rd", "rem"); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
@@ -174,7 +174,7 @@ func TestLoadModuleBuildErrorsPropagate(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	})
 
-	err := h.Execute(consts.ModuleLoadModule, "--modules", "nano")
+	err := h.Execute(consts.CommandModule, "load", "--modules", "nano")
 	if err == nil || err != context.DeadlineExceeded {
 		t.Fatalf("Execute error = %v, want %v", err, context.DeadlineExceeded)
 	}
@@ -192,7 +192,7 @@ func TestLoadModuleBuildErrorsPropagate(t *testing.T) {
 func TestLoadModuleRejectsMutuallyExclusiveSelectors(t *testing.T) {
 	h := testsupport.NewHarness(t)
 
-	err := h.Execute(consts.ModuleLoadModule, "--modules", "nano", "--3rd", "rem")
+	err := h.Execute(consts.CommandModule, "load", "--modules", "nano", "--3rd", "rem")
 	if err == nil {
 		t.Fatal("expected mutually exclusive selector error")
 	}
@@ -207,7 +207,7 @@ func TestLoadModuleRejectsMutuallyExclusiveSelectors(t *testing.T) {
 func TestLoadModuleRejectsMultipleInputSources(t *testing.T) {
 	h := testsupport.NewHarness(t)
 
-	err := h.Execute(consts.ModuleLoadModule, "--artifact", "module.dll", "--modules", "nano")
+	err := h.Execute(consts.CommandModule, "load", "--artifact", "module.dll", "--modules", "nano")
 	if err == nil {
 		t.Fatal("expected multiple input source error")
 	}
@@ -222,7 +222,7 @@ func TestLoadModuleRejectsMultipleInputSources(t *testing.T) {
 func TestLoadModuleRequiresOneSource(t *testing.T) {
 	h := testsupport.NewHarness(t)
 
-	err := h.Execute(consts.ModuleLoadModule)
+	err := h.Execute(consts.CommandModule, "load")
 	if err == nil {
 		t.Fatal("expected missing source error")
 	}
@@ -232,6 +232,25 @@ func TestLoadModuleRequiresOneSource(t *testing.T) {
 
 	testsupport.RequireNoPrimaryCalls(t, h)
 	testsupport.RequireNoSessionEvents(t, h)
+}
+
+func TestUnloadModule(t *testing.T) {
+	h := testsupport.NewHarness(t)
+
+	if err := h.Execute(consts.CommandModule, "unload", "execute_dll"); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	req, md := testsupport.MustSingleCall[*implantpb.Request](t, h, "UnloadModule")
+	if req.Name != consts.ModuleUnloadModule {
+		t.Fatalf("request name = %q, want %q", req.Name, consts.ModuleUnloadModule)
+	}
+	if req.Input != "execute_dll" {
+		t.Fatalf("request input = %q, want execute_dll", req.Input)
+	}
+	testsupport.RequireSessionID(t, md, h.Session.SessionId)
+	testsupport.RequireCallee(t, md, consts.CalleeCMD)
+	assertSingleTaskEvent(t, h, consts.ModuleUnloadModule)
 }
 
 func assertSingleTaskEvent(t testing.TB, h *testsupport.Harness, wantType string) {
