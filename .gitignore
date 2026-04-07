@@ -15,3 +15,7 @@ helper/intl/custom/*
 .gocache/
 /config.yaml
 /server/config.yaml
+helper/intl/community/resources/
+helper/intl/community/modules/
+helper/intl/community/main.lua
+helper/intl/community/mal.yaml
