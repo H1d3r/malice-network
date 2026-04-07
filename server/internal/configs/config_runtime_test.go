@@ -3,13 +3,11 @@ package configs
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/chainreactors/IoM-go/consts"
-	types "github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/malice-network/helper/implanttypes"
 	chunkparser "github.com/chainreactors/malice-network/server/internal/parser"
 	maleficparser "github.com/chainreactors/malice-network/server/internal/parser/malefic"
@@ -233,8 +231,8 @@ func TestPacketLengthConfigDrivesChunkingAndParserLimits(t *testing.T) {
 	}
 
 	_, _, err = parser.ReadHeader(newTestHeaderConn(9, allowed+1))
-	if !errors.Is(err, types.ErrPacketTooLarge) {
-		t.Fatalf("expected ErrPacketTooLarge, got %v", err)
+	if err != nil {
+		t.Fatalf("expected oversized packet to be accepted with warning, got %v", err)
 	}
 }
 

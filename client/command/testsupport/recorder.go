@@ -208,6 +208,10 @@ func (r *RecorderRPC) RefreshModule(ctx context.Context, in *implantpb.Request, 
 	return r.taskResponse(ctx, "RefreshModule", in)
 }
 
+func (r *RecorderRPC) UnloadModule(ctx context.Context, in *implantpb.Request, opts ...grpc.CallOption) (*clientpb.Task, error) {
+	return r.taskResponse(ctx, "UnloadModule", in)
+}
+
 func (r *RecorderRPC) ExecuteModule(ctx context.Context, in *implantpb.ExecuteModuleRequest, opts ...grpc.CallOption) (*clientpb.Task, error) {
 	return r.taskResponse(ctx, "ExecuteModule", in)
 }
@@ -763,6 +767,7 @@ var methodTaskTypes = map[string]string{
 	"ListModule":     consts.ModuleListModule,
 	"LoadModule":     consts.ModuleLoadModule,
 	"RefreshModule":  consts.ModuleRefreshModule,
+	"UnloadModule":   consts.ModuleUnloadModule,
 	"ListAddon":      consts.ModuleListAddon,
 	"LoadAddon":      consts.ModuleLoadAddon,
 	"ExecuteAddon":   consts.ModuleExecuteAddon,

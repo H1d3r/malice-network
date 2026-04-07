@@ -209,6 +209,11 @@ func (c *Connection) runtimeErrorHandler(scope string) GoErrorHandler {
 	)
 }
 
+func (c *Connection) closeWithError(err error) error {
+	Connections.remove(c.SessionID, err)
+	return err
+}
+
 func (c *Connection) runReceiveLoop() error {
 	for c.IsAlive() {
 		select {
@@ -285,25 +290,31 @@ func (c *Connection) Handler(ctx context.Context, conn *cryptostream.Conn) error
 	var err error
 	_, length, err := c.Parser.ReadHeader(conn)
 	if err != nil {
-		return fmt.Errorf("error reading header:%s %w", conn.RemoteAddr(), err)
+		return c.closeWithError(fmt.Errorf("error reading header:%s %w", conn.RemoteAddr(), err))
 	}
 	GoGuarded("connection-send-call:"+c.SessionID, func() error {
 		return c.Send(ctx, conn)
 	}, c.runtimeErrorHandler("send call"))
 
-	return c.buildResponse(conn, length)
+	if err := c.buildResponse(conn, length); err != nil {
+		return c.closeWithError(err)
+	}
+	return nil
 }
 
 func (c *Connection) HandlerSimplex(ctx context.Context, conn *cryptostream.Conn) error {
 	var err error
 	_, length, err := c.Parser.ReadHeader(conn)
 	if err != nil {
-		return fmt.Errorf("error reading header:%s %w", conn.RemoteAddr(), err)
+		return c.closeWithError(fmt.Errorf("error reading header:%s %w", conn.RemoteAddr(), err))
 	}
 	if err := c.Send(ctx, conn); err != nil {
-		return err
+		return c.closeWithError(err)
 	}
-	return c.buildResponse(conn, length)
+	if err := c.buildResponse(conn, length); err != nil {
+		return c.closeWithError(err)
+	}
+	return nil
 }
 
 type connections struct {
