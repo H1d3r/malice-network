@@ -26,8 +26,7 @@ func PowershellCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	con.GetInteractive().Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func Powershell(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, output bool) (*clientpb.Task, error) {
@@ -51,8 +50,7 @@ func ExecutePowershellCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func PowerPick(rpc clientrpc.MaliceRPCClient, sess *client.Session, path string, ps []string, param map[string]string) (*clientpb.Task, error) {

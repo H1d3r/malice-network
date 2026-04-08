@@ -7,6 +7,7 @@ import (
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/IoM-go/proto/services/clientrpc"
+	"github.com/chainreactors/malice-network/client/command/common"
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/chainreactors/malice-network/helper/intermediate"
 	"github.com/chainreactors/malice-network/helper/utils/output"
@@ -22,8 +23,7 @@ func RunCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func ExecuteCmd(cmd *cobra.Command, con *core.Console) error {
@@ -33,8 +33,7 @@ func ExecuteCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func Execute(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, realtime, output bool) (*clientpb.Task, error) {
@@ -63,8 +62,7 @@ func ShellCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func Shell(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, output bool) (*clientpb.Task, error) {

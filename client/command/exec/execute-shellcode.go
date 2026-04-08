@@ -27,8 +27,7 @@ func ExecuteShellcodeCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func ExecShellcode(rpc clientrpc.MaliceRPCClient, sess *client.Session, shellcodePath string,
@@ -65,8 +64,7 @@ func InlineShellcodeCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func InlineShellcode(rpc clientrpc.MaliceRPCClient, sess *client.Session, path string, args []string,

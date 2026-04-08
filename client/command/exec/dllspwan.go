@@ -29,8 +29,7 @@ func ExecuteDLLSpawnCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func ExecuteDLLSpawn(rpc clientrpc.MaliceRPCClient, sess *client.Session, dllPath string, entrypoint string, data string, binPath string, out bool, timeout uint32, arch string, process string, sac *implantpb.SacrificeProcess) (*clientpb.Task, error) {

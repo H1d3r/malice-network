@@ -35,6 +35,7 @@ run gogo.exe -- -i 127.0.0.1 -p http
 		carapace.ActionValues().Usage("command to execute"),
 		carapace.ActionValues().Usage("arguments to the command"),
 	)
+	common.BindOutputFlags(runCmd)
 
 	executeCmd := &cobra.Command{
 		Use:   consts.ModuleAliasExecute + " [cmdline]",
@@ -60,6 +61,7 @@ execute gogo.exe -- -i 127.0.0.1 -p http
 	common.BindArgCompletions(executeCmd, nil,
 		carapace.ActionValues().Usage("command to execute"),
 	)
+	common.BindOutputFlags(executeCmd)
 
 	shellCmd := &cobra.Command{
 		Use:     consts.ModuleAliasShell + " [cmdline]",
@@ -83,6 +85,7 @@ execute gogo.exe -- -i 127.0.0.1 -p http
 	common.BindFlag(shellCmd, func(f *pflag.FlagSet) {
 		f.BoolP("quiet", "q", false, "disable output")
 	})
+	common.BindOutputFlags(shellCmd)
 
 	execLocalCmd := &cobra.Command{
 		Use:   consts.ModuleExecuteLocal + " [local_exe]",
@@ -108,6 +111,7 @@ execute_local local_exe --ppid 1234 --block_dll --etw --argue "argue"
 		f.StringP("process", "n", "", "custom process path")
 		f.BoolP("output", "o", false, "disable output")
 	})
+	common.BindOutputFlags(execLocalCmd)
 
 	inlineLocalCmd := &cobra.Command{
 		Use:   consts.ModuleInlineLocal + " [local_exe]",
@@ -133,6 +137,7 @@ inline_local whoami
 		f.StringP("process", "n", "", "custom process path")
 		f.BoolP("output", "o", false, "disable output")
 	})
+	common.BindOutputFlags(inlineLocalCmd)
 
 	powershellCmd := &cobra.Command{
 		Use:   consts.ModuleAliasPowershell + " [cmdline]",
@@ -160,6 +165,7 @@ powershell dir
 	common.BindFlag(powershellCmd, func(f *pflag.FlagSet) {
 		f.BoolP("quiet", "q", false, "disable output")
 	})
+	common.BindOutputFlags(powershellCmd)
 
 	execAssemblyCmd := &cobra.Command{
 		Use:   consts.ModuleExecuteAssembly + " [file]",
@@ -185,6 +191,7 @@ execute_assembly potato.exe "whoami"
 		carapace.ActionValues().Usage("arguments to pass to the assembly args"))
 
 	common.BindFlag(execAssemblyCmd, common.SacrificeFlagSet, common.CLRFlagSet)
+	common.BindOutputFlags(execAssemblyCmd)
 
 	inlineAssemblyCmd := &cobra.Command{
 		Use:   consts.ModuleInlineAssembly + " [file]",
@@ -216,6 +223,7 @@ inline_assembly --amsi potato.exe -- cmd /c whoami
 		carapace.ActionValues().Usage("arguments to pass to the assembly args"))
 
 	common.BindFlag(inlineAssemblyCmd, common.CLRFlagSet)
+	common.BindOutputFlags(inlineAssemblyCmd)
 
 	execShellcodeCmd := &cobra.Command{
 		Use:   consts.ModuleExecuteShellcode + " [shellcode_file]",
@@ -242,6 +250,7 @@ execute_shellcode example.bin
 		carapace.ActionValues().Usage("arguments to pass to the assembly entrypoint"))
 
 	common.BindFlag(execShellcodeCmd, common.ExecuteFlagSet, common.SacrificeFlagSet)
+	common.BindOutputFlags(execShellcodeCmd)
 
 	inlineShellcodeCmd := &cobra.Command{
 		Use:   consts.ModuleAliasInlineShellcode + " [shellcode_file]",
@@ -269,6 +278,7 @@ inline_shellcode example.bin
 	common.BindArgCompletions(inlineShellcodeCmd, nil,
 		carapace.ActionFiles().Usage("path the shellcode file"))
 	common.BindFlag(inlineShellcodeCmd, common.ExecuteFlagSet)
+	common.BindOutputFlags(inlineShellcodeCmd)
 
 	execDLLCmd := &cobra.Command{
 		Use:   consts.ModuleExecuteDll + " [dll]",
@@ -304,6 +314,7 @@ execute_dll example.dll -e entrypoint -- arg1 arg2
 		f.StringP("entrypoint", "e", "", "custom entrypoint")
 		f.StringP("binPath", "", "", "custom process path")
 	})
+	common.BindOutputFlags(execDLLCmd)
 
 	common.BindFlagCompletions(execDLLCmd, func(comp carapace.ActionMap) {
 		comp["binPath"] = carapace.ActionFiles()
@@ -334,6 +345,7 @@ dllspawn example.dll
 		f.StringP("entrypoint", "e", "", "custom entrypoint")
 		f.StringP("binPath", "", "", "custom process path")
 	})
+	common.BindOutputFlags(execDLLSpawnCmd)
 
 	common.BindFlagCompletions(execDLLSpawnCmd, func(comp carapace.ActionMap) {
 		comp["binPath"] = carapace.ActionFiles()
@@ -371,6 +383,7 @@ inline_dll example.dll -e RunFunction -- arg1 arg2
 	common.BindFlag(inlineDLLCmd, common.ExecuteFlagSet, func(f *pflag.FlagSet) {
 		f.StringP("entrypoint", "e", "", "entrypoint")
 	})
+	common.BindOutputFlags(inlineDLLCmd)
 
 	execExeCmd := &cobra.Command{
 		Use:   consts.ModuleExecuteExe + " [exe]",
@@ -395,6 +408,7 @@ execute_exe gogo.exe -- -i 123.123.123.123 -p top2
 		carapace.ActionValues().Usage("arguments to pass to the assembly entrypoint"))
 
 	common.BindFlag(execExeCmd, common.ExecuteFlagSet, common.SacrificeFlagSet)
+	common.BindOutputFlags(execExeCmd)
 
 	inlinePECmd := &cobra.Command{
 		Use:   consts.ModuleAliasInlineExe + " [exe]",
@@ -421,6 +435,7 @@ inline_exe hackbrowserdata.exe -- -h
 `,
 	}
 	common.BindFlag(inlinePECmd, common.ExecuteFlagSet)
+	common.BindOutputFlags(inlinePECmd)
 	common.BindArgCompletions(inlinePECmd, nil,
 		carapace.ActionFiles().Usage("path the PE file"))
 
@@ -456,6 +471,7 @@ bof dir.x64.o -- wstr:"C:\\Windows\\System32"
 	common.BindArgCompletions(execBofCmd, nil,
 		carapace.ActionFiles().Usage("path the BOF file"),
 		carapace.ActionValues().Usage("arguments to pass to the assembly entrypoint"))
+	common.BindOutputFlags(execBofCmd)
 
 	powerpickCmd := &cobra.Command{
 		Use:   consts.ModulePowerpick + " [args]",
@@ -483,6 +499,7 @@ powerpick -s powerview.ps1 -- Get-NetUser
 	common.BindFlagCompletions(powerpickCmd, func(comp carapace.ActionMap) {
 		comp["script"] = carapace.ActionFiles()
 	})
+	common.BindOutputFlags(powerpickCmd)
 
 	return []*cobra.Command{
 		runCmd,

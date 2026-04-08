@@ -29,8 +29,7 @@ func ExecuteDLLCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func ExecDLL(rpc clientrpc.MaliceRPCClient, sess *client.Session, dllPath string, entrypoint string, args []string, binPath string, out bool, timeout uint32, arch string, process string, sac *implantpb.SacrificeProcess) (*clientpb.Task, error) {
@@ -71,8 +70,7 @@ func InlineDLLCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func InlineDLL(rpc clientrpc.MaliceRPCClient, sess *client.Session, path, entryPoint string, args []string,

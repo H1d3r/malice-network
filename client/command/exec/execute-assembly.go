@@ -21,8 +21,7 @@ func ExecuteAssemblyCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func ExecuteAssembly(rpc clientrpc.MaliceRPCClient, sess *client.Session, path string, args []string, out bool, param map[string]string, sac *implantpb.SacrificeProcess) (*clientpb.Task, error) {
@@ -46,8 +45,7 @@ func InlineAssemblyCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func InlineAssembly(rpc clientrpc.MaliceRPCClient, sess *client.Session, path string, args []string, out bool, param map[string]string) (*clientpb.Task, error) {

@@ -74,7 +74,7 @@ execute_addon,clear,ps,powershell...
 		},
 	}
 	common.BindArgCompletions(unloadCmd, nil,
-		common.SessionModuleCompleter(con).Usage("bundle name to unload"))
+		common.SessionBundleCompleter(con).Usage("bundle name to unload"))
 
 	refreshCmd := &cobra.Command{
 		Use:   "refresh",
@@ -104,7 +104,11 @@ func Register(con *core.Console) {
 		nil,
 		func(ctx *clientpb.TaskContext) (interface{}, error) {
 			resp := ctx.Spite.GetModules()
-			con.RefreshCmd(con.AddSession(ctx.Session))
+			sess := con.AddSession(ctx.Session)
+			if sess.Data != nil {
+				sess.Data.BundleMap = resp.GetBundleMap()
+			}
+			con.RefreshCmd(sess)
 			return resp.Modules, nil
 		},
 		func(content *clientpb.TaskContext) (string, error) {
@@ -148,7 +152,16 @@ func Register(con *core.Console) {
 		func(ctx *clientpb.TaskContext) (interface{}, error) {
 			resp := ctx.Spite.GetModules()
 			ctx.Session.Modules = append(ctx.Session.Modules, resp.Modules...)
-			con.RefreshCmd(con.AddSession(ctx.Session))
+			sess := con.AddSession(ctx.Session)
+			if sess.Data != nil {
+				if sess.Data.BundleMap == nil {
+					sess.Data.BundleMap = make(map[string]string)
+				}
+				for k, v := range resp.GetBundleMap() {
+					sess.Data.BundleMap[k] = v
+				}
+			}
+			con.RefreshCmd(sess)
 			return resp.Modules, nil
 		},
 		nil)
@@ -172,7 +185,11 @@ func Register(con *core.Console) {
 		func(ctx *clientpb.TaskContext) (interface{}, error) {
 			resp := ctx.Spite.GetModules()
 			ctx.Session.Modules = resp.Modules
-			con.RefreshCmd(con.AddSession(ctx.Session))
+			sess := con.AddSession(ctx.Session)
+			if sess.Data != nil {
+				sess.Data.BundleMap = resp.GetBundleMap()
+			}
+			con.RefreshCmd(sess)
 			return resp.Modules, nil
 		},
 		func(content *clientpb.TaskContext) (string, error) {
@@ -226,7 +243,11 @@ func Register(con *core.Console) {
 		nil,
 		func(ctx *clientpb.TaskContext) (interface{}, error) {
 			resp := ctx.Spite.GetModules()
-			con.RefreshCmd(con.AddSession(ctx.Session))
+			sess := con.AddSession(ctx.Session)
+			if sess.Data != nil {
+				sess.Data.BundleMap = resp.GetBundleMap()
+			}
+			con.RefreshCmd(sess)
 			return resp.Modules, nil
 		},
 		nil)

@@ -21,8 +21,7 @@ func ExecuteBofCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	con.GetInteractive().Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func ExecBof(rpc clientrpc.MaliceRPCClient, sess *client.Session, bofPath string, args []string, out bool) (*clientpb.Task, error) {

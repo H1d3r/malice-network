@@ -360,6 +360,25 @@ func SessionModuleCompleter(con *core.Console) carapace.Action {
 	return carapace.ActionCallback(callback)
 }
 
+func SessionBundleCompleter(con *core.Console) carapace.Action {
+	callback := func(c carapace.Context) carapace.Action {
+		results := make([]string, 0)
+		sess := con.GetInteractive()
+		if sess == nil || sess.Data == nil || sess.Data.BundleMap == nil {
+			return carapace.ActionValuesDescribed(results...).Tag("session bundles")
+		}
+		seen := make(map[string]bool)
+		for _, bundle := range sess.Data.BundleMap {
+			if bundle != "" && !seen[bundle] {
+				seen[bundle] = true
+				results = append(results, bundle, "")
+			}
+		}
+		return carapace.ActionValuesDescribed(results...).Tag("session bundles")
+	}
+	return carapace.ActionCallback(callback)
+}
+
 func ModulesCompleter() carapace.Action {
 	callback := func(c carapace.Context) carapace.Action {
 		results := make([]string, 0)

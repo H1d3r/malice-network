@@ -36,6 +36,10 @@ func (c *Console) complete(line []rune, pos int) (comps readline.Completions) {
 	// completer.Complete() variable is correctly initialized before use.
 	carapace.Gen(menu.Command)
 
+	// Hide internal _carapace subcommands before completion so they
+	// never appear as candidates.
+	hideCarapaceCommands(menu.Command)
+
 	// Split the line as shell words, only using
 	// what the right buffer (up to the cursor)
 	args, prefixComp, prefixLine := splitArgs(line, pos)
@@ -68,12 +72,18 @@ func (c *Console) complete(line []rune, pos int) (comps readline.Completions) {
 
 	// The completions are never nil: fill out our own object
 	// with everything it contains, regardless of errors.
-	raw := make([]readline.Completion, len(completions.Values))
+	raw := make([]readline.Completion, 0, len(completions.Values))
 	ansiEscape := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
-	for idx, val := range completions.Values.Decolor() {
+	for _, val := range completions.Values.Decolor() {
 		val.Value = ansiEscape.ReplaceAllString(val.Value, "")
-		raw[idx] = readline.Completion{
+
+		// Filter out carapace internal commands from completion candidates.
+		if strings.TrimSpace(val.Value) == "_carapace" {
+			continue
+		}
+
+		comp := readline.Completion{
 			Value:       unescapeValue(prefixComp, prefixLine, val.Value),
 			Display:     val.Display,
 			Description: val.Description,
@@ -82,8 +92,10 @@ func (c *Console) complete(line []rune, pos int) (comps readline.Completions) {
 		}
 
 		if !completions.Nospace.Matches(val.Value) {
-			raw[idx].Value = val.Value + " "
+			comp.Value = val.Value + " "
 		}
+
+		raw = append(raw, comp)
 	}
 
 	// Assign both completions and command/flags/args usage strings.
@@ -610,3 +622,15 @@ var replacer = strings.NewReplacer(
 	"\t", ` `,
 	"\\ ", " ", // User-escaped spaces in words.
 )
+
+// hideCarapaceCommands recursively hides all _carapace internal
+// subcommands so they never appear in completion candidates or help.
+func hideCarapaceCommands(root *cobra.Command) {
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == "_carapace" {
+			cmd.Hidden = true
+			continue
+		}
+		hideCarapaceCommands(cmd)
+	}
+}

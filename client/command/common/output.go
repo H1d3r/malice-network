@@ -10,37 +10,47 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// BindOutputFlags adds --file and --output flags to a command
+// BindOutputFlags adds -f/--file flag to a command for saving output to a file.
 func BindOutputFlags(cmd *cobra.Command) {
 	Bind("output", false, cmd, func(f *pflag.FlagSet) {
-		f.BoolP("file", "f", false, "save output to file")
-		f.StringP("output", "o", "", "output file path")
+		f.StringP("file", "f", "", "save output to file path")
 	})
 }
 
-// HandleTaskOutput waits for task completion and optionally saves to file
+// HandleTaskOutput optionally saves task output to file based on -f flag,
+// then always displays output to console.
 func HandleTaskOutput(cmd *cobra.Command, con *core.Console, task *clientpb.Task) error {
-	toFile, _ := cmd.Flags().GetBool("file")
-	outputPath, _ := cmd.Flags().GetString("output")
+	outputPath, _ := cmd.Flags().GetString("file")
 
-	if !toFile && outputPath == "" {
-		// 正常流程：异步处理
+	if outputPath == "" {
 		con.GetInteractive().Console(task, string(*con.App.Shell().Line()))
 		return nil
 	}
 
-	// 需要保存文件：同步等待结果
-	tasksContext, err := con.Rpc.GetAllTaskContent(con.GetInteractive().Context(), &clientpb.Task{
+	if task == nil {
+		return fmt.Errorf("task is nil")
+	}
+
+	session := con.GetInteractive()
+	if session == nil {
+		return fmt.Errorf("no active session")
+	}
+
+	taskReq := &clientpb.Task{
 		SessionId: task.SessionId,
 		TaskId:    task.TaskId,
 		Need:      -1,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to get task content: %w", err)
 	}
 
-	if outputPath == "" {
-		outputPath = fmt.Sprintf("task_%d.txt", task.TaskId)
+	// Task content may arrive asynchronously. Wait for completion first so the
+	// server-side cache/disk state is ready before collecting all chunks.
+	if _, err := con.Rpc.WaitTaskFinish(session.Context(), taskReq); err != nil {
+		return fmt.Errorf("failed to wait task finish: %w", err)
+	}
+
+	tasksContext, err := con.Rpc.GetAllTaskContent(session.Context(), taskReq)
+	if err != nil {
+		return fmt.Errorf("failed to get task content: %w", err)
 	}
 
 	var rendered []byte
@@ -54,6 +64,9 @@ func HandleTaskOutput(cmd *cobra.Command, con *core.Console, task *clientpb.Task
 		if err != nil {
 			return fmt.Errorf("failed to render task output: %w", err)
 		}
+		if text == "" {
+			continue
+		}
 		rendered = append(rendered, []byte(text+"\n")...)
 	}
 
@@ -63,7 +76,13 @@ func HandleTaskOutput(cmd *cobra.Command, con *core.Console, task *clientpb.Task
 
 	con.Log.Infof("Task output saved to: %s\n", outputPath)
 
-	// 同时也显示到控制台
-	con.GetInteractive().Console(task, string(*con.App.Shell().Line()))
+	// File output already waited for completion, so a user-supplied --wait would
+	// otherwise trigger a second wait/render pass in PersistentPostRunE.
+	if waitFlag := cmd.Flags().Lookup("wait"); waitFlag != nil {
+		_ = cmd.Flags().Set("wait", "false")
+	}
+
+	// Also display to console
+	session.Console(task, string(*con.App.Shell().Line()))
 	return nil
 }

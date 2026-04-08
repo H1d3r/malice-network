@@ -1,9 +1,16 @@
 package exec_test
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chainreactors/IoM-go/consts"
+	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/malice-network/client/command/testsupport"
 	"google.golang.org/grpc/metadata"
@@ -103,6 +110,87 @@ func TestExecCommandConformance(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestShellFileOutputWaitsForAsyncTask(t *testing.T) {
+	h := testsupport.NewHarness(t)
+	outputPath := filepath.Join(t.TempDir(), "shell-output.txt")
+
+	waitCalled := false
+	h.Recorder.OnTaskContext("WaitTaskFinish", func(_ context.Context, request any) (*clientpb.TaskContext, error) {
+		waitCalled = true
+		task, ok := request.(*clientpb.Task)
+		if !ok {
+			return nil, fmt.Errorf("wait request type = %T, want *clientpb.Task", request)
+		}
+		return &clientpb.TaskContext{
+			Task: &clientpb.Task{
+				TaskId:    task.GetTaskId(),
+				SessionId: task.GetSessionId(),
+				Type:      consts.ModuleExecute,
+				Cur:       2,
+				Total:     2,
+				Finished:  true,
+			},
+			Session: h.Session.Session,
+			Spite: &implantpb.Spite{
+				Error: 6,
+			},
+		}, nil
+	})
+	h.Recorder.OnTaskContexts("GetAllTaskContent", func(_ context.Context, request any) (*clientpb.TaskContexts, error) {
+		if !waitCalled {
+			return nil, errors.New("GetAllTaskContent called before WaitTaskFinish")
+		}
+		task, ok := request.(*clientpb.Task)
+		if !ok {
+			return nil, fmt.Errorf("content request type = %T, want *clientpb.Task", request)
+		}
+		return &clientpb.TaskContexts{
+			Task: &clientpb.Task{
+				TaskId:    task.GetTaskId(),
+				SessionId: task.GetSessionId(),
+				Type:      consts.ModuleExecute,
+				Cur:       2,
+				Total:     2,
+				Finished:  true,
+			},
+			Session: h.Session.Session,
+			Spites: []*implantpb.Spite{
+				{Error: 0},
+				{Error: 6},
+			},
+		}, nil
+	})
+
+	if err := h.Execute(consts.ModuleAliasShell, "-f", outputPath, "whoami"); err != nil {
+		t.Fatalf("execute shell with file output failed: %v", err)
+	}
+
+	calls := h.Recorder.Calls()
+	if len(calls) != 3 {
+		t.Fatalf("primary call count = %d, want 3 (Execute, WaitTaskFinish, GetAllTaskContent)", len(calls))
+	}
+	if calls[0].Method != "Execute" || calls[1].Method != "WaitTaskFinish" || calls[2].Method != "GetAllTaskContent" {
+		t.Fatalf("primary call order = %#v, want [Execute WaitTaskFinish GetAllTaskContent]", []string{calls[0].Method, calls[1].Method, calls[2].Method})
+	}
+
+	taskReq, ok := calls[1].Request.(*clientpb.Task)
+	if !ok {
+		t.Fatalf("wait request type = %T, want *clientpb.Task", calls[1].Request)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output file failed: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, fmt.Sprintf("task: %d true", taskReq.GetTaskId())) {
+		t.Fatalf("output file = %q, want first aggregated chunk", text)
+	}
+	if !strings.Contains(text, fmt.Sprintf("task: %d false", taskReq.GetTaskId())) {
+		t.Fatalf("output file = %q, want second aggregated chunk", text)
+	}
 }
 
 func assertExecTaskEvent(t testing.TB, h *testsupport.Harness, md metadata.MD, wantType string) {

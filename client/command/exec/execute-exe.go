@@ -24,8 +24,7 @@ func ExecuteExeCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	con.GetInteractive().Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func ExecExe(rpc clientrpc.MaliceRPCClient, sess *client.Session, pePath string,
@@ -56,8 +55,7 @@ func InlineExeCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	session.Console(task, string(*con.App.Shell().Line()))
-	return nil
+	return common.HandleTaskOutput(cmd, con, task)
 }
 
 func InlineExe(rpc clientrpc.MaliceRPCClient, sess *client.Session, path string, args []string,
