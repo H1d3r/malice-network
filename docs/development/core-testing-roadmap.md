@@ -25,20 +25,23 @@ go vet ./...
 go test ./... -count=1 -timeout 300s
 CGO_ENABLED=0 go build ./...
 go test -race ./server/internal/core -count=1 -timeout 300s
-go test -tags=mockimplant ./server -count=1 -timeout 300s
-go test -tags=integration ./server ./client/command/listener ./client/command/pipeline ./client/command/website ./client/command/sessions ./client/command/context -count=1 -timeout 300s
+mock_packages=$(go run ./scripts/testmatrix -layer mockimplant)
+go test -tags=mockimplant $mock_packages -count=1 -timeout 300s
+integration_packages=$(go run ./scripts/testmatrix -layer integration)
+go test -tags=integration $integration_packages -count=1 -timeout 300s
 ```
 
 If the default baseline fails, fix that first. Do not stack new testing work on top of a broken default suite.
 
 ## Core Layers
 
-The repository currently uses four primary layers:
+The repository currently uses five primary layers:
 
 - `unit`: deterministic package-level tests for parsing, validation, helpers, and side-effect boundaries
 - `command_conformance`: real Cobra command execution with recorder-backed RPC assertions
 - `integration`: real client/server control-plane tests with gRPC and mTLS
 - `mockimplant`: listener-facing implant transport tests with the mock implant harness
+- `realimplant`: manual real process validation on top of the mock breadth layer
 
 These layers map to core chains as follows:
 
@@ -132,4 +135,5 @@ The roadmap is being followed correctly when:
 - new command families land with `command_conformance` coverage first
 - new transport and listener behavior lands with either `unit` or `mockimplant` guards
 - CI keeps the inventory command runnable and the baseline suites green
+- tagged workflows discover their package lists from source instead of hardcoded YAML lists
 - regression records under `docs/tests/` are updated when a coverage expansion finds real defects

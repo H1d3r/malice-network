@@ -185,7 +185,8 @@ Run only the real implant suite:
 
 ```powershell
 $env:MALICE_REAL_IMPLANT_RUN = "1"
-go test ./server -tags realimplant -run TestRealImplant -count=1 -timeout 300s
+$packages = go run ./scripts/testmatrix -layer realimplant -format lines
+go test -tags realimplant $packages -run TestRealImplant -count=1 -timeout 300s
 ```
 
 Run the client command closure against the same real implant path:
@@ -215,6 +216,13 @@ Run a single case:
 $env:MALICE_REAL_IMPLANT_RUN = "1"
 go test ./server -tags realimplant -run TestRealImplantDeadSweepKeepsPendingStreamingTaskAlive -count=1 -timeout 300s
 ```
+
+Run the same suite in GitHub Actions through the manual workflow:
+
+- workflow: `.github/workflows/realimplant.yaml`
+- runner labels: `self-hosted`, `windows`
+- required repository variables: `MALICE_REAL_IMPLANT_BIN`, `MALICE_REAL_IMPLANT_MUTANT`
+- optional repository variable: `MALICE_REAL_IMPLANT_WORKSPACE`
 
 ## Design Choices
 

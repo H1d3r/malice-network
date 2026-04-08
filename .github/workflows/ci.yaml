@@ -20,7 +20,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24.13"
-          cache: true
+          cache: false
 
       - name: Go mod tidy
         run: go mod tidy
@@ -51,7 +51,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24.13"
-          cache: true
+          cache: false
 
       - name: Go mod tidy
         run: go mod tidy
@@ -75,13 +75,20 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24.13"
-          cache: true
+          cache: false
 
       - name: Go mod tidy
         run: go mod tidy
 
+      - name: Discover mock implant packages
+        shell: bash
+        run: echo "MOCKIMPLANT_PACKAGES=$(go run ./scripts/testmatrix -layer mockimplant)" >> "$GITHUB_ENV"
+
+      - name: Show mock implant package selection
+        run: echo "$MOCKIMPLANT_PACKAGES"
+
       - name: Mock implant E2E tests
-        run: go test -tags=mockimplant ./server -count=1 -timeout 300s
+        run: go test -tags=mockimplant $MOCKIMPLANT_PACKAGES -count=1 -timeout 300s
 
   integration:
     runs-on: ubuntu-22.04
@@ -95,10 +102,17 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24.13"
-          cache: true
+          cache: false
 
       - name: Go mod tidy
         run: go mod tidy
 
+      - name: Discover integration packages
+        shell: bash
+        run: echo "INTEGRATION_PACKAGES=$(go run ./scripts/testmatrix -layer integration)" >> "$GITHUB_ENV"
+
+      - name: Show integration package selection
+        run: echo "$INTEGRATION_PACKAGES"
+
       - name: Client/Server integration tests
-        run: go test -tags=integration ./server ./client/command/listener ./client/command/pipeline ./client/command/website ./client/command/sessions ./client/command/context -count=1 -timeout 300s
+        run: go test -tags=integration $INTEGRATION_PACKAGES -count=1 -timeout 300s
