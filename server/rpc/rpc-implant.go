@@ -43,6 +43,7 @@ func (rpc *Server) Register(ctx context.Context, req *clientpb.RegisterSession) 
 		core.Sessions.Add(sess)
 	} else {
 		logs.Log.Infof("session %s re-register", sess.ID)
+		sess.SetLastCheckin(getTimestamp(ctx))
 		sess.Update(req)
 		sess.Publish(consts.CtrlSessionUpdate, fmt.Sprintf("%s from %s re-registered at %s", sess.Abstract(), sess.Target, sess.PipelineID), true, true)
 		core.Sessions.Add(sess)

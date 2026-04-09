@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
+	"google.golang.org/grpc/metadata"
 )
 
 // ---------------------------------------------------------------------------
@@ -102,8 +104,14 @@ func TestRegister_CreatesNewSession(t *testing.T) {
 func TestRegister_ReRegisterExistingSession(t *testing.T) {
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "rereg-sess", "rereg-pipe", true)
+	before := sess.LastCheckinUnix()
+	wantTimestamp := before + 120
 
-	_, err := (&Server{}).Register(context.Background(), &clientpb.RegisterSession{
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"timestamp", strconv.FormatInt(wantTimestamp, 10),
+	))
+
+	_, err := (&Server{}).Register(ctx, &clientpb.RegisterSession{
 		Type:       "tcp",
 		SessionId:  sess.ID,
 		RawId:      1,
@@ -132,6 +140,9 @@ func TestRegister_ReRegisterExistingSession(t *testing.T) {
 	// Should still be in memory.
 	if _, err := core.Sessions.Get(sess.ID); err != nil {
 		t.Fatalf("session lost after re-Register: %v", err)
+	}
+	if got := sess.LastCheckinUnix(); got != wantTimestamp {
+		t.Fatalf("re-register last_checkin = %d, want %d", got, wantTimestamp)
 	}
 }
 

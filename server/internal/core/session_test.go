@@ -53,6 +53,10 @@ func withLastCheckin(ts int64) func(*Session) {
 	return func(s *Session) { s.SetLastCheckin(ts) }
 }
 
+func expiredLastCheckinUnix() int64 {
+	return time.Now().Add(-3 * time.Hour).Unix()
+}
+
 // withExpression returns an option that sets the cron expression.
 func withExpression(expr string) func(*Session) {
 	return func(s *Session) { s.SessionContext.Expression = expr }
@@ -164,7 +168,7 @@ func TestSession_isAlived_BindPipeline(t *testing.T) {
 func TestSession_isAlived_Expired(t *testing.T) {
 	sess := newTestSession("expired-1",
 		withExpression("*/1 * * * *"),
-		withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+		withLastCheckin(expiredLastCheckinUnix()),
 	)
 	if sess.isAlived() {
 		t.Fatal("session with old LastCheckin should be dead")
@@ -545,7 +549,7 @@ func TestSessions_SweepInactiveKeepsPendingTasks(t *testing.T) {
 	s := &sessions{active: &sync.Map{}}
 	sess := newTestSession("sweep-pending",
 		withExpression("*/1 * * * *"),
-		withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+		withLastCheckin(expiredLastCheckinUnix()),
 	)
 	task := sess.NewTask("sleep", 1)
 	s.Add(sess)
@@ -573,7 +577,7 @@ func TestSessions_SweepInactiveRemovesIdleSessions(t *testing.T) {
 	s := &sessions{active: &sync.Map{}}
 	sess := newTestSession("sweep-idle",
 		withExpression("*/1 * * * *"),
-		withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+		withLastCheckin(expiredLastCheckinUnix()),
 	)
 	s.Add(sess)
 

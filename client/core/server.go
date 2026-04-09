@@ -360,9 +360,7 @@ func (s *Server) EventHandler() {
 		if fn, ok := s.EventCallback[event.Op]; ok {
 			fn(event)
 		}
-		go func() {
-			s.HandlerEvent(event)
-		}()
+		s.HandlerEvent(event)
 	}
 }
 

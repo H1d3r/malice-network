@@ -123,7 +123,7 @@ func markRealSessionStale(t *testing.T, sessionID string) int64 {
 	t.Helper()
 
 	session := mustRealRuntimeSession(t, sessionID)
-	staleAt := time.Now().Add(-10 * time.Minute).Unix()
+	staleAt := time.Now().Add(-3 * time.Hour).Unix()
 	session.SetLastCheckin(staleAt)
 	if err := session.Save(); err != nil {
 		t.Fatalf("session.Save(stale) failed: %v", err)

@@ -12,6 +12,10 @@ import (
 	inotify "github.com/chainreactors/malice-network/server/internal/notify"
 )
 
+func lifecycleExpiredLastCheckinUnix() int64 {
+	return time.Now().Add(-3 * time.Hour).Unix()
+}
+
 // ---------- Lifecycle: Ticker marks dead sessions ----------
 
 func TestLifecycle_TickerMarksDead(t *testing.T) {
@@ -37,7 +41,7 @@ func TestLifecycle_TickerMarksDead(t *testing.T) {
 	// Add an expired session
 	sess := newTestSession("dead-ticker",
 		withExpression("*/1 * * * *"),
-		withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+		withLastCheckin(lifecycleExpiredLastCheckinUnix()),
 	)
 	s.Add(sess)
 
@@ -196,7 +200,7 @@ func TestLifecycle_RegisterCheckinDeadReborn(t *testing.T) {
 	sess.Save()
 
 	// Step 3: Expire — set old LastCheckin
-	sess.SetLastCheckin(time.Now().Add(-10 * time.Minute).Unix())
+	sess.SetLastCheckin(lifecycleExpiredLastCheckinUnix())
 
 	// Step 4: Ticker detects dead
 	for _, session := range s.All() {
@@ -385,11 +389,11 @@ func TestLifecycle_MixedAliveDeadSessions(t *testing.T) {
 	// Add dead sessions
 	dead1 := newTestSession("dead-mix-1",
 		withExpression("*/1 * * * *"),
-		withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+		withLastCheckin(lifecycleExpiredLastCheckinUnix()),
 	)
 	dead2 := newTestSession("dead-mix-2",
 		withExpression("*/1 * * * *"),
-		withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+		withLastCheckin(lifecycleExpiredLastCheckinUnix()),
 	)
 
 	// Add a bind session (always alive regardless of checkin)
@@ -483,7 +487,7 @@ func TestEdge_RegisterLongSilenceThenReborn(t *testing.T) {
 	s.Add(sess)
 
 	// Step 2: NO checkin for a long time — simulate by backdating LastCheckin
-	sess.SetLastCheckin(time.Now().Add(-30 * time.Minute).Unix())
+	sess.SetLastCheckin(lifecycleExpiredLastCheckinUnix())
 
 	// Step 3: Ticker detects dead
 	runTicker(s)
@@ -608,7 +612,7 @@ func TestEdge_ConcurrentRemove(t *testing.T) {
 		s := &sessions{active: &sync.Map{}}
 		sess := newTestSession("conc-rm",
 			withExpression("*/1 * * * *"),
-			withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+			withLastCheckin(lifecycleExpiredLastCheckinUnix()),
 		)
 		s.Add(sess)
 
@@ -660,7 +664,7 @@ func TestEdge_ConcurrentRemove(t *testing.T) {
 func TestEdge_isAlived_EmptyExpression(t *testing.T) {
 	sess := newTestSession("empty-expr",
 		withExpression(""), // no expression set
-		withLastCheckin(time.Now().Add(-1*time.Hour).Unix()),
+		withLastCheckin(lifecycleExpiredLastCheckinUnix()),
 	)
 	// cronexpr.Parse("") fails → isAlived returns true (never times out)
 	// This is a known gap: sessions with no timer expression never die
@@ -683,33 +687,48 @@ func TestEdge_isAlived_ZeroJitter(t *testing.T) {
 	}
 
 	// Now expire it
-	sess.SetLastCheckin(time.Now().Add(-10 * time.Minute).Unix())
+	sess.SetLastCheckin(lifecycleExpiredLastCheckinUnix())
 	if sess.isAlived() {
 		t.Fatal("expired session with zero jitter should be dead")
 	}
 }
 
-// ---------- Edge: isAlived boundary — exactly at allowed offline ----------
+// ---------- Edge: isAlived boundary — exactly at expected deadline ----------
 
 func TestEdge_isAlived_Boundary(t *testing.T) {
-	// With expression "*/1 * * * *" (every minute):
-	// nextInterval ≈ 0..60s, allowedOffline = max(nextInterval*(1+jitter)+30, 150) = 150s
-	// So a session that last checked in 149s ago should be alive,
-	// and one that checked in 151s ago should be dead.
-
 	sess := newTestSession("boundary",
-		withExpression("*/1 * * * *"),
+		withExpression("* * * * *"),
 	)
 	sess.SessionContext.Jitter = 0.0
+	base := time.Now().Truncate(time.Minute)
+	sess.SetLastCheckin(base.Unix())
 
-	sess.SetLastCheckin(time.Now().Add(-149 * time.Second).Unix())
-	if !sess.isAlived() {
-		t.Fatal("session 149s ago should be alive (within 150s window)")
+	if !sess.isAliveAt(base.Add(19*time.Minute + 59*time.Second)) {
+		t.Fatal("session should stay alive before the 10x interval + 600s deadline")
 	}
 
-	sess.SetLastCheckin(time.Now().Add(-151 * time.Second).Unix())
-	if sess.isAlived() {
-		t.Fatal("session 151s ago should be dead (beyond 150s window)")
+	if sess.isAliveAt(base.Add(20*time.Minute + time.Second)) {
+		t.Fatal("session should be dead after the 10x interval + 600s deadline passes")
+	}
+}
+
+func TestEdge_isAlived_UsesLastCheckinAsDeadlineBase(t *testing.T) {
+	sess := newTestSession("deadline-base",
+		withExpression("*/5 * * * *"),
+	)
+	sess.SessionContext.Jitter = 0.2
+
+	base := time.Date(2026, time.January, 1, 12, 3, 20, 0, time.UTC)
+	sess.SetLastCheckin(base.Unix())
+
+	// Next cron boundary after 12:03:20 is 12:05:00, so the expected interval is
+	// 100s and the deadline keeps at least a 10x margin plus 600s:
+	// base + 100s * 10 + 600s = base + 1600s.
+	if !sess.isAliveAt(base.Add(1599 * time.Second)) {
+		t.Fatal("session should be alive before the last-checkin-based deadline")
+	}
+	if sess.isAliveAt(base.Add(1601 * time.Second)) {
+		t.Fatal("session should be dead after the last-checkin-based deadline")
 	}
 }
 
@@ -793,7 +812,7 @@ func TestEdge_RapidFlapping(t *testing.T) {
 		}
 
 		// Expire it
-		sess.SetLastCheckin(time.Now().Add(-10 * time.Minute).Unix())
+		sess.SetLastCheckin(lifecycleExpiredLastCheckinUnix())
 
 		// Ticker kills it
 		runTicker(s)
@@ -934,7 +953,7 @@ func TestEdge_MultipleDeathsInSameTicker(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		sess := newTestSession("batch-dead-"+string(rune('a'+i)),
 			withExpression("*/1 * * * *"),
-			withLastCheckin(time.Now().Add(-10*time.Minute).Unix()),
+			withLastCheckin(lifecycleExpiredLastCheckinUnix()),
 		)
 		s.Add(sess)
 	}

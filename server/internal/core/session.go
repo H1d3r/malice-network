@@ -23,7 +23,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/chainreactors/logs"
-	"github.com/chainreactors/malice-network/helper/utils"
 	"github.com/chainreactors/malice-network/helper/utils/fileutils"
 	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/db"
@@ -485,24 +484,65 @@ func (s *Session) LastCheckinUnix() int64 {
 	return s.lastCheckin.Load()
 }
 
-func (s *Session) isAlived() bool {
+func (s *Session) expectedCheckinDeadline() (time.Time, bool) {
+	if s == nil {
+		return time.Time{}, false
+	}
+	lastCheckin := s.LastCheckinUnix()
+	if lastCheckin <= 0 {
+		return time.Time{}, false
+	}
+	if strings.TrimSpace(s.Expression) == "" {
+		return time.Time{}, false
+	}
+
+	parsedExpr, err := cronexpr.Parse(s.Expression)
+	if err != nil {
+		logs.Log.Debugf("session %s timer expression parse error %q: %v", s.ID, s.Expression, err)
+		return time.Time{}, false
+	}
+
+	base := time.Unix(lastCheckin, 0)
+	nextTime := parsedExpr.Next(base)
+	if nextTime.IsZero() || !nextTime.After(base) {
+		return time.Time{}, false
+	}
+
+	jitter := s.Jitter
+	if jitter < 0 {
+		jitter = 0
+	}
+
+	expectedInterval := nextTime.Sub(base)
+	if expectedInterval <= 0 {
+		return time.Time{}, false
+	}
+
+	multiplier := 1 + jitter
+	if multiplier < 10 {
+		multiplier = 10
+	}
+
+	allowedOffline := time.Duration(float64(expectedInterval)*multiplier) + 10*time.Minute
+	return base.Add(allowedOffline), true
+}
+
+func (s *Session) isAliveAt(now time.Time) bool {
 	if s == nil {
 		return false
 	}
 	if s.Type == consts.BindPipeline {
 		return true
-	} else {
-		parsedExpr, err := cronexpr.Parse(s.Expression)
-		if err != nil {
-			logs.Errorf("exp parse error %s", err)
-			return true
-		}
-		nextTime := parsedExpr.Next(time.Now())
-		remainingSeconds := int64(nextTime.Sub(time.Now()).Seconds())
-		remainingSeconds = int64(float64(remainingSeconds) * (1 + s.Jitter))
-		allowedOffline := utils.Max(remainingSeconds+30, int64(150)) // values are in seconds
-		return time.Now().Unix()-s.LastCheckinUnix() <= allowedOffline
 	}
+	deadline, ok := s.expectedCheckinDeadline()
+	if !ok {
+		return true
+	}
+	return !now.After(deadline)
+}
+
+func (s *Session) isAlived() bool {
+	return s.isAliveAt(time.Now())
 }
 
 func (s *Session) ToProtobuf() *clientpb.Session {
@@ -924,6 +964,10 @@ func (s *sessions) SweepInactive() {
 		if session == nil || session.isAlived() {
 			continue
 		}
+		// Re-check with the latest timestamp to avoid racing with a fresh checkin.
+		if session.isAlived() {
+			continue
+		}
 		if err := session.Save(); err != nil {
 			logs.Log.Errorf("save dead session %s failed: %s", session.ID, err.Error())
 		}
@@ -936,6 +980,12 @@ func (s *sessions) SweepInactive() {
 			)
 		}
 		if session.HasUnfinishedTasks() {
+			continue
+		}
+		// A checkin may have revived the session after it was marked dead but
+		// before runtime eviction. Keep it in memory when the latest state is alive.
+		if session.isAlived() {
+			session.MarkAlive()
 			continue
 		}
 		s.Remove(session.ID)
