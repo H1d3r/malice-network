@@ -1,147 +1,148 @@
-# Listener 与 Pipeline
+# Listener 与 Pipeline 架构
 
-本文档说明 Listener 与 Pipeline 的职责、启动方式、配置项和实现位置。
+本文档说明 Listener 与 Pipeline 的架构设计、类型体系和核心机制。
 
-## 1. Listener 是什么
+操作指南见 [Listener 操作](../operations/listener.md)。
 
-Listener 是 `malice-network` 的分布式通信层，负责：
+## 架构设计
 
-- 接收 implant 的真实网络连接
-- 维护不同 pipeline 的监听状态
-- 对接 parser、加密和协议转换
-- 通过 gRPC / mTLS 和 server 同步状态与任务
+### Listener 的角色
 
-Listener 负责通信接入与传输处理，Server 负责状态管理与任务编排。
+Listener 是 malice-network 的分布式通信层，与 Server 解耦设计：
 
-## 2. 当前支持哪些 Pipeline
+- **分布式部署**：可以独立部署在任意服务器上，不需要与 Server 同机
+- **与 Server 解耦**：通过 gRPC Stream 与 Server 全双工通信，独立运行和故障隔离
+- **多 Pipeline 承载**：每个 Listener 可运行多个不同类型的 Pipeline
 
-按 `server/listener/` 目录里的实现，当前仓库里已经落地的类型包括：
-
-- `tcp`
-- `http`
-- `bind`
-- `rem`
-- `website`
-- `custom`
-
-其中 `custom` 的详细接入方式见 [../custom-pipeline-guide.md](../custom-pipeline-guide.md)。
-EvilClaw (CLIProxyAPI) 的部署与使用教程见 [evilclaw-integration.md](evilclaw-integration.md)。
-
-## 3. 默认配置长什么样
-
-当前 `server/config.example.yaml` 默认会启用：
-
-- listener 名称: `listener`
-- listener IP: `127.0.0.1`
-- TCP pipeline: `tcp`, 默认端口 `5001`
-- HTTP pipeline: `http`, 默认端口 `8080`
-- REM pipeline: `rem_default`
-
-最常改的字段通常是：
-
-- `listeners.ip`
-- `listeners.auth`
-- `listeners.tcp[*].port`
-- `listeners.http[*].port`
-- `listeners.auto_build.*`
-
-## 4. 启动模式
-
-### Server + Listener 一起启动
-
-常用部署模式如下：
-
-```bash
-./malice_network_linux_amd64 -i <public-ip>
+```
+┌─────────┐  gRPC/mTLS  ┌──────────┐
+│  Server  │◄───────────►│ Listener │
+│          │             │          │
+│ 状态管理  │             │ ┌──────┐ │   TCP     ┌─────────┐
+│ 任务编排  │             │ │ TCP  │◄├──────────►│ Implant │
+│ RPC 服务  │             │ ├──────┤ │           └─────────┘
+│          │             │ │ HTTP │ │   HTTP
+│          │             │ ├──────┤ │           ┌─────────┐
+│          │             │ │ REM  │◄├──────────►│ Implant │
+│          │             │ ├──────┤ │           └─────────┘
+│          │             │ │ Web  │ │
+│          │             │ └──────┘ │
+└─────────┘             └──────────┘
 ```
 
-### 只启动 server
+### Pipeline 的角色
 
-```bash
-./malice_network_linux_amd64 --server-only
-```
+Pipeline 是 Listener 与 Implant 交互的具体传输实现：
 
-### 只启动 listener
+- 每个 Pipeline 负责一种协议的监听、解析和路由
+- Pipeline 相当于传统 C2 中的"Listener"概念，但 IoM 进一步细分了层次
 
-```bash
-./malice_network_linux_amd64 --listener-only -c listener.yaml
-```
+## Pipeline 类型
 
-独立 listener 一般需要：
+| 类型 | 协议 | 用途 |
+|------|------|------|
+| **TCP** | TCP（可选 TLS） | 最基础的传输，直连场景 |
+| **HTTP** | HTTP/HTTPS | 伪装为 Web 流量，支持自定义 Header/Body |
+| **REM** | 自定义协议 | 基于 [rem](https://github.com/chainreactors/rem) 的灵活传输 |
+| **Bind** | 反向连接 | Implant 监听端口，Client 主动连接（不稳定） |
+| **Website** | HTTP | 文件托管和伪装 |
+| **Custom** | 自定义 | 第三方 Pipeline 接入，详见 [自定义 Pipeline 开发](../development/custom-pipeline-guide.md) |
 
-- 一份可执行文件
-- 一份 listener 配置
-- 一份对应的 `*.auth` 凭证文件
+## 核心机制
 
-## 5. Root 命令怎么管理 Listener
+### TLS 配置
 
-按当前 `server/root/listener.go`，内置的 root 命令有：
+Pipeline 的 TLS 支持两种配置方式：
 
-- `listener add <name>`
-- `listener del <name>`
-- `listener list`
-- `listener reset <name>`
+=== "config.yaml 配置"
 
-其中：
+    ```yaml
+    tcp:
+      - name: tcp
+        tls:
+          enable: true                # 使用自签名证书
+          cert_file: path/to/cert     # 或指定证书路径
+          key_file: path/to/key
+          ca_file: path/to/ca         # 可选
+    ```
 
-- `add` 会新增 listener 并在当前目录写出 `<name>.auth`
-- `reset` 会重置证书并重新生成 auth 文件
-- 这些命令依赖本地 root RPC，所以需要 server 已运行
+=== "Client 命令配置"
 
-## 6. 独立部署时要注意什么
+    ```bash
+    cert self_signed                  # 生成自签名证书
+    cert import --cert cert.crt --key key.crt  # 导入证书
+    pipeline start tcp --cert-name <name>      # 使用指定证书启动
+    ```
 
-### 认证文件
+!!! warning "Implant 对齐"
+    Pipeline 开启 TLS 时，Implant 的 profile 中也需要同步开启 `tls.enable: true`。
 
-Listener 侧的 mTLS 凭证通常来自：
+### Parser 机制
 
-- 默认的 `listener.auth`
-- 或者 `listener add <name>` 生成的 `<name>.auth`
+Parser 决定 Pipeline 如何解析 Implant 的通信协议：
 
-配置里对应字段是：
+| Parser | 说明 |
+|--------|------|
+| `auto` | 自动检测 Implant 类型 |
+| `malefic` | 解析 malefic 主 implant 协议 |
+| `pulse` | 解析 pulse 轻量 implant 协议 |
+
+### Encryption 机制
+
+Pipeline 与 Implant 之间的通信加密：
 
 ```yaml
-listeners:
-  auth: listener.auth
+encryption:
+  - enable: true
+    type: aes              # 支持 aes / xor
+    key: maliceofinternal  # 密钥需与 Implant profile 一致
 ```
 
-### 外网地址
+支持配置多层加密（如同时启用 AES + XOR）。
 
-部署时应重点核对以下字段：
+### HTTP 自定义响应
 
-- `server.ip`
-- `listeners.ip`
-- `-i, --ip` 启动参数
-
-## 7. Auto Build
-
-Listener 还可以挂上自动构建策略，当前默认结构在 `server/config.example.yaml` 里已经留好了：
+HTTP Pipeline 支持自定义响应内容，用于流量伪装：
 
 ```yaml
-listeners:
-  auto_build:
-    enable: false
-    build_pulse: false
-    pipeline:
-      - tcp
-      - http
-    target:
-      - x86_64-pc-windows-gnu
+http:
+  - name: http
+    headers:                               # 自定义响应头
+      Server: ["nginx/1.22.0"]
+      Content-Type: ["text/html; charset=utf-8"]
+    error_page: "/var/www/error.html"      # 错误页面
+    body_prefix: "<!-- prefix -->"         # Body 前缀
+    body_suffix: "<!-- suffix -->"         # Body 后缀
 ```
 
-常见用途：
+## 独立部署
 
-- 某些 pipeline 启动后自动准备对应 artifact
-- 为固定 target 预热常用产物
+Listener 可以独立部署在与 Server 不同的服务器上：
 
-更完整的构建链路看 [build.md](build.md)。
+```bash
+./malice-network --listener-only -c listener.yaml
+```
 
-## 8. 实现位置
+需要的文件：
 
-相关实现主要位于：
+- `malice-network` 可执行文件
+- `listener.yaml` 配置文件（或 `config.yaml`）
+- `listener.auth` 认证凭证
 
-1. `server/listener/listener.go`
-2. `server/listener/tcp.go`
-3. `server/listener/http.go`
-4. `server/listener/rem.go`
-5. `server/listener/custom.go`
-6. `server/internal/core/pipeline.go`
+## 实现位置
+
+| 文件 | 职责 |
+|------|------|
+| `server/listener/listener.go` | Listener 生命周期管理 |
+| `server/listener/tcp.go` | TCP Pipeline 实现 |
+| `server/listener/http.go` | HTTP Pipeline 实现 |
+| `server/listener/rem.go` | REM Pipeline 实现 |
+| `server/listener/custom.go` | Custom Pipeline 接入 |
+| `server/internal/core/pipeline.go` | Pipeline 运行时状态 |
+
+## 相关文档
+
+- [Server 配置参考](index.md) - config.yaml 完整配置
+- [Listener 操作指南](../operations/listener.md) - 具体操作与使用
+- [自定义 Pipeline](../development/custom-pipeline-guide.md) - 第三方 Pipeline 开发
+- [代理配置](../operations/proxy.md) - REM 代理集成

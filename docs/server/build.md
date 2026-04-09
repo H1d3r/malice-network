@@ -1,164 +1,131 @@
-# 构建与 Profile
+# 构建系统架构
 
-本文档说明 `malice-network` 中的 Profile、Build 和构建源配置。
+本文档说明 malice-network 构建系统的架构设计、构建源机制和 Profile 体系。
 
-## 1. 基本概念
+操作指南见 [构建操作](../operations/build.md)。
 
-### Pipeline
+## 架构设计
 
-Pipeline 决定 implant 通过什么网络方式和 listener 通信，比如 `tcp`、`http`、`rem`。
+构建系统是 Server 端的编排层，负责将 Profile + Target + 构建源 组合成最终的 Artifact。
 
-### Profile
-
-Profile 是一份构建配置快照，负责把 pipeline、模块、反沙箱、guardrail、构建参数等固定下来。
-
-### Build
-
-`build` 命令使用某个 profile，结合 target 和构建源，真正生成 beacon / bind / prelude / module / artifact。
-
-## 2. 典型工作流
-
-### 第一步：创建 profile
-
-```bash
-./iom_linux_amd64 profile new --name tcp-demo --pipeline tcp
+```
+┌─────────┐   profile    ┌──────────┐   dispatch   ┌─────────────┐
+│  Client  │────────────►│  Server   │────────────►│ Build Source │
+│ build cmd│             │ 构建编排   │             │ Docker/      │
+└─────────┘             │          │             │ Action/SaaS  │
+                        │          │◄────────────│              │
+                        │          │  artifact   └─────────────┘
+                        │          │
+                        │  ┌──────┐│
+                        │  │ DB   ││  存储 artifact 记录
+                        │  └──────┘│
+                        └──────────┘
 ```
 
-也可以从现成配置导入：
+### 三个核心概念
 
-```bash
-./iom_linux_amd64 profile load ./config.yaml --name tcp-demo --pipeline tcp
-```
+| 概念 | 说明 |
+|------|------|
+| **Profile** | 构建配置快照，绑定 Pipeline、模块列表、加密、guardrail 等参数 |
+| **Build** | 使用 Profile + Target + Source 触发的一次构建任务 |
+| **Artifact** | 构建产物，记录在 DB 中，可下载为多种格式 |
 
-### 第二步：查看 profile
+## 构建源机制
 
-```bash
-./iom_linux_amd64 profile list
-./iom_linux_amd64 profile show tcp-demo
-```
+Server 支持多种构建源，按优先级自动选择或手动指定：
 
-### 第三步：开始构建
+| 构建源 | 机制 | 依赖 | 适用场景 |
+|--------|------|------|----------|
+| **Docker** | 本地 Docker 容器内编译 | Server 节点安装 Docker + 构建镜像 | 自托管、可控、调试 |
+| **GitHub Action** | 远程触发 GitHub Workflow | `server.github` 配置完整 | 无 Docker 环境、分布式 |
+| **SaaS** | 调用外部编译服务 API | `server.saas` 配置完整 | 开箱即用、无需本地环境 |
+| **Patch** | 对已有模板做补丁式构建 | 已有 artifact 模板 | 高级定制 |
 
-```bash
-./iom_linux_amd64 build beacon --profile tcp-demo --target x86_64-pc-windows-gnu --source docker
-```
+!!! info "自动选择"
+    未指定 `--source` 时，Server 按 Docker → GitHub Action → SaaS 的优先级自动寻找可用构建源。
 
-## 3. 当前 build 支持哪些产物
+### 构建源配置
 
-按 `client/command/build/commands.go`，常见入口包括：
+=== "Docker"
 
-- `build beacon`
-- `build bind`
-- `build prelude`
-- `build modules`
+    需要 Server 节点安装 Docker 并拉取构建镜像：
+    ```bash
+    docker pull ghcr.io/chainreactors/malefic-builder:latest
+    ```
 
-常用辅助命令包括：
+=== "GitHub Action"
 
-- `profile list`
-- `profile new`
-- `profile load`
-- `profile show`
-- `profile delete`
+    config.yaml 配置：
+    ```yaml
+    server:
+      github:
+        owner: <github-owner>
+        repo: malefic
+        token: <github-token>
+        workflow: generate.yml
+    ```
 
-## 4. 构建源怎么选
+=== "SaaS"
 
-当前命令层暴露的常见构建源有：
+    config.yaml 配置：
+    ```yaml
+    server:
+      saas:
+        enable: true
+        url: https://build.chainreactors.red
+        token: null
+    ```
 
-| 构建源 | 适合场景 | 依赖 |
-| --- | --- | --- |
-| `docker` | 自托管、可控、调试方便 | server 节点本地有 Docker |
-| `action` | 借 GitHub Action 做远程构建 | `server.github` 配置完整 |
-| `saas` | 直接接外部构建服务 | `server.saas` 配置完整 |
-| `patch` | 对模板做高级补丁式构建 | 更适合已有模板与高级场景 |
+## Profile 体系
 
-## 5. Server 端需要准备什么
+Profile 是构建配置的快照，包含三部分：
 
-### Docker 构建
+| 部分 | 职责 |
+|------|------|
+| **basic** | 连接参数：target 地址、协议、TLS、加密、HTTP 伪装 |
+| **implants** | 功能配置：模块列表、hot_load、第三方模块、autorun |
+| **build** | 编译选项：zigbuild、remap、OLLVM 混淆、PE metadata |
 
-如果要用 `--source docker`，server 节点需要能访问 Docker 环境，并准备好构建所需镜像或模板。
+### Profile 与 Pipeline 的绑定
 
-### GitHub Action 构建
+Profile 在创建时绑定一个 Pipeline。编译前，Profile 中的 `basic.target`、`protocol`、`tls` 配置会自动使用 Pipeline 的实际参数，确保编译出的 Implant 能正确连接。
 
-对应 `server/config.yaml` 里的这一段：
+## 构建产物
 
-```yaml
-server:
-  github:
-    owner: <github-owner>
-    repo: malefic
-    token: <github-token>
-    workflow: generate.yml
-```
+支持的构建产物类型：
 
-### SaaS 构建
+| 产物 | 说明 |
+|------|------|
+| **Beacon** | 功能完整的主 Implant，beacon 模式运行 |
+| **Pulse** | 轻量上线马（~4KB），类似 CS artifact |
+| **Prelude** | 多阶段上线的中间 Implant，支持 autorun |
+| **Modules** | 功能模块集合，运行时动态加载 |
 
-对应这一段：
+### 自动构建
 
-```yaml
-server:
-  saas:
-    enable: true
-    url: https://build.example.com
-    token: <token>
-```
-
-如果 `enable` 是 `false`，或者 `url/token` 没配全，`saas` 构建会直接失败。
-
-## 6. 命令示例
-
-### 构建 beacon
-
-```bash
-./iom_linux_amd64 build beacon --profile tcp-demo --target x86_64-pc-windows-gnu --source docker
-```
-
-### 构建 bind
-
-```bash
-./iom_linux_amd64 build bind --profile tcp-demo --target x86_64-pc-windows-gnu --source docker
-```
-
-### 构建 prelude
-
-```bash
-./iom_linux_amd64 build prelude --profile tcp-demo --target x86_64-pc-windows-gnu --source docker
-```
-
-### 构建 modules
-
-```bash
-./iom_linux_amd64 build modules --profile tcp-demo --target x86_64-pc-windows-gnu --source docker
-```
-
-## 7. 和 Implant 仓库的关系
-
-`malice-network` 负责的是控制面与构建编排，不是 implant 全部源码本体。
-
-默认 implant 家族来自：
-
-- <https://github.com/chainreactors/malefic>
-
-相关实现主要分布在：
-
-- 本仓库的 `client/command/build/`
-- 本仓库的 `server/build/`
-- `malefic` 仓库本身
-
-Implant 背景介绍看 [../implant/overview.md](../implant/overview.md)。
-
-## 8. 自动构建
-
-Listener 侧自动构建可通过 `listeners.auto_build` 启用：
+Listener 启动时可自动触发构建：
 
 ```yaml
 listeners:
   auto_build:
     enable: true
     build_pulse: true
-    pipeline:
-      - tcp
-    target:
-      - x86_64-pc-windows-gnu
+    pipeline: [tcp, http]
+    target: [x86_64-pc-windows-gnu]
 ```
 
-适用场景包括固定 Listener、固定 Target 和固定上线流程。
+自动构建的优先级：Docker > GitHub Action > SaaS。
+
+## 实现位置
+
+| 目录 | 职责 |
+|------|------|
+| `client/command/build/` | 构建命令入口 |
+| `server/build/` | 构建编排与调度 |
+| `server/internal/db/` | Artifact 记录持久化 |
+
+## 相关文档
+
+- [Server 配置参考](index.md) - 构建源 config.yaml 配置
+- [构建操作指南](../operations/build.md) - Profile 配置与编译操作
+- [Listener 架构](listeners.md) - Pipeline 与自动构建

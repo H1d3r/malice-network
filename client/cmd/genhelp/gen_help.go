@@ -194,7 +194,7 @@ func GenGroupHelp(writer io.Writer, con *core.Console, groupId string, binds ...
 }
 
 func GenImplantHelp(con *core.Console) {
-	implantMd, err := os.Create("implant_template.md")
+	implantMd, err := os.Create("docs/reference/commands/implant.md")
 	if err != nil {
 		panic(err)
 	}
@@ -230,7 +230,7 @@ func GenImplantHelp(con *core.Console) {
 }
 
 func GenClientHelp(con *core.Console) {
-	clientMd, err := os.Create("client_template.md")
+	clientMd, err := os.Create("docs/reference/commands/client.md")
 	if err != nil {
 		panic(err)
 	}
@@ -261,7 +261,7 @@ func GenClientHelp(con *core.Console) {
 }
 
 func GenMalHelper(con *core.Console, name string) {
-	clientMd, err := os.Create(name + ".md")
+	clientMd, err := os.Create("docs/reference/commands/" + name + ".md")
 	if err != nil {
 		panic(err)
 	}

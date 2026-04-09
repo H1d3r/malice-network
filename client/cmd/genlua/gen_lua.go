@@ -39,7 +39,7 @@ func main() {
 	mals.GenerateLuaDefinitionFile(vm, intermediate.RpcPackage, plugin.ProtoPackage, intermediate.InternalFunctions.Package(intermediate.RpcPackage))
 	mals.GenerateLuaDefinitionFile(vm, intermediate.BeaconPackage, plugin.ProtoPackage, intermediate.InternalFunctions.Package(intermediate.BeaconPackage))
 
-	mals.GenerateMarkdownDefinitionFile(vm, intermediate.BuiltinPackage, "builtin.md", intermediate.InternalFunctions.Package(intermediate.BuiltinPackage))
-	mals.GenerateMarkdownDefinitionFile(vm, intermediate.RpcPackage, "rpc.md", intermediate.InternalFunctions.Package(intermediate.RpcPackage))
-	mals.GenerateMarkdownDefinitionFile(vm, intermediate.BeaconPackage, "beacon.md", intermediate.InternalFunctions.Package(intermediate.BeaconPackage))
+	mals.GenerateMarkdownDefinitionFile(vm, intermediate.BuiltinPackage, "docs/reference/lua-api/builtin.md", intermediate.InternalFunctions.Package(intermediate.BuiltinPackage))
+	mals.GenerateMarkdownDefinitionFile(vm, intermediate.RpcPackage, "docs/reference/lua-api/rpc.md", intermediate.InternalFunctions.Package(intermediate.RpcPackage))
+	mals.GenerateMarkdownDefinitionFile(vm, intermediate.BeaconPackage, "docs/reference/lua-api/beacon.md", intermediate.InternalFunctions.Package(intermediate.BeaconPackage))
 }

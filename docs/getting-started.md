@@ -119,4 +119,4 @@ Malice Network 的构建入口位于 client，基本流程如下：
 - Client 命令总览: [client/commands.md](client/commands.md)
 - MAL 插件开发: [development/mal/](development/mal/)
 - Implant 概览: [implant/overview.md](implant/overview.md)
-- 架构图: [architecture.md](architecture.md)
+- 架构图: [concept.md](concept.md)
