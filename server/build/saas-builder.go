@@ -44,18 +44,12 @@ func (s *SaasBuilder) Generate() (*clientpb.Artifact, error) {
 	//profileByte, err := GenerateProfile(s.config)
 
 	// get profile
-	if s.config.ProfileName != "" {
+	if needsProfileFiles(s.config) {
 		implant, prelude, resources, pErr := db.GetProfileFullConfig(s.config.ProfileName)
 		if pErr != nil {
 			return nil, fmt.Errorf("failed to get profile config: %s", pErr)
 		}
-		s.config.MaleficConfig = implant
-		if s.config.PreludeConfig == nil {
-			s.config.PreludeConfig = prelude
-		}
-		if s.config.Resources == nil {
-			s.config.Resources = resources
-		}
+		mergeProfileFiles(s.config, implant, prelude, resources)
 	}
 	//profile, err := types.LoadProfileFromContent(profileByte)
 	//if err != nil {

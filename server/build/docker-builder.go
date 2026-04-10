@@ -79,18 +79,12 @@ func (d *DockerBuilder) Generate() (*clientpb.Artifact, error) {
 		d.config.BuildName = codenames.GetCodename()
 	}
 	// get profile
-	if d.config.ProfileName != "" && d.config.MaleficConfig == nil {
+	if needsProfileFiles(d.config) {
 		implant, prelude, resources, pErr := db.GetProfileFullConfig(d.config.ProfileName)
 		if pErr != nil {
 			return nil, fmt.Errorf("failed to get profile config: %s", pErr)
 		}
-		d.config.MaleficConfig = implant
-		if d.config.PreludeConfig == nil {
-			d.config.PreludeConfig = prelude
-		}
-		if d.config.Resources == nil {
-			d.config.Resources = resources
-		}
+		mergeProfileFiles(d.config, implant, prelude, resources)
 	}
 	_, err = selfType.LoadProfile(d.config.MaleficConfig)
 	if err != nil {

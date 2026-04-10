@@ -159,6 +159,16 @@ func prepareBuildConfig(cmd *cobra.Command, con *core.Console, buildType string)
 		return nil, fmt.Errorf("failed to parse build flags: %w", err)
 	}
 
+	// Validate: --rem without --addresses has no effect on targets
+	if cmd.Flags().Changed("rem") && !cmd.Flags().Changed("addresses") {
+		con.Log.Warnf("--rem is set without --addresses, REM targets will not be configured\n")
+	}
+
+	// Validate: at least one target must exist after all layers are applied
+	if len(profile.Basic.Targets) == 0 {
+		return nil, errors.New("no target addresses configured: specify --addresses or use a profile that contains targets")
+	}
+
 	// align implant mode with requested build type
 	if profile.Implant != nil && (buildType == consts.CommandBuildBeacon || buildType == consts.CommandBuildBind) {
 		profile.Implant.Mod = buildType
@@ -171,6 +181,113 @@ func prepareBuildConfig(cmd *cobra.Command, con *core.Console, buildType string)
 	}
 
 	return buildConfig, nil
+}
+
+func buildTargetsFromAddresses(addrs string, remLink string, remChanged bool) ([]implanttypes.Target, error) {
+	addresses := strings.Split(addrs, ",")
+	if remChanged && len(addresses) > 0 {
+		firstAddress := strings.TrimSpace(addresses[0])
+		if strings.HasPrefix(firstAddress, "tcp://") {
+			remAddresses := strings.Split(remLink, ",")
+			targets := make([]implanttypes.Target, 0, len(remAddresses))
+			addr := strings.TrimSpace(strings.TrimPrefix(firstAddress, "tcp://"))
+			if !strings.Contains(addr, ":") {
+				addr = addr + ":5001"
+			}
+			for _, remAddress := range remAddresses {
+				remAddress = strings.TrimSpace(remAddress)
+				if remAddress == "" {
+					continue
+				}
+				targets = append(targets, implanttypes.Target{
+					Address: addr,
+					REM: &implanttypes.REMProfile{
+						Link: remAddress,
+					},
+				})
+			}
+			if len(targets) == 0 {
+				return nil, errors.New("invalid rem target address: empty rem link")
+			}
+			return targets, nil
+		}
+	}
+
+	targets := make([]implanttypes.Target, 0, len(addresses))
+	for _, rawAddress := range addresses {
+		address := strings.TrimSpace(rawAddress)
+		if address == "" {
+			continue
+		}
+
+		target := implanttypes.Target{}
+		if strings.HasPrefix(address, "http://") {
+			address = strings.TrimPrefix(address, "http://")
+			if !strings.Contains(address, ":") {
+				address = address + ":80"
+			}
+			target.Address = address
+			target.Http = &implanttypes.HttpProfile{
+				Method:  "POST",
+				Path:    "/",
+				Version: "1.1",
+				Headers: map[string]string{
+					"User-Agent":   uarand.GetRandom(),
+					"Content-Type": "application/octet-stream",
+				},
+			}
+		} else if strings.HasPrefix(address, "https://") {
+			address = strings.TrimPrefix(address, "https://")
+			if !strings.Contains(address, ":") {
+				address = address + ":443"
+			}
+			target.Address = address
+			target.Http = &implanttypes.HttpProfile{
+				Method:  "POST",
+				Path:    "/",
+				Version: "1.1",
+				Headers: map[string]string{
+					"User-Agent":   uarand.GetRandom(),
+					"Content-Type": "application/octet-stream",
+				},
+			}
+			target.TLS = &implanttypes.TLSProfile{
+				Enable:           true,
+				SNI:              strings.Split(address, ":")[0],
+				SkipVerification: true,
+			}
+		} else if strings.HasPrefix(address, "tcp://") {
+			address = strings.TrimPrefix(address, "tcp://")
+			if !strings.Contains(address, ":") {
+				address = address + ":5001"
+			}
+			target.Address = address
+			target.TCP = &implanttypes.TCPProfile{}
+		} else if strings.HasPrefix(address, "tcp+tls://") {
+			address = strings.TrimPrefix(address, "tcp+tls://")
+			if !strings.Contains(address, ":") {
+				address = address + ":5001"
+			}
+			target.Address = address
+			target.TCP = &implanttypes.TCPProfile{}
+			target.TLS = &implanttypes.TLSProfile{
+				Enable:           true,
+				SNI:              strings.Split(address, ":")[0],
+				SkipVerification: true,
+			}
+		} else if strings.HasPrefix(address, "mtls://") {
+			// todo
+		} else {
+			return nil, errors.New("invalid target address: " + address)
+		}
+		targets = append(targets, target)
+	}
+
+	if len(targets) == 0 {
+		return nil, errors.New("invalid target address: empty")
+	}
+
+	return targets, nil
 }
 
 // parseBuildFlags 解析所有构建相关的flag参数
@@ -265,89 +382,13 @@ func parseBuildFlags(cmd *cobra.Command, profile *implanttypes.ProfileConfig) (*
 
 	// targets
 	addrs, _ := cmd.Flags().GetString("addresses")
-	addresses := strings.Split(addrs, ",")
-
 	remLink, _ := cmd.Flags().GetString("rem")
-	if cmd.Flags().Changed("rem") && strings.HasPrefix(addresses[0], "tcp://") {
-		remAddresses := strings.Split(remLink, ",")
-		for _, remAddress := range remAddresses {
-			target := implanttypes.Target{}
-			addr := strings.TrimPrefix(addresses[0], "tcp://")
-			if !strings.Contains(addr, ":") {
-				addr = addr + ":5001"
-			}
-			target.Address = addr
-			target.REM = &implanttypes.REMProfile{
-				Link: remAddress,
-			}
-			profile.Basic.Targets = append(profile.Basic.Targets, target)
+	if cmd.Flags().Changed("addresses") {
+		targets, err := buildTargetsFromAddresses(addrs, remLink, cmd.Flags().Changed("rem"))
+		if err != nil {
+			return nil, err
 		}
-	} else if cmd.Flags().Changed("addresses") {
-		for _, address := range addresses {
-			target := implanttypes.Target{}
-			//
-			if strings.HasPrefix(address, "http://") {
-				address = strings.TrimPrefix(address, "http://")
-				// default port 80
-				if !strings.Contains(address, ":") {
-					address = address + ":80"
-				}
-				target.Address = address
-				target.Http = &implanttypes.HttpProfile{
-					Method:  "POST",
-					Path:    "/",
-					Version: "1.1",
-					Headers: map[string]string{
-						"User-Agent":   uarand.GetRandom(),
-						"Content-Type": "application/octet-stream",
-					},
-				}
-			} else if strings.HasPrefix(address, "https://") {
-				address = strings.TrimPrefix(address, "https://")
-				if !strings.Contains(address, ":") {
-					address = address + ":443"
-				}
-				target.Address = address
-				target.Http = &implanttypes.HttpProfile{
-					Method:  "POST",
-					Path:    "/",
-					Version: "1.1",
-					Headers: map[string]string{
-						"User-Agent":   uarand.GetRandom(),
-						"Content-Type": "application/octet-stream",
-					},
-				}
-				target.TLS = &implanttypes.TLSProfile{
-					Enable:           true,
-					SNI:              strings.Split(address, ":")[0],
-					SkipVerification: true,
-				}
-			} else if strings.HasPrefix(address, "tcp://") { // 走tcp的配置
-				address = strings.TrimPrefix(address, "tcp://")
-				if !strings.Contains(address, ":") {
-					address = address + ":5001"
-				}
-				target.Address = address
-				target.TCP = &implanttypes.TCPProfile{}
-			} else if strings.HasPrefix(address, "tcp+tls://") { // 走tcp的配置
-				address = strings.TrimPrefix(address, "tcp+tls://")
-				if !strings.Contains(address, ":") {
-					address = address + ":5001"
-				}
-				target.Address = address
-				target.TCP = &implanttypes.TCPProfile{}
-				target.TLS = &implanttypes.TLSProfile{
-					Enable:           true,
-					SNI:              strings.Split(address, ":")[0],
-					SkipVerification: true,
-				}
-			} else if strings.HasPrefix(address, "mtls://") {
-				// todo
-			} else {
-				return nil, errors.New("invalid target address: " + address)
-			}
-			profile.Basic.Targets = append(profile.Basic.Targets, target)
-		}
+		profile.Basic.Targets = targets
 	}
 
 	// modules - only override if explicitly provided

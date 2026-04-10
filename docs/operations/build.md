@@ -185,6 +185,10 @@ profile load config.yaml --name test --pipeline tcp
 
 准备好profile后，您可以在client端使用build命令进行编译，目前build命令支持编译beacon、pulse、prelude和modules。
 
+!!! info "命令行参数优先级"
+    在编译时，命令行内联参数会覆盖 profile 中的同名配置。
+    例如 `build beacon --profile tcp_default --addresses tcp://127.0.0.1:5001` 会以命令行提供的地址覆盖 `basic.targets`。
+
 !!!tip "有关implant的简单介绍可以查看[核心概念](../concept.md)"
 
 ### 编译命令
