@@ -12,6 +12,8 @@
 - `malice_network_darwin_arm64` — macOS Apple Silicon
 - `malice_network_windows_amd64.exe` — Windows x86_64
 
+如果你使用安装脚本，脚本会把 Linux 服务端二进制归一命名为 `malice-network_linux_amd64`。如果你是手动下载 release，请按实际下载下来的文件名执行。
+
 !!! tip "网络问题"
     国内服务器下载 GitHub release 可能超时，建议配置代理：
     ```bash
@@ -22,11 +24,17 @@
 ## 首次启动
 
 ```bash
-./malice-network -i <公网IP>
+./malice-network_linux_amd64 -i <公网IP>
 ```
 
 !!! important "IP 设置"
     `-i` 参数需要设置为 Client 可访问到的 IP 地址。公网服务器设置为公网 IP，内网环境设置为内网 IP。
+
+如果当前还没有配置文件，默认启动会按下面的规则处理：
+
+- **交互终端**：先提示你是否进入 quickstart 向导
+- **非交互环境**（比如 systemd、无 PTY 的脚本环境）：直接生成默认 `config.yaml`，然后继续正常启动
+- **显式传入 `--quickstart`**：直接进入向导模式
 
 首次启动后，Server 会自动完成：
 
@@ -46,14 +54,20 @@
 首次使用或需要重新配置时，可以使用交互式向导：
 
 ```bash
-./malice-network --quickstart
+./malice-network_linux_amd64 --quickstart
 ```
 
 向导会引导完成 IP、端口、构建源等基础配置。
 
+注意：
+
+- `--quickstart` 是显式入口，不依赖“配置文件是否存在”来触发
+- quickstart 基于 TUI，适合交互式终端，不适合 systemd 这类无 PTY 环境
+- 如果目标配置文件已经存在，quickstart 不会覆盖原文件
+
 ## 使用安装脚本（Linux）
 
-!!! info "安装脚本会自动完成 Docker 安装、Server/Client 下载、构建镜像拉取和 systemd 配置"
+!!! info "安装脚本会自动完成 Docker 安装、Server/Client 下载、malefic.zip 解压，并可选配置 systemd"
 
 ```bash
 curl -L "https://raw.githubusercontent.com/chainreactors/malice-network/master/install.sh" | sudo bash
@@ -61,10 +75,10 @@ curl -L "https://raw.githubusercontent.com/chainreactors/malice-network/master/i
 
 安装脚本会交互式询问：
 
-- **安装路径**：默认 `/iom`
+- **安装路径**：默认 `/opt/iom`
 - **IP 地址**：自动检测，可手动修改
 
-安装完成后 Server 会以 systemd 服务运行。
+安装完成后，脚本会询问是否安装并启动 systemd 服务；如果跳过，会直接输出手动启动命令。使用 systemd 时，服务端会走默认启动路径，不会自动进入 quickstart 向导。
 
 ## 防火墙配置
 
@@ -99,11 +113,11 @@ pipeline        # 查看 Pipeline 列表
 
 | 模式 | 命令 | 场景 |
 |------|------|------|
-| 标准启动 | `./malice-network -i <ip>` | Server + Listener 一起运行 |
-| 仅 Server | `./malice-network --server-only` | Listener 独立部署时 |
-| 仅 Listener | `./malice-network --listener-only` | 独立 Listener 节点 |
-| 守护进程 | `./malice-network --daemon` | 后台运行 |
-| 交互向导 | `./malice-network --quickstart` | 首次配置 |
+| 标准启动 | `./malice-network_linux_amd64 -i <ip>` | Server + Listener 一起运行 |
+| 仅 Server | `./malice-network_linux_amd64 --server-only` | Listener 独立部署时 |
+| 仅 Listener | `./malice-network_linux_amd64 --listener-only` | 独立 Listener 节点 |
+| 守护进程 | `./malice-network_linux_amd64 --daemon` | 后台运行 |
+| 交互向导 | `./malice-network_linux_amd64 --quickstart` | 首次配置 |
 
 ## 下一步
 

@@ -37,9 +37,9 @@ sudo -E bash install.sh
 
 脚本会提示输入：
 
-1. 安装路径（默认 `/iom`）：
+1. 安装路径（默认 `/opt/iom`）：
    ```
-   Please input the base directory for the installation [default: /iom]:
+   Please input the base directory for the installation [default: /opt/iom]:
    ```
 
 2. IP 地址（自动检测）：
@@ -48,11 +48,22 @@ sudo -E bash install.sh
    ```
 
 **安装脚本自动完成：**
-1. 检查并安装 Docker
-2. 下载并安装 Malice-Network 服务端及客户端
-3. 下载并安装 Malefic 源码及工具
-4. 拉取 Docker 镜像（约 8.21GB）：`ghcr.io/chainreactors/malefic-builder:latest`
-5. 配置并启动服务（基于 systemd）
+1. 检查基础依赖（`curl`、`unzip`）
+2. 下载并安装 Malice Network 服务端及客户端
+3. 下载 `malefic.zip`，并解压到 `./malefic/source_code`
+4. 拉取 Docker 镜像：`ghcr.io/chainreactors/malefic-builder:latest`
+5. 可选配置并启动 systemd 服务；如跳过，则输出手动启动命令
+
+**安装完成后的工作目录结构：**
+
+```text
+<base-dir>/malice-network/
+├── malice-network_linux_amd64
+├── malice_network_linux_amd64 -> malice-network_linux_amd64
+├── iom_linux_amd64
+└── malefic/
+    └── source_code/
+```
 
 ### 下载 Release 部署
 
@@ -61,16 +72,18 @@ Windows 或 macOS 系统部署 Server，从 [Releases](https://github.com/chainr
 - `iom_*` - Client 端
 - `malice_network_*` - Server 端
 
+如果你使用安装脚本，脚本会把 Linux 服务端二进制归一命名为 `malice-network_linux_amd64`；如果你是手动下载 release，请按实际文件名执行。
+
 启动 Server：
 
 ```bash
-./malice_network_linux_amd64
+./malice-network_linux_amd64
 ```
 
 指定 IP 启动（Client 可访问的 IP，如公网 IP）：
 
 ```bash
-./malice_network_linux_amd64 -i 123.123.123.123
+./malice-network_linux_amd64 -i 123.123.123.123
 ```
 
 ### Server 启动参数
@@ -135,6 +148,13 @@ notify:
 Listener 和编译配置详见 [listeners.md](server/listeners.md) 和 [build.md](server/build.md)。
 
 ## 启动 Client
+
+如果安装时跳过了 systemd，可手动启动：
+
+```bash
+cd /opt/iom/malice-network
+./malice-network_linux_amd64 -i <server-ip>
+```
 
 Server 启动后生成两个配置文件：
 - `listener.auth` - Listener 凭证

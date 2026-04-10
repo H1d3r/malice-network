@@ -32,7 +32,7 @@ Server 是 malice-network 的控制核心，职责包括：
 | `./malice-network --server-only` | 仅启动 Server，不启动 Listener |
 | `./malice-network --listener-only` | 仅启动 Listener，独立部署时使用 |
 | `./malice-network --daemon` | 以守护进程模式运行 |
-| `./malice-network --quickstart` | 交互式配置向导，引导完成初始配置 |
+| `./malice-network --quickstart` | 显式进入交互式配置向导，引导完成初始配置 |
 
 | 参数 | 说明 |
 |------|------|
@@ -40,6 +40,12 @@ Server 是 malice-network 的控制核心，职责包括：
 | `-i, --ip` | 外网 IP 地址，覆盖配置文件中的 ip 字段 |
 | `--debug` | 开启 debug 日志 |
 | `--opsec` | 启用 OPSEC 模式 |
+
+当默认启动时，如果配置文件不存在：
+
+- 交互终端会先提示是否进入 quickstart
+- 非交互环境会直接生成默认配置并继续启动
+- 只有显式传入 `--quickstart` 时，才会强制进入向导
 
 !!! tip "部署指南"
     完整的部署流程见 [部署操作指南](../operations/deployment.md)。

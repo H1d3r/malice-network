@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 
@@ -19,9 +18,19 @@ import (
 // RunQuickstart runs the interactive quickstart wizard using a single-page
 // tabbed form so that users can review/edit all configuration at once.
 func RunQuickstart(opt *Options) error {
+	if opt == nil {
+		return fmt.Errorf("options is required")
+	}
+
+	configPath := opt.Config
+	if configPath == "" {
+		configPath = configs.ServerConfigFileName
+		opt.Config = configPath
+	}
+
 	// skip if config already exists
-	if _, err := os.Stat(opt.Config); err == nil {
-		logs.Log.Warnf("config %s already exists, skipping quickstart", opt.Config)
+	if existing := configs.FindConfig(configPath); existing != "" {
+		logs.Log.Warnf("config %s already exists, skipping quickstart", existing)
 		return nil
 	}
 
@@ -85,7 +94,7 @@ func RunQuickstart(opt *Options) error {
 					Name: "encryption_key", Title: "Encryption Key",
 					Kind: wizard.KindInput, InputValue: encryptionKey,
 					Required: true,
-					Value: &encryptionKey,
+					Value:    &encryptionKey,
 				},
 			},
 		},
@@ -120,21 +129,21 @@ func RunQuickstart(opt *Options) error {
 				{
 					Name: "tcp_port", Title: "TCP Port",
 					Description: "ignored if tcp not selected",
-					Kind: wizard.KindInput, InputValue: tcpPort,
+					Kind:        wizard.KindInput, InputValue: tcpPort,
 					Validate: validatePort,
 					Value:    &tcpPort,
 				},
 				{
 					Name: "http_port", Title: "HTTP Port",
 					Description: "ignored if http not selected",
-					Kind: wizard.KindInput, InputValue: httpPort,
+					Kind:        wizard.KindInput, InputValue: httpPort,
 					Validate: validatePort,
 					Value:    &httpPort,
 				},
 				{
 					Name: "rem_name", Title: "REM Pipeline Name",
 					Description: "ignored if rem not selected",
-					Kind: wizard.KindInput, InputValue: remName,
+					Kind:        wizard.KindInput, InputValue: remName,
 					Value: &remName,
 				},
 			},
@@ -201,14 +210,14 @@ func RunQuickstart(opt *Options) error {
 				{
 					Name: "notify_param1", Title: "Webhook/Token/APIKey",
 					Description: "main credential for the service",
-					Kind: wizard.KindInput, InputValue: notifyParam1,
+					Kind:        wizard.KindInput, InputValue: notifyParam1,
 					Required: true,
 					Value:    &notifyParam1,
 				},
 				{
 					Name: "notify_param2", Title: "Secret/ChatID (optional)",
 					Description: "dingtalk secret or telegram chat ID",
-					Kind: wizard.KindInput, InputValue: notifyParam2,
+					Kind:        wizard.KindInput, InputValue: notifyParam2,
 					Value: &notifyParam2,
 				},
 			},
@@ -326,7 +335,7 @@ func RunQuickstart(opt *Options) error {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	logs.Log.Importantf("quickstart config saved to %s", opt.Config)
+	logs.Log.Importantf("quickstart config saved to %s", configPath)
 	return nil
 }
 

@@ -21,7 +21,7 @@ Release 中的主要二进制如下：
 首次启动可使用交互式向导：
 
 ```bash
-./malice_network_linux_amd64 --quickstart
+./malice-network_linux_amd64 --quickstart
 ```
 
 向导会生成初始化所需的核心配置：
@@ -35,11 +35,17 @@ Release 中的主要二进制如下：
 
 ### 直接启动
 
-已从 `server/config.example.yaml` 复制出本地 `config.yaml` 后，可直接启动：
+已有 `config.yaml`，或者让程序自动生成默认配置后，可直接启动：
 
 ```bash
-./malice_network_linux_amd64 -i <public-ip>
+./malice-network_linux_amd64 -i <public-ip>
 ```
+
+默认启动时的初始化行为：
+
+- 如果配置文件不存在，且当前是交互终端，程序会先询问是否进入 quickstart 向导
+- 如果配置文件不存在，且当前不是交互终端，程序会直接写入默认 `config.yaml` 并继续正常启动
+- 如果显式传入 `--quickstart`，则直接进入向导模式，而不是等默认启动时再判断
 
 常用参数：
 
@@ -47,7 +53,7 @@ Release 中的主要二进制如下：
 - `-i, --ip`: 覆盖配置里的外网 IP
 - `--server-only`: 只启动 server
 - `--listener-only`: 只启动 listener
-- `--quickstart`: 仅在配置文件不存在时运行初始化向导
+- `--quickstart`: 显式进入交互式初始化向导
 - `--debug`: 打开 debug 日志
 
 ### 首次启动生成的文件
@@ -57,6 +63,13 @@ Release 中的主要二进制如下：
 - `config.yaml`: 默认配置文件
 - `admin_<server-ip>.auth`: client 登录凭证
 - `listener.auth`: 默认 listener 的 mTLS 凭证
+
+如果你使用安装脚本并跳过了 `systemd`，推荐在安装目录中手动启动：
+
+```bash
+cd /opt/iom/malice-network
+./malice-network_linux_amd64 -i <public-ip>
+```
 
 ## 3. 登录 Client
 

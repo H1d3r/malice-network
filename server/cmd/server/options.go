@@ -210,12 +210,16 @@ func (opt *Options) Save() error {
 func (opt *Options) PrepareConfig(defaultConfig []byte) error {
 	filename := configs.FindConfig(opt.Config)
 	if filename == "" {
-		err := os.WriteFile(configs.ServerConfigFileName, defaultConfig, 0644)
+		target := opt.Config
+		if target == "" {
+			target = configs.ServerConfigFileName
+		}
+		err := os.WriteFile(target, defaultConfig, 0644)
 		if err != nil {
 			return err
 		}
-		logs.Log.Warnf("config file not found, created default config %s", configs.ServerConfigFileName)
-		filename = configs.ServerConfigFileName
+		logs.Log.Warnf("config file not found, created default config %s", target)
+		filename = target
 	}
 
 	config.WithOptions(config.WithHookFunc(func(event string, c *config.Config) {

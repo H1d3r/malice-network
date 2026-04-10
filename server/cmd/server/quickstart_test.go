@@ -86,6 +86,99 @@ func TestValidateNotEmpty(t *testing.T) {
 	}
 }
 
+func TestShouldOfferQuickstart(t *testing.T) {
+	tests := []struct {
+		name             string
+		opt              *Options
+		configMissing    bool
+		interactive      bool
+		hasActiveCommand bool
+		want             bool
+	}{
+		{
+			name:             "default startup offers quickstart on interactive terminal",
+			opt:              &Options{},
+			configMissing:    true,
+			interactive:      true,
+			hasActiveCommand: false,
+			want:             true,
+		},
+		{
+			name:             "nil options never offer quickstart",
+			opt:              nil,
+			configMissing:    true,
+			interactive:      true,
+			hasActiveCommand: false,
+			want:             false,
+		},
+		{
+			name:             "explicit quickstart skips prompt",
+			opt:              &Options{Quickstart: true},
+			configMissing:    true,
+			interactive:      true,
+			hasActiveCommand: false,
+			want:             false,
+		},
+		{
+			name:             "existing config skips prompt",
+			opt:              &Options{},
+			configMissing:    false,
+			interactive:      true,
+			hasActiveCommand: false,
+			want:             false,
+		},
+		{
+			name:             "non interactive terminal skips prompt",
+			opt:              &Options{},
+			configMissing:    true,
+			interactive:      false,
+			hasActiveCommand: false,
+			want:             false,
+		},
+		{
+			name:             "active subcommand skips prompt",
+			opt:              &Options{},
+			configMissing:    true,
+			interactive:      true,
+			hasActiveCommand: true,
+			want:             false,
+		},
+		{
+			name:             "daemon mode skips prompt",
+			opt:              &Options{Daemon: true},
+			configMissing:    true,
+			interactive:      true,
+			hasActiveCommand: false,
+			want:             false,
+		},
+		{
+			name:             "server only skips prompt",
+			opt:              &Options{ServerOnly: true},
+			configMissing:    true,
+			interactive:      true,
+			hasActiveCommand: false,
+			want:             false,
+		},
+		{
+			name:             "listener only skips prompt",
+			opt:              &Options{ListenerOnly: true},
+			configMissing:    true,
+			interactive:      true,
+			hasActiveCommand: false,
+			want:             false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldOfferQuickstart(tt.opt, tt.configMissing, tt.interactive, tt.hasActiveCommand)
+			if got != tt.want {
+				t.Fatalf("shouldOfferQuickstart() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRandomHex(t *testing.T) {
 	h := randomHex(16)
 	if len(h) != 32 {
