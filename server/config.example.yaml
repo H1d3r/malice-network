@@ -1,8 +1,8 @@
 listeners:
   auth: listener.auth
   auto_build:
-    build_pulse: true
-    enable: true
+    build_pulse: false
+    enable: false
     pipeline:
     - tcp
     - http
@@ -59,7 +59,7 @@ listeners:
     tls:
       enable: true
   website:
-  - enable: true
+  - enable: false
     name: default-website
     port: 80
     root: /
