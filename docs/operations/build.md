@@ -227,9 +227,14 @@ build beacon --target x86_64-pc-windows-gnu --profile tcp_default --modules exec
 build beacon --profile tcp_default --target x86_64-unknown-linux-musl --interval 1 --jitter 0.2
 ```
 
-若您需要在beacon中使用rem插件时，可以使用 `--rem` 来配置。
+若您需要在beacon中使用rem插件时，可以使用 `--rem` 来配置。`--rem` 支持两种用法：
+
 ```bash
-build beacon --profile tcp_default --target x86_64-unknown-linux-musl --rem
+# 通过 pipeline 名自动解析 link
+build beacon --profile tcp_default --target x86_64-unknown-linux-musl --addresses tcp://10.0.0.1:5001 --rem rem_default
+
+# 直接指定 link 地址
+build beacon --profile tcp_default --target x86_64-unknown-linux-musl --addresses tcp://10.0.0.1:5001 --rem tcp://cdn.example.com:5555
 ```
 
 !!!tip "更多有关 `build beacon` 命令的编译选项，请参阅 [构建操作](build.md)"

@@ -47,8 +47,11 @@ execute_shellcode rem.exe -- -c [rem_link] ...
 # 加载rem dll
 rem_community load 
 
-# 选择对应的rem pipeline, 搭建了反向代理隧道
+# 通过 pipeline 名
 rem_community socks5 rem_pipeline
+
+# 通过直接 link 地址
+rem_community socks5 tcp://10.0.0.1:5555
 ```
 
 !!! example "优点"
@@ -147,9 +150,9 @@ debug 模式下的日志。 可以看到IoM的implant基于通过rem的构建的
 
 ### portfwd（本地端口转发）
 ```bash
-portfwd [pipeline] [flags]
+portfwd [pipeline|url] [flags]
 ```
-将本地端口的流量通过 implant 转发到远程目标。
+将本地端口的流量通过 implant 转发到远程目标。`[pipeline|url]` 可以是 pipeline 名称或直接的 link 地址（如 `tcp://1.2.3.4:5555`）。
 
 **选项:**
 
@@ -161,11 +164,12 @@ portfwd [pipeline] [flags]
 **示例:**
 ```bash
 portfwd rem_default --port 8080 --target 192.168.1.1:80
+portfwd tcp://10.0.0.1:5555 --port 8080 --target 192.168.1.1:80
 ```
 
 ### rportfwd（远程端口转发）
 ```bash
-rportfwd [pipeline] [flags]
+rportfwd [pipeline|url] [flags]
 ```
 在 implant 端监听端口，将流量转发回本地。
 
@@ -179,6 +183,7 @@ rportfwd [pipeline] [flags]
 **示例:**
 ```bash
 rportfwd rem_default --port 8080 --remote 10.0.0.1:3389
+rportfwd tcp://10.0.0.1:5555 --port 8080 --remote 10.0.0.1:3389
 ```
 
 ### portfwd_local（本地端口转发到客户端）
@@ -209,7 +214,7 @@ rportfwd_local [pipeline] [agent] [flags]
 
 ### proxy（代理服务器）
 ```bash
-proxy [pipeline] [flags]
+proxy [pipeline|url] [flags]
 ```
 通过 implant 创建代理服务器，支持 socks5/http 协议和认证。
 
@@ -226,11 +231,12 @@ proxy [pipeline] [flags]
 ```bash
 proxy rem_default --port 1080
 proxy rem_default --port 1080 --username admin --password pass
+proxy tcp://10.0.0.1:5555 --port 1080
 ```
 
 ### reverse（反向代理）
 ```bash
-reverse [pipeline] [flags]
+reverse [pipeline|url] [flags]
 ```
 通过 implant 创建反向代理，implant 主动连接回本地。
 
@@ -246,11 +252,12 @@ reverse [pipeline] [flags]
 **示例:**
 ```bash
 reverse rem_default --port 12345
+reverse tcp://10.0.0.1:5555 --port 12345
 ```
 
 ### rem_dial（直接执行 rem 命令）
 ```bash
-rem_dial [pipeline] [args]
+rem_dial [pipeline|url] [args]
 ```
 在 implant 上直接执行 rem 命令，适用于需要自定义 rem 参数的高级场景。
 

@@ -210,6 +210,10 @@ func (rpc *Server) RemDial(ctx context.Context, req *implantpb.Request) (*client
 
 	greq.HandlerResponse(ch, types.MsgResponse, func(spite *implantpb.Spite) {
 		agentID := spite.GetResponse().GetOutput()
+		if agentID == "" {
+			logs.Log.Warnf("RemDial response has empty agent ID for pipeline %s", pid)
+			return
+		}
 
 		// resolve pipeline: by name first, fallback to agent ID search
 		pipe, ok := core.Listeners.Find(pid)
@@ -220,7 +224,11 @@ func (rpc *Server) RemDial(ctx context.Context, req *implantpb.Request) (*client
 				return
 			}
 		}
-		lns, _ := core.Listeners.Get(pipe.ListenerId)
+		lns, err := core.Listeners.Get(pipe.ListenerId)
+		if err != nil {
+			logs.Log.Warnf("listener %s not found for pipeline %s", pipe.ListenerId, pipe.Name)
+			return
+		}
 		i := lns.PushCtrl(&clientpb.JobCtrl{
 			Ctrl: consts.CtrlPipelineSync,
 			Job: &clientpb.Job{
@@ -237,6 +245,9 @@ func (rpc *Server) RemDial(ctx context.Context, req *implantpb.Request) (*client
 			Spite:     spite,
 		}
 
+		if pipe.GetRem() == nil {
+			return
+		}
 		if remOpt, ok := pipe.GetRem().Agents[agentID]; ok {
 			pivot := output.NewPivotingWithRem(remOpt, pipe)
 			event.Op = "pivot_" + pivot.InboundSide
@@ -370,6 +381,9 @@ func (rpc *Server) RemAgentLog(ctx context.Context, req *clientpb.REMAgent) (*cl
 }
 
 func (rpc *Server) RemAgentStop(ctx context.Context, req *clientpb.REMAgent) (*clientpb.Empty, error) {
+	if req == nil {
+		return nil, types.ErrMissingRequestField
+	}
 	pipe, ok := core.Listeners.Find(req.PipelineId)
 	if !ok {
 		pipe, ok = core.Listeners.FindByRemAgent(req.Id)

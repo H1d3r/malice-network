@@ -73,11 +73,10 @@ func BeaconFlagSet(f *pflag.FlagSet) {
 
 	// Network target flags
 	f.String("addresses", "", "Target addresses (comma-separated)")
-	f.String("rem-link", "", "Override REM link address (e.g., for CDN scenarios)")
 
 	// Legacy flags for backward compatibility
 	//f.String("proxy", "", "Legacy proxy override (use --proxy-url instead)")
-	f.String("rem", "", "REM pipeline name or link address (contains :// for direct link)")
+	f.String("rem", "", "REM pipeline name or direct link address (e.g., rem_default or tcp://cdn:5555)")
 	f.Bool("auto-download", false, "Auto download artifact after build")
 	f.Uint32("artifact-id", 0, "Artifact ID for pulse builds")
 	//f.Uint32("relink", 0, "Relink beacon ID")
@@ -166,15 +165,10 @@ func prepareBuildConfig(cmd *cobra.Command, con *core.Console, buildType string)
 			if link == "" {
 				return nil, fmt.Errorf("REM pipeline %q has no link address", remValue)
 			}
-			// --rem-link overrides the pipeline link (CDN scenario)
-			if cmd.Flags().Changed("rem-link") {
-				remLinkOverride, _ := cmd.Flags().GetString("rem-link")
-				if remLinkOverride != "" {
-					link = remLinkOverride
-				}
-			}
 			// rewrite --rem flag value to resolved link so parseBuildFlags sees a real address
-			cmd.Flags().Set("rem", link)
+			if err := cmd.Flags().Set("rem", link); err != nil {
+				return nil, fmt.Errorf("failed to set resolved REM link: %w", err)
+			}
 		}
 	}
 
@@ -453,7 +447,16 @@ func parseBuildFlags(cmd *cobra.Command, profile *implanttypes.ProfileConfig) (*
 
 	if cmd.Flags().Changed("rem") && cmd.Flags().Changed("addresses") {
 		profile.Implant.Enable3rd = true
-		profile.Implant.ThirdModules = append(profile.Implant.ThirdModules, "rem")
+		hasRem := false
+		for _, m := range profile.Implant.ThirdModules {
+			if m == "rem" {
+				hasRem = true
+				break
+			}
+		}
+		if !hasRem {
+			profile.Implant.ThirdModules = append(profile.Implant.ThirdModules, "rem")
+		}
 	}
 
 	ollvm, _ := cmd.Flags().GetBool("ollvm")
