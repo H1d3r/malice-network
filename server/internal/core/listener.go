@@ -165,6 +165,26 @@ func (l *listeners) Find(pid string) (*clientpb.Pipeline, bool) {
 	return nil, false
 }
 
+// FindByRemAgent searches all listeners for a REM pipeline that contains the given agent ID.
+func (l *listeners) FindByRemAgent(agentID string) (*clientpb.Pipeline, bool) {
+	var pipe *clientpb.Pipeline
+	l.Range(func(key, value interface{}) bool {
+		for _, p := range value.(*Listener).AllPipelines() {
+			if rem := p.GetRem(); rem != nil {
+				if _, ok := rem.Agents[agentID]; ok {
+					pipe = p
+					return false
+				}
+			}
+		}
+		return true
+	})
+	if pipe != nil {
+		return pipe, true
+	}
+	return nil, false
+}
+
 func (l *listeners) FindByListener(listenerID, pid string) (*clientpb.Pipeline, bool) {
 	if listenerID == "" || pid == "" {
 		return nil, false

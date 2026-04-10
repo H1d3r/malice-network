@@ -35,12 +35,12 @@ func (p *PatchBuilder) Generate() (*clientpb.Artifact, error) {
 		p.config.BuildName = codenames.GetCodename()
 	}
 
-	if p.config.ProfileName != "" && p.config.MaleficConfig == nil {
-		implant, _, _, err := db.GetProfileFullConfig(p.config.ProfileName)
+	if needsProfileFiles(p.config) {
+		implant, prelude, resources, err := db.GetProfileFullConfig(p.config.ProfileName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get profile config: %s", err)
 		}
-		p.config.MaleficConfig = implant
+		mergeProfileFiles(p.config, implant, prelude, resources)
 	}
 
 	if p.config.MaleficConfig == nil {

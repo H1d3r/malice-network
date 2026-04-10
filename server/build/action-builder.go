@@ -5,7 +5,6 @@ import (
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/helper/implanttypes"
-	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
 )
@@ -31,71 +30,7 @@ func NewActionBuilder(req *clientpb.BuildConfig) *ActionBuilder {
 }
 
 func (a *ActionBuilder) Generate() (*clientpb.Artifact, error) {
-	// get config
-	actionConfig := a.config.GetGithubAction()
-	if actionConfig == nil {
-		config := configs.GetGithubConfig()
-		if config == nil {
-			return nil, fmt.Errorf("please set github config use flag or server config")
-		}
-		actionConfig = &clientpb.GithubActionBuildConfig{
-			Owner:      config.Owner,
-			Repo:       config.Repo,
-			Token:      config.Token,
-			WorkflowId: config.Workflow,
-		}
-		a.config.SourceConfig = &clientpb.BuildConfig_GithubAction{
-			GithubAction: actionConfig,
-		}
-	}
-	if actionConfig.Owner == "" || actionConfig.Repo == "" || actionConfig.Token == "" {
-		return nil, fmt.Errorf("incomplete github action configuration")
-	}
-	//
-	var builder *models.Artifact
-	//var err error
-	//var profileParams types.ProfileParams
-	//err = json.Unmarshal(a.config.ParamsBytes, &profileParams)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if profileParams.Modules != "" {
-	//	a.config.Inputs["malefic_modules_features"] = profileParams.Modules
-	//}
-	//if profileParams.Enable3RD {
-	//	a.config.Inputs["package"] = "3rd"
-	//}
-	//if a.config.BuildName == "" {
-	//	a.config.BuildName = codenames.GetCodename()
-	//}
-	//profileByte, err := GenerateProfile(a.config)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if a.config.ArtifactId != 0 && a.config.Type == consts.CommandBuildBeacon {
-	//	builder, err = db.SaveArtifactFromID(a.config, a.config.ArtifactId, a.config.Source, profileByte)
-	//} else {
-	//	builder, err = db.SaveArtifactFromConfig(a.config, profileByte)
-	//}
-	//if err != nil {
-	//	logs.Log.Errorf("failed to save build: %s", err)
-	//	return nil, err
-	//}
-	//a.builder = builder
-	//a.config.Inputs["remark"] = a.builder.Name
-	//a.config.ArtifactId = a.builder.ID
-	//a.config.Inputs["remark"] = a.builder.Name
-	//base64Encoded := encode.Base64Encode(profileByte)
-	//a.config.Inputs["malefic_config_yaml"] = base64Encoded
-	//profile, err := types.LoadProfile(profileByte)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	//a.profile = profile
-	db.UpdateBuilderStatus(a.builder.ID, consts.BuildStatusWaiting)
-
-	return builder.ToProtobuf([]byte{}), nil
+	return nil, fmt.Errorf("github action builder is not yet implemented")
 }
 
 func (a *ActionBuilder) Execute() error {

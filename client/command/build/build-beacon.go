@@ -73,11 +73,11 @@ func BeaconFlagSet(f *pflag.FlagSet) {
 
 	// Network target flags
 	f.String("addresses", "", "Target addresses (comma-separated)")
-	//f.String("rem-link", "", "REM link configuration")
+	f.String("rem-link", "", "Override REM link address (e.g., for CDN scenarios)")
 
 	// Legacy flags for backward compatibility
 	//f.String("proxy", "", "Legacy proxy override (use --proxy-url instead)")
-	f.String("rem", "", "Legacy REM static link flag")
+	f.String("rem", "", "REM pipeline name or link address (contains :// for direct link)")
 	f.Bool("auto-download", false, "Auto download artifact after build")
 	f.Uint32("artifact-id", 0, "Artifact ID for pulse builds")
 	//f.Uint32("relink", 0, "Relink beacon ID")
@@ -153,6 +153,31 @@ func prepareBuildConfig(cmd *cobra.Command, con *core.Console, buildType string)
 		return nil, fmt.Errorf("failed to load profile: %w", err)
 	}
 
+	// Resolve --rem pipeline name to link address before parsing flags
+	if cmd.Flags().Changed("rem") {
+		remValue, _ := cmd.Flags().GetString("rem")
+		if !strings.Contains(remValue, "://") {
+			// pipeline name mode: look up link from cached pipelines
+			pipe, ok := con.Pipelines[remValue]
+			if !ok || pipe.GetRem() == nil {
+				return nil, fmt.Errorf("REM pipeline %q not found or not running", remValue)
+			}
+			link := pipe.GetRem().Link
+			if link == "" {
+				return nil, fmt.Errorf("REM pipeline %q has no link address", remValue)
+			}
+			// --rem-link overrides the pipeline link (CDN scenario)
+			if cmd.Flags().Changed("rem-link") {
+				remLinkOverride, _ := cmd.Flags().GetString("rem-link")
+				if remLinkOverride != "" {
+					link = remLinkOverride
+				}
+			}
+			// rewrite --rem flag value to resolved link so parseBuildFlags sees a real address
+			cmd.Flags().Set("rem", link)
+		}
+	}
+
 	// Layer 4: Inline flag overrides
 	profile, err = parseBuildFlags(cmd, profile)
 	if err != nil {
@@ -174,7 +199,10 @@ func prepareBuildConfig(cmd *cobra.Command, con *core.Console, buildType string)
 		profile.Implant.Mod = buildType
 	}
 
-	buildConfig.MaleficConfig, _ = profile.ToYAML()
+	buildConfig.MaleficConfig, err = profile.ToYAML()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize profile: %w", err)
+	}
 
 	if err := parseOutputType(cmd, buildConfig); err != nil {
 		return nil, err
@@ -276,7 +304,7 @@ func buildTargetsFromAddresses(addrs string, remLink string, remChanged bool) ([
 				SkipVerification: true,
 			}
 		} else if strings.HasPrefix(address, "mtls://") {
-			// todo
+			return nil, errors.New("mtls:// is not yet supported")
 		} else {
 			return nil, errors.New("invalid target address: " + address)
 		}
@@ -293,7 +321,17 @@ func buildTargetsFromAddresses(addrs string, remLink string, remChanged bool) ([
 // parseBuildFlags 解析所有构建相关的flag参数
 func parseBuildFlags(cmd *cobra.Command, profile *implanttypes.ProfileConfig) (*implanttypes.ProfileConfig, error) {
 
-	//newProfile.SetDefaults()
+	// ensure top-level sub-profiles are non-nil so flag handlers can assign safely
+	if profile.Basic == nil {
+		profile.Basic = &implanttypes.BasicProfile{}
+	}
+	if profile.Implant == nil {
+		profile.Implant = &implanttypes.ImplantProfile{}
+	}
+	if profile.Build == nil {
+		profile.Build = &implanttypes.BuildProfile{}
+	}
+
 	// Basic profile flags - only override if explicitly provided
 	if cmd.Flags().Changed("cron") {
 		cron, _ := cmd.Flags().GetString("cron")
@@ -360,6 +398,12 @@ func parseBuildFlags(cmd *cobra.Command, profile *implanttypes.ProfileConfig) (*
 	guardrailUsernames, _ := cmd.Flags().GetString("guardrail-usernames")
 	guardrailServerNames, _ := cmd.Flags().GetString("guardrail-server-names")
 	guardrailDomains, _ := cmd.Flags().GetString("guardrail-domains")
+	if guardrailIPAddresses != "" || guardrailUsernames != "" ||
+		guardrailServerNames != "" || guardrailDomains != "" {
+		if profile.Basic.Guardrail == nil {
+			profile.Basic.Guardrail = &implanttypes.GuardrailProfile{}
+		}
+	}
 	if guardrailIPAddresses != "" {
 		profile.Basic.Guardrail.IPAddresses = strings.Split(guardrailIPAddresses, ",")
 	}
@@ -407,7 +451,7 @@ func parseBuildFlags(cmd *cobra.Command, profile *implanttypes.ProfileConfig) (*
 		}
 	}
 
-	if cmd.Flags().Changed("rem") {
+	if cmd.Flags().Changed("rem") && cmd.Flags().Changed("addresses") {
 		profile.Implant.Enable3rd = true
 		profile.Implant.ThirdModules = append(profile.Implant.ThirdModules, "rem")
 	}
@@ -427,9 +471,10 @@ func parseBuildFlags(cmd *cobra.Command, profile *implanttypes.ProfileConfig) (*
 	// anti configuration
 	antiSandbox, _ := cmd.Flags().GetBool("anti-sandbox")
 	if cmd.Flags().Changed("anti-sandbox") {
-		profile.Implant.Anti = &implanttypes.AntiProfile{
-			Sandbox: antiSandbox,
+		if profile.Implant.Anti == nil {
+			profile.Implant.Anti = &implanttypes.AntiProfile{}
 		}
+		profile.Implant.Anti.Sandbox = antiSandbox
 	}
 
 	return profile, nil

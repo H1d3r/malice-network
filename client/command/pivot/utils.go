@@ -10,6 +10,7 @@ import (
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/spf13/cobra"
 	"net/url"
+	"strings"
 )
 
 func RemDialCmd(cmd *cobra.Command, con *core.Console) error {
@@ -24,6 +25,11 @@ func RemDialCmd(cmd *cobra.Command, con *core.Console) error {
 }
 
 func GetRemLink(con *core.Console, pipe string) (string, error) {
+	// direct link mode: contains "://" means it's already a link address
+	if strings.Contains(pipe, "://") {
+		return pipe, nil
+	}
+	// pipeline name mode: look up in cached pipelines
 	remPipe, ok := con.Pipelines[pipe]
 	if !(ok && remPipe.GetRem() != nil) {
 		return "", types.ErrNotFoundPipeline

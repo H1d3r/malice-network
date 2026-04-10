@@ -88,10 +88,11 @@ func (s *SaasBuilder) Generate() (*clientpb.Artifact, error) {
 }
 
 func (s *SaasBuilder) Execute() error {
+	profileName := s.config.ProfileName
 	s.config.ProfileName = ""
 	data, err := protojson.Marshal(s.config)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config %s: %s", s.config.ProfileName, err)
+		return fmt.Errorf("failed to marshal config %s: %s", profileName, err)
 	}
 	headers := saas.SaasHeaders(s.getToken())
 	var respObj clientpb.Artifact

@@ -209,10 +209,16 @@ func (rpc *Server) RemDial(ctx context.Context, req *implantpb.Request) (*client
 	}
 
 	greq.HandlerResponse(ch, types.MsgResponse, func(spite *implantpb.Spite) {
+		agentID := spite.GetResponse().GetOutput()
+
+		// resolve pipeline: by name first, fallback to agent ID search
 		pipe, ok := core.Listeners.Find(pid)
 		if !ok {
-			logs.Log.Warnf("pipeline %s not found", pid)
-			return
+			pipe, ok = core.Listeners.FindByRemAgent(agentID)
+			if !ok {
+				logs.Log.Warnf("pipeline not found for %s (agent %s)", pid, agentID)
+				return
+			}
 		}
 		lns, _ := core.Listeners.Get(pipe.ListenerId)
 		i := lns.PushCtrl(&clientpb.JobCtrl{
@@ -230,13 +236,8 @@ func (rpc *Server) RemDial(ctx context.Context, req *implantpb.Request) (*client
 			Important: true,
 			Spite:     spite,
 		}
-		pipe, ok = core.Listeners.Find(pid)
-		if !ok {
-			logs.Log.Warnf("pipeline %s not found", pid)
-			return
-		}
 
-		if remOpt, ok := pipe.GetRem().Agents[spite.GetResponse().Output]; ok {
+		if remOpt, ok := pipe.GetRem().Agents[agentID]; ok {
 			pivot := output.NewPivotingWithRem(remOpt, pipe)
 			event.Op = "pivot_" + pivot.InboundSide
 			event.Message = pivot.Abstract()
@@ -266,6 +267,9 @@ func (rpc *Server) RemAgentCtrl(ctx context.Context, req *clientpb.REMAgent) (*c
 		return nil, types.ErrMissingRequestField
 	}
 	pipe, ok := core.Listeners.Find(req.PipelineId)
+	if !ok {
+		pipe, ok = core.Listeners.FindByRemAgent(req.Id)
+	}
 	if !ok {
 		return nil, types.ErrNotFoundListener
 	}
@@ -335,6 +339,9 @@ func (rpc *Server) RemAgentLog(ctx context.Context, req *clientpb.REMAgent) (*cl
 	}
 	pipe, ok := core.Listeners.Find(req.PipelineId)
 	if !ok {
+		pipe, ok = core.Listeners.FindByRemAgent(req.Id)
+	}
+	if !ok {
 		return nil, types.ErrNotFoundListener
 	}
 	lns, err := core.Listeners.Get(pipe.ListenerId)
@@ -364,6 +371,9 @@ func (rpc *Server) RemAgentLog(ctx context.Context, req *clientpb.REMAgent) (*cl
 
 func (rpc *Server) RemAgentStop(ctx context.Context, req *clientpb.REMAgent) (*clientpb.Empty, error) {
 	pipe, ok := core.Listeners.Find(req.PipelineId)
+	if !ok {
+		pipe, ok = core.Listeners.FindByRemAgent(req.Id)
+	}
 	if !ok {
 		return nil, types.ErrNotFoundListener
 	}
