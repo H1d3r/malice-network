@@ -149,9 +149,8 @@ func RunQuickstart(opt *Options) error {
 			},
 		},
 		{
-			Name:     "build",
-			Title:    "Build",
-			Optional: true,
+			Name:  "build",
+			Title: "Build",
 			Fields: []*wizard.FormField{
 				{
 					Name: "enable_auto_build", Title: "Enable Auto-Build",
