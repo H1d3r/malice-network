@@ -11,6 +11,8 @@ import (
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"time"
@@ -27,6 +29,10 @@ func (rpc *Server) RegisterListener(ctx context.Context, req *clientpb.RegisterL
 	// Idempotent: if a listener with this name already exists (e.g. reconnect after crash),
 	// fully clean up the old state before creating the fresh instance.
 	if old, err := core.Listeners.Get(req.Name); err == nil {
+		if old.Active() {
+			return nil, status.Errorf(codes.AlreadyExists,
+				"listener %q is already active, use a different name or stop the existing one first", req.Name)
+		}
 		for _, pipe := range old.AllPipelines() {
 			pipelinesCh.Delete(pipe.Name)
 		}
