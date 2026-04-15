@@ -257,6 +257,11 @@ func (opt *Options) PrepareConfig(defaultConfig []byte) error {
 }
 
 func (opt *Options) PrepareServer() error {
+	// Initialize .malice directory structure (only needed for server mode)
+	if err := configs.InitConfig(); err != nil {
+		return fmt.Errorf("cannot init config directories: %w", err)
+	}
+
 	// Override malefic root if configured
 	if opt.Server.SourceCodeRoot != "" {
 		configs.UpdateMaleficRoot(opt.Server.SourceCodeRoot)

@@ -17,11 +17,6 @@ import (
 )
 
 func init() {
-	err := configs.InitConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-		return
-	}
 	config.WithOptions(func(opt *config.Options) {
 		opt.DecoderConfig.TagName = "config"
 		opt.ParseDefault = true
