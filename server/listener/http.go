@@ -293,15 +293,18 @@ func (h *httpReadWriter) Read(p []byte) (n int, err error) {
 func (h *httpReadWriter) Write(p []byte) (n int, err error) {
 	var buf bytes.Buffer
 	if len(h.bodyPrefix) > 0 {
-		buf.Write(h.bodyPrefix)
+		if _, err := buf.Write(h.bodyPrefix); err != nil {
+			return 0, err
+		}
 	}
 	n, err = buf.Write(p)
 	if err != nil {
 		return n, err
 	}
-
 	if len(h.bodySuffix) > 0 {
-		buf.Write(h.bodySuffix)
+		if _, err := buf.Write(h.bodySuffix); err != nil {
+			return n, err
+		}
 	}
 	h.writer.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 	if _, err := h.writer.Write(buf.Bytes()); err != nil {
