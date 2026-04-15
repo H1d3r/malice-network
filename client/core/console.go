@@ -408,7 +408,7 @@ func (c *Console) getStatusLine() string {
 		status = tui.RedFg.Render("dead")
 	}
 	parts = append(parts,
-		tui.WhiteFg.Bold(true).Render(session.Name),
+		tui.CyanFg.Bold(true).Render(session.Name),
 		tui.DarkGrayFg.Render("on"),
 		tui.CyanFg.Render(hostname),
 		tui.GreenFg.Render(osInfo),

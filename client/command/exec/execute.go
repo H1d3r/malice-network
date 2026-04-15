@@ -2,6 +2,8 @@ package exec
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -13,7 +15,6 @@ import (
 	"github.com/chainreactors/malice-network/helper/utils/output"
 	"github.com/kballard/go-shellquote"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 func RunCmd(cmd *cobra.Command, con *core.Console) error {
@@ -57,22 +58,32 @@ func ShellCmd(cmd *cobra.Command, con *core.Console) error {
 	session := con.GetInteractive()
 	//token := ctx.Flags.Bool("token")
 	quiet, _ := cmd.Flags().GetBool("quiet")
+	realtime, _ := cmd.Flags().GetBool("realtime")
+	shellPath, _ := cmd.Flags().GetString("shell")
 	cmdStr := strings.Join(cmd.Flags().Args(), " ")
-	task, err := Shell(con.Rpc, session, cmdStr, !quiet)
+	task, err := Shell(con.Rpc, session, cmdStr, !quiet, realtime, shellPath)
 	if err != nil {
 		return err
 	}
 	return common.HandleTaskOutput(cmd, con, task)
 }
 
-func Shell(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, output bool) (*clientpb.Task, error) {
+func Shell(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, output bool, realtime bool, shellPath string) (*clientpb.Task, error) {
 	var binpath string
 	var args []string
 	if sess.Os.Name == "windows" {
-		binpath = `C:\Windows\System32\cmd.exe`
-		args = []string{"/c", cmd}
+		if shellPath != "" {
+			binpath = shellPath
+		} else {
+			binpath = `C:\Windows\System32\cmd.exe`
+		}
+		args = []string{"/S", "/c", cmd}
 	} else {
-		binpath = "/bin/sh"
+		if shellPath != "" {
+			binpath = shellPath
+		} else {
+			binpath = "/bin/sh"
+		}
 		args = []string{"-c", cmd}
 	}
 
@@ -80,7 +91,7 @@ func Shell(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, outp
 		Path:     binpath,
 		Args:     args,
 		Output:   output,
-		Realtime: true,
+		Realtime: realtime,
 	})
 	if err != nil {
 		return nil, err
@@ -150,7 +161,7 @@ func RegisterExecuteFunc(con *core.Console) {
 		Shell,
 		"bshell",
 		func(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string) (*clientpb.Task, error) {
-			return Shell(rpc, sess, cmd, true)
+			return Shell(rpc, sess, cmd, true, true, "")
 		},
 		output.ParseExecResponse,
 		nil,

@@ -84,6 +84,8 @@ execute gogo.exe -- -i 127.0.0.1 -p http
 
 	common.BindFlag(shellCmd, func(f *pflag.FlagSet) {
 		f.BoolP("quiet", "q", false, "disable output")
+		f.StringP("shell", "s", "", "custom shell path (e.g. /bin/bash, /bin/ash)")
+		f.BoolP("realtime", "r", true, "stream output in realtime")
 	})
 	common.BindOutputFlags(shellCmd)
 
