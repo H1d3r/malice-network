@@ -9,6 +9,7 @@ import (
 	"github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
+	"github.com/chainreactors/IoM-go/proto/services/clientrpc"
 	errs "github.com/chainreactors/IoM-go/types"
 
 	"github.com/chainreactors/malice-network/helper/utils/output"
@@ -297,4 +298,75 @@ func (rpc *Server) Sync(ctx context.Context, req *clientpb.Sync) (*clientpb.Cont
 		result.Content = data
 		return result, nil
 	}
+}
+
+// SyncStream is the streaming variant of Sync. It is designed for large
+// Context payloads (e.g. downloaded files, screenshots) that would otherwise
+// stall the gRPC-Web proxy because it has to buffer the entire response.
+//
+// The first chunk carries the Context metadata (header) with an empty
+// content field. Subsequent chunks carry byte slices of the full content.
+// Clients should concatenate chunks by offset until they receive one with
+// eof == true.
+func (rpc *Server) SyncStream(req *clientpb.Sync, stream clientrpc.MaliceRPC_SyncStreamServer) error {
+	if req.TaskId == "" && req.ContextId == "" {
+		return fmt.Errorf("context id or task id is required")
+	}
+
+	var ictx *models.Context
+	var err error
+	if req.TaskId != "" {
+		ictx, err = db.GetContextByTask(req.TaskId)
+	} else {
+		ictx, err = db.FindContext(req.ContextId)
+	}
+	if err != nil {
+		return err
+	}
+
+	header := ictx.ToProtobuf()
+	// Content is shipped in subsequent chunks; keep header lean.
+	header.Content = nil
+
+	data, readErr := core.ReadFileForContext(ictx.Context)
+	totalSize := int64(len(data))
+
+	// Always send the header first so the client can populate metadata.
+	if err := stream.Send(&clientpb.ContextChunk{
+		Header:    header,
+		TotalSize: totalSize,
+		Eof:       readErr != nil || totalSize == 0,
+	}); err != nil {
+		return err
+	}
+
+	// If file is missing or empty, the EOF flag on the header is enough.
+	if readErr != nil || totalSize == 0 {
+		return nil
+	}
+
+	const chunkSize int64 = 256 * 1024 // 256 KB per chunk
+	for offset := int64(0); offset < totalSize; offset += chunkSize {
+		// Honor client cancellation promptly.
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		default:
+		}
+
+		end := offset + chunkSize
+		if end > totalSize {
+			end = totalSize
+		}
+		eof := end == totalSize
+		if err := stream.Send(&clientpb.ContextChunk{
+			Content:   data[offset:end],
+			Offset:    offset,
+			TotalSize: totalSize,
+			Eof:       eof,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
