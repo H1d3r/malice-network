@@ -93,32 +93,43 @@ func LoadProfile() (*Profile, error) {
 	return profile, nil
 }
 
-// PrintProfileSettings 打印配置信息
-func PrintProfileSettings() {
+// PrintProfileSettings prints current settings, overlaying any CLI overrides.
+// mcpAddr and rpcAddr are the values from --mcp / --rpc flags (empty means no override).
+func PrintProfileSettings(mcpAddr, rpcAddr string) {
 	setting, err := GetSetting()
 	if err != nil {
 		logs.Log.Errorf("Failed to get setting: %v\n", err)
 		return
 	}
-	profile := &Profile{Settings: setting}
-	if profile.Settings == nil {
+	if setting == nil {
 		return
 	}
 
-	// 构建配置映射
-	settingsMap := map[string]interface{}{
-		"MCP Enable":          formatBool(profile.Settings.McpEnable),
-		"MCP Address":         profile.Settings.McpAddr,
-		"LocalRPC Enable":     formatBool(profile.Settings.LocalRPCEnable),
-		"LocalRPC Address":    profile.Settings.LocalRPCAddr,
-		"Max Server Log Size": formatInt(profile.Settings.MaxServerLogSize),
-		"Opsec Threshold":     formatFloat(profile.Settings.OpsecThreshold),
+	mcpEnable := setting.McpEnable
+	mcpDisplay := setting.McpAddr
+	localRPCEnable := setting.LocalRPCEnable
+	localRPCDisplay := setting.LocalRPCAddr
+
+	if mcpAddr != "" {
+		mcpEnable = true
+		mcpDisplay = mcpAddr
+	}
+	if rpcAddr != "" {
+		localRPCEnable = true
+		localRPCDisplay = rpcAddr
 	}
 
-	// 定义显示顺序
+	settingsMap := map[string]interface{}{
+		"MCP Enable":          formatBool(mcpEnable),
+		"MCP Address":         mcpDisplay,
+		"LocalRPC Enable":     formatBool(localRPCEnable),
+		"LocalRPC Address":    localRPCDisplay,
+		"Max Server Log Size": formatInt(setting.MaxServerLogSize),
+		"Opsec Threshold":     formatFloat(setting.OpsecThreshold),
+	}
+
 	orderedKeys := []string{"MCP Enable", "MCP Address", "LocalRPC Enable", "LocalRPC Address", "Max Server Log Size", "Opsec Threshold"}
 
-	// 使用tui.RenderKV显示配置
 	tui.RenderKVWithOptions(settingsMap, orderedKeys, tui.KVOptions{ShowHeader: false})
 }
 

@@ -143,6 +143,9 @@ func makeRunners(implantCmd *cobra.Command, con *core.Console) (pre, post func(c
 		if sess.LastTask != nil {
 			if wait {
 				RegisterImplantFunc(con)
+				if con.Server != nil && !con.Server.EventStatus {
+					go con.EventHandler()
+				}
 				context, err := con.WaitTaskFinish(sess.Context(), sess.LastTask)
 				if err != nil {
 					return err

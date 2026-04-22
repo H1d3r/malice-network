@@ -78,7 +78,7 @@ func LoginCmd(cmd *cobra.Command, con *core.Console) error {
 
 func loginWithMode(con *core.Console, authFile string, quiet bool) error {
 	if !quiet {
-		assets.PrintProfileSettings()
+		assets.PrintProfileSettings(con.MCPAddr, con.RPCAddr)
 	}
 
 	config, err := assets.LoadConfig(authFile)
