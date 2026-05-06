@@ -23,7 +23,6 @@ func init() {
 	})
 	config.AddDriver(yaml.Driver)
 	codenames.SetupCodenames()
-	assets.SetupGithubFile()
 }
 
 func isInteractiveTerminal() bool {
@@ -111,6 +110,9 @@ func Start(defaultConfig []byte) error {
 	}
 
 	if !opt.ListenerOnly && opt.Server.Enable {
+		if err := assets.SetupGithubFile(); err != nil {
+			logs.Log.Warnf("failed to setup github files: %s", err)
+		}
 		err = opt.PrepareServer()
 		if err != nil {
 			return fmt.Errorf("cannot prepare server, %s", err.Error())
