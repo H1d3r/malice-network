@@ -62,17 +62,12 @@ func GetConnection(conn *cryptostream.Conn, pipelineID string, secureConfig *imp
 
 	sessionID := hash.Md5Hash(encoders.Uint32ToBytes(sid))
 
-	// 尝试从现有连接池获取连接
-	if existingConn := Connections.Get(sessionID); existingConn != nil {
-		// 获取 KeyPair 并更新现有连接的安全配置
-		keyPair := GetKeyPairForSession(sid, secureConfig)
-		if keyPair != nil {
-			existingConn.Parser.WithSecure(keyPair)
-		}
-		return existingConn, nil
+	// Each TCP connection gets its own Connection object. Reusing a Connection
+	// across multiple TCPs causes one TCP's EOF to kill the shared Connection,
+	// making the surviving TCP unable to receive tasks via tcp-forward-recv.
+	if existing := Connections.Get(sessionID); existing != nil {
+		logs.Log.Debugf("[connection] replacing existing connection %s (raw ID %d, alive=%v) for new TCP", sessionID, sid, existing.IsAlive())
 	}
-
-	// 创建新连接
 	keyPair := GetKeyPairForSession(sid, secureConfig)
 	newConn := NewConnection(conn.Parser, sid, pipelineID, keyPair)
 	Connections.Add(newConn)
@@ -204,13 +199,15 @@ func (c *Connection) runtimeErrorHandler(scope string) GoErrorHandler {
 		LogGuardedError(label),
 		func(err error) {
 			c.fail(err)
-			Connections.remove(c.SessionID, err)
+			Connections.removeIfSame(c.SessionID, c)
 		},
 	)
 }
 
 func (c *Connection) closeWithError(err error) error {
-	Connections.remove(c.SessionID, err)
+	logs.Log.Debugf("[connection] TCP close for connection %s (raw ID %d): %v", c.SessionID, c.RawID, err)
+	c.fail(err)
+	Connections.removeIfSame(c.SessionID, c)
 	return err
 }
 
@@ -367,6 +364,15 @@ func (c *connections) Add(connect *Connection) *Connection {
 
 func (c *connections) Remove(sessionID string) {
 	c.remove(sessionID, ErrConnectionRemoved)
+}
+
+func (c *connections) removeIfSame(sessionID string, conn *Connection) {
+	if current := c.Get(sessionID); current == conn {
+		c.connections.Delete(sessionID)
+		logs.Log.Debugf("[connection] removed connection %s from map", sessionID)
+	} else {
+		logs.Log.Debugf("[connection] connection %s already replaced in map, skip removal", sessionID)
+	}
 }
 
 func (c *connections) remove(sessionID string, err error) {
