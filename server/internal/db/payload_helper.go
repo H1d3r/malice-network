@@ -491,18 +491,27 @@ func UpdateBuilderPath(builder *models.Artifact) error {
 		Error
 }
 
-func SaveArtifact(name, artifactType, platform, arch, source string) (*models.Artifact, error) {
+// SaveUploadedArtifact records a user-uploaded binary in the artifact table.
+// Unlike SaveArtifactFromConfig (which is driven by a BuildConfig from the
+// build pipeline), this path takes a pre-built artifact: the Status is set to
+// completed up-front so FindArtifact / SearchArtifact can locate it, and the
+// caller fields (target/format/comment) are forwarded verbatim.
+func SaveUploadedArtifact(req *clientpb.Artifact) (*models.Artifact, error) {
 	absBuildOutputPath, err := filepath.Abs(configs.TempPath)
 	if err != nil {
 		return nil, err
 	}
 
 	artifact := &models.Artifact{
-		Name:   name,
-		Os:     platform,
-		Arch:   arch,
-		Type:   artifactType,
-		Source: source,
+		Name:    req.Name,
+		Os:      req.Platform,
+		Arch:    req.Arch,
+		Type:    req.Type,
+		Target:  req.Target,
+		Format:  req.Format,
+		Comment: req.Comment,
+		Source:  consts.ArtifactFromUpload,
+		Status:  consts.BuildStatusCompleted,
 	}
 
 	artifact.Path = filepath.Join(absBuildOutputPath, encoders.UUID())
@@ -511,6 +520,12 @@ func SaveArtifact(name, artifactType, platform, arch, source string) (*models.Ar
 		return nil, err
 	}
 	return artifact, nil
+}
+
+// DeleteArtifactRow removes an artifact row by primary key. Used by upload
+// rollback when the on-disk write fails after the DB record was created.
+func DeleteArtifactRow(id uint32) error {
+	return Session().Delete(&models.Artifact{}, id).Error
 }
 
 // resolveArtifactFormat returns file extension (with dot) based on OS/buildType/outputType.

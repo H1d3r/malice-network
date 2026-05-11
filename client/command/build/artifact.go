@@ -2,6 +2,7 @@ package build
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -242,10 +243,32 @@ func UploadArtifactCmd(cmd *cobra.Command, con *core.Console) error {
 	artifactType, _ := cmd.Flags().GetString("type")
 	name, _ := cmd.Flags().GetString("name")
 	comment, _ := cmd.Flags().GetString("comment")
+	target, _ := cmd.Flags().GetString("target")
+	platform, _ := cmd.Flags().GetString("platform")
+	arch, _ := cmd.Flags().GetString("arch")
+	format, _ := cmd.Flags().GetString("format")
 	if name == "" {
 		name = filepath.Base(path)
 	}
-	artifact, err := UploadArtifact(con, path, name, artifactType, comment)
+	// If --target is set but --platform/--arch were not, fall back to the
+	// canonical OS/Arch derived from the build target table so server-side
+	// metadata is consistent with the compiled-artifact path.
+	if target != "" && (platform == "" || arch == "") {
+		if t, ok := consts.GetBuildTarget(target); ok {
+			if platform == "" {
+				platform = t.OS
+			}
+			if arch == "" {
+				arch = t.Arch
+			}
+		}
+	}
+	// Default Format to the source file's extension (.exe/.dll/...) so the
+	// server doesn't have to guess from magic bytes on download.
+	if format == "" {
+		format = filepath.Ext(path)
+	}
+	artifact, err := UploadArtifact(con, path, name, artifactType, comment, target, platform, arch, format)
 	if err != nil {
 		return err
 	}
@@ -264,16 +287,39 @@ func DeleteArtifactCmd(cmd *cobra.Command, con *core.Console) error {
 	return nil
 }
 
-func UploadArtifact(con *core.Console, path string, name, artifactType string, comment string) (*clientpb.Artifact, error) {
+// MaxArtifactUploadSize mirrors the server-side cap. Stat'ing first lets us
+// reject huge files (e.g. wrong-path uploads of an ISO) before slurping them
+// into memory and shipping them over the wire.
+const MaxArtifactUploadSize = 128 << 20
+
+func UploadArtifact(con *core.Console, path, name, artifactType, comment, target, platform, arch, format string) (*clientpb.Artifact, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("upload target %s is a directory", path)
+	}
+	if info.Size() == 0 {
+		return nil, fmt.Errorf("upload target %s is empty", path)
+	}
+	if info.Size() > MaxArtifactUploadSize {
+		return nil, fmt.Errorf("artifact %s is %d bytes, exceeds limit of %d MiB",
+			path, info.Size(), MaxArtifactUploadSize>>20)
+	}
 	bin, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	return con.Rpc.UploadArtifact(con.Context(), &clientpb.Artifact{
-		Name:    name,
-		Bin:     bin,
-		Type:    artifactType,
-		Comment: comment,
+		Name:     name,
+		Bin:      bin,
+		Type:     artifactType,
+		Comment:  comment,
+		Target:   target,
+		Platform: platform,
+		Arch:     arch,
+		Format:   format,
 	})
 }
 

@@ -460,6 +460,11 @@ artifact show artifact_name --profile
 		Short: "Upload a build output file to the server",
 		Long: `Upload a custom artifact to the server for storage or further use.
 
+Use --type to declare the implant role (beacon, pulse, modules, prelude); use
+--format to override the file extension (.exe, .dll, .so, ...) — by default
+the extension is taken from the uploaded file's name. --target accepts a Rust
+target triple (e.g. x86_64-pc-windows-gnu); when set without --platform / --arch,
+the canonical OS and architecture are filled in automatically.
 `,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -469,18 +474,21 @@ artifact show artifact_name --profile
 // Upload an artifact with default settings
 artifact upload /path/to/artifact
 
-// Upload an artifact with a specific stage and alias name
-artifact upload /path/to/artifact --comment production --name my_artifact
+// Upload with implant role and a friendly name
+artifact upload /path/to/beacon.exe --type beacon --name my_beacon
 
-// Upload an artifact and specify its type
-artifact upload /path/to/artifact --type DLL
+// Upload a Windows DLL beacon, pinning the build target
+artifact upload /path/to/beacon.dll --type beacon --target x86_64-pc-windows-gnu --format .dll
 ~~~`,
 	}
 	common.BindArgCompletions(uploadCmd, nil, carapace.ActionFiles().Usage("custom artifact"))
 	common.BindFlag(uploadCmd, func(f *pflag.FlagSet) {
-		f.StringP("type", "t", "", "Set type")
-		f.StringP("name", "n", "", "alias name")
-		f.StringP("target", "", "", "rust target")
+		f.StringP("type", "t", "", "implant role (beacon, pulse, modules, prelude)")
+		f.StringP("name", "n", "", "alias name (defaults to the uploaded file's basename)")
+		f.String("target", "", "rust target triple, e.g. x86_64-pc-windows-gnu")
+		f.String("platform", "", "OS override (windows, linux, darwin); inferred from --target when set")
+		f.String("arch", "", "architecture override (x86_64, i386, ...); inferred from --target when set")
+		f.String("format", "", "file format/extension (.exe, .dll, .so, ...); defaults to source file extension")
 		f.StringP("comment", "c", "", "comment for artifact")
 	})
 
@@ -738,6 +746,7 @@ func registerWizardProviders(cmd *cobra.Command, con *core.Console) {
 			"i686-pc-windows-gnu",
 			"i686-pc-windows-msvc",
 			"x86_64-unknown-linux-gnu",
+			"x86_64-unknown-linux-gnu.2.17",
 			"i686-unknown-linux-gnu",
 		}
 	})

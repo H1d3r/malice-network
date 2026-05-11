@@ -3,10 +3,10 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/helper/codenames"
+	"github.com/chainreactors/malice-network/helper/utils/fileutils"
 	"github.com/chainreactors/malice-network/server/build"
 	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/db"
@@ -76,17 +76,45 @@ func (rpc *Server) DownloadArtifact(ctx context.Context, req *clientpb.Artifact)
 	return build.ConvertArtifact(artifact, req.Format, req.Rdi)
 }
 
+// maxArtifactUploadSize caps user-uploaded artifact binaries. 128 MiB covers
+// debug builds and OLLVM-obfuscated implants with several times the headroom
+// of a typical release beacon (~5 MiB), while still rejecting accidental ISO/
+// VM-image uploads that would otherwise exhaust disk.
+const maxArtifactUploadSize = 128 << 20
+
 func (rpc *Server) UploadArtifact(ctx context.Context, req *clientpb.Artifact) (*clientpb.Artifact, error) {
+	if len(req.Bin) == 0 {
+		return nil, fmt.Errorf("uploaded artifact has empty binary")
+	}
+	if len(req.Bin) > maxArtifactUploadSize {
+		return nil, fmt.Errorf("uploaded artifact is %d bytes, exceeds limit of %d bytes (%d MiB)",
+			len(req.Bin), maxArtifactUploadSize, maxArtifactUploadSize>>20)
+	}
 	if req.Name == "" {
 		req.Name = codenames.GetCodename()
 	}
-	artifact, err := db.SaveArtifact(req.Name, req.Type, req.Platform, req.Arch, consts.ArtifactFromUpload)
+	// Reject duplicate names up-front so the caller gets a clear error instead
+	// of the raw "UNIQUE constraint failed" surfaced by GORM.
+	if existing, _ := db.GetArtifactByName(req.Name); existing != nil {
+		return nil, fmt.Errorf("artifact %q already exists (id=%d), use a different --name or delete the existing one",
+			req.Name, existing.ID)
+	}
+	if req.Format == "" {
+		if ext, err := fileutils.GetExtensionByBytes(req.Bin); err == nil {
+			req.Format = ext
+		}
+	}
+	artifact, err := db.SaveUploadedArtifact(req)
 	if err != nil {
 		return nil, err
 	}
-	err = os.WriteFile(artifact.Path, req.Bin, 0644)
-	if err != nil {
-		return nil, err
+	if err := os.WriteFile(artifact.Path, req.Bin, 0644); err != nil {
+		// Roll back the DB row so the table doesn't carry a record whose
+		// backing file never landed on disk.
+		if delErr := db.DeleteArtifactRow(artifact.ID); delErr != nil {
+			logs.Log.Warnf("failed to rollback artifact %d after write failure: %v", artifact.ID, delErr)
+		}
+		return nil, fmt.Errorf("write artifact %s: %w", req.Name, err)
 	}
 	return artifact.ToProtobuf([]byte{}), nil
 }
