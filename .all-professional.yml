@@ -8,8 +8,7 @@ git:
 before:
   hooks:
     - go mod tidy
-    - go run scripts/pre_install.go
-
+    - go run scripts/pre_install.go --professional
 
 builds:
   -
@@ -18,6 +17,7 @@ builds:
     binary: "iom_{{ .Os }}_{{ .Arch }}"
     flags:
       - -trimpath
+      - "-tags=professional"
     goos:
       - windows
       - linux
@@ -28,7 +28,7 @@ builds:
     ldflags: |
       -s -w
       -X github.com/chainreactors/malice-network/server/rpc.ver={{ envOrDefault "VERSION" "" }}
-      -X github.com/chainreactors/malice-network/server/rpc.commit={{ envOrDefault "COMMIT" "" }}
+      -X github.com/chainreactors/malice-network/server/rpc.commit={{ envOrDefault "COMMIT" "" }}.{{ envOrDefault "LICENSE_ID" "" }}
     no_unique_dist_dir: true
     env:
       - CGO_ENABLED=0
@@ -38,6 +38,7 @@ builds:
     binary: "malice_network_{{ .Os }}_{{ .Arch }}"
     flags:
       - -trimpath
+      - "-tags=professional,dns,graph"
     goos:
       - windows
       - linux
@@ -48,7 +49,7 @@ builds:
     ldflags: |
       -s -w
       -X github.com/chainreactors/malice-network/helper/consts.Ver={{ envOrDefault "VERSION" "" }}
-      -X github.com/chainreactors/malice-network/helper/consts.Commit={{ envOrDefault "COMMIT" "" }}
+      -X github.com/chainreactors/malice-network/helper/consts.Commit={{ envOrDefault "COMMIT" "" }}.{{ envOrDefault "LICENSE_ID" "" }}
       -X github.com/chainreactors/malice-network/helper/consts.Buildstamp={{.Timestamp}}
     no_unique_dist_dir: true
     env:

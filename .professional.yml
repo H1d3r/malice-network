@@ -16,6 +16,7 @@ builds:
     id: client
     binary: "iom_{{ .Os }}_{{ .Arch }}"
     flags:
+      - -trimpath
       - "-tags=professional"
     goos:
       - windows
@@ -26,12 +27,8 @@ builds:
       - arm64
     ldflags: |
       -s -w
-      -X github.com/chainreactors/malice-network/server/rpc.ver={{.Env.VERSION}}
-      -X github.com/chainreactors/malice-network/server/rpc.commit={{.Env.COMMIT}}.{{.Env.LICENSE_ID}}
-    asmflags:
-      - all=-trimpath={{.Env.GOPATH}}
-    gcflags:
-      - all=-trimpath={{.Env.GOPATH}}
+      -X github.com/chainreactors/malice-network/server/rpc.ver={{ envOrDefault "VERSION" "" }}
+      -X github.com/chainreactors/malice-network/server/rpc.commit={{ envOrDefault "COMMIT" "" }}.{{ envOrDefault "LICENSE_ID" "" }}
     no_unique_dist_dir: true
     env:
       - CGO_ENABLED=0
@@ -40,6 +37,7 @@ builds:
     id: server
     binary: "malice_network_{{ .Os }}_{{ .Arch }}"
     flags:
+      - -trimpath
       - "-tags=professional"
     goos:
       - windows
@@ -50,13 +48,9 @@ builds:
       - arm64
     ldflags: |
       -s -w
-      -X github.com/chainreactors/malice-network/helper/consts.Ver={{.Env.VERSION}}
-      -X github.com/chainreactors/malice-network/helper/consts.Commit={{.Env.COMMIT}}.{{.Env.LICENSE_ID}}
+      -X github.com/chainreactors/malice-network/helper/consts.Ver={{ envOrDefault "VERSION" "" }}
+      -X github.com/chainreactors/malice-network/helper/consts.Commit={{ envOrDefault "COMMIT" "" }}.{{ envOrDefault "LICENSE_ID" "" }}
       -X github.com/chainreactors/malice-network/helper/consts.Buildstamp={{.Timestamp}}
-    asmflags:
-      - all=-trimpath={{.Env.GOPATH}}
-    gcflags:
-      - all=-trimpath={{.Env.GOPATH}}
     no_unique_dist_dir: true
     env:
       - CGO_ENABLED=0
