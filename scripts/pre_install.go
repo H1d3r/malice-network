@@ -22,30 +22,64 @@ type asset struct {
 }
 
 var sgnAssets = []asset{
+	// Linux
 	{
-		cache:  "sgn",
-		target: filepath.Join("server", "assets", "linux", "sgn"),
-		url:    "https://github.com/EgeBalci/sgn/releases/download/v2.0.1/sgn_linux_amd64_2.0.1.zip",
-		isZip:  true,
+		cache:  "sgn-linux-amd64",
+		target: filepath.Join("server", "assets", "linux", "amd64", "sgn"),
+		url:    "https://github.com/moloch--/sgn/releases/download/v0.0.5/sgn_linux-amd64",
 	},
 	{
-		cache:  "sgn.exe",
-		target: filepath.Join("server", "assets", "windows", "sgn.exe"),
-		url:    "https://github.com/EgeBalci/sgn/releases/download/v2.0.1/sgn_windows_amd64_2.0.1.zip",
-		isZip:  true,
+		cache:  "sgn-linux-arm64",
+		target: filepath.Join("server", "assets", "linux", "arm64", "sgn"),
+		url:    "https://github.com/moloch--/sgn/releases/download/v0.0.5/sgn_linux-arm64",
+	},
+	// Windows
+	{
+		cache:  "sgn-windows-amd64.exe",
+		target: filepath.Join("server", "assets", "windows", "amd64", "sgn.exe"),
+		url:    "https://github.com/moloch--/sgn/releases/download/v0.0.5/sgn_windows-amd64.exe",
+	},
+	{
+		cache:  "sgn-windows-arm64.exe",
+		target: filepath.Join("server", "assets", "windows", "arm64", "sgn.exe"),
+		url:    "https://github.com/moloch--/sgn/releases/download/v0.0.5/sgn_windows-arm64.exe",
+	},
+	// Darwin
+	{
+		cache:  "sgn-darwin-amd64",
+		target: filepath.Join("server", "assets", "darwin", "amd64", "sgn"),
+		url:    "https://github.com/moloch--/sgn/releases/download/v0.0.5/sgn_darwin-amd64",
+	},
+	{
+		cache:  "sgn-darwin-arm64",
+		target: filepath.Join("server", "assets", "darwin", "arm64", "sgn"),
+		url:    "https://github.com/moloch--/sgn/releases/download/v0.0.5/sgn_darwin-arm64",
 	},
 }
 
 var communityMutant = []asset{
+	// Linux (amd64 only)
 	{
-		cache:  "malefic-mutant.exe",
-		target: filepath.Join("server", "assets", "windows", "malefic-mutant.exe"),
+		cache:  "malefic-mutant-linux-amd64",
+		target: filepath.Join("server", "assets", "linux", "amd64", "malefic-mutant"),
+		url:    "https://github.com/chainreactors/malefic/releases/latest/download/malefic-mutant-x86_64-unknown-linux-musl",
+	},
+	// Windows (amd64 only)
+	{
+		cache:  "malefic-mutant-windows-amd64.exe",
+		target: filepath.Join("server", "assets", "windows", "amd64", "malefic-mutant.exe"),
 		url:    "https://github.com/chainreactors/malefic/releases/latest/download/malefic-mutant-x86_64-pc-windows-gnu.exe",
 	},
+	// Darwin (amd64 + arm64)
 	{
-		cache:  "malefic-mutant",
-		target: filepath.Join("server", "assets", "linux", "malefic-mutant"),
-		url:    "https://github.com/chainreactors/malefic/releases/latest/download/malefic-mutant-x86_64-unknown-linux-musl",
+		cache:  "malefic-mutant-darwin-amd64",
+		target: filepath.Join("server", "assets", "darwin", "amd64", "malefic-mutant"),
+		url:    "https://github.com/chainreactors/malefic/releases/latest/download/malefic-mutant-x86_64-apple-darwin",
+	},
+	{
+		cache:  "malefic-mutant-darwin-arm64",
+		target: filepath.Join("server", "assets", "darwin", "arm64", "malefic-mutant"),
+		url:    "https://github.com/chainreactors/malefic/releases/latest/download/malefic-mutant-aarch64-apple-darwin",
 	},
 }
 
