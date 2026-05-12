@@ -199,9 +199,9 @@ func (f *Forward) Handler() error {
 				continue
 			default:
 				if size := proto.Size(spite); size <= 1000 {
-					logs.Log.Debugf("[listener.%s] receive spite %s, %v", msg.SessionID, spite.Name, spite)
+					logs.Log.Debugf("listener.%s - receive_spite session=%s name=%s spite=%v", msg.SessionID, msg.SessionID, spite.Name, spite)
 				} else {
-					logs.Log.Debugf("[listener.%s] receive spite %s %d bytes", msg.SessionID, spite.Name, size)
+					logs.Log.Debugf("listener.%s - receive_spite session=%s name=%s bytes=%d", msg.SessionID, msg.SessionID, spite.Name, size)
 				}
 				if err := f.Stream.Send(&clientpb.SpiteResponse{
 					ListenerId: f.ID(),

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
+	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/helper/implanttypes"
 	"github.com/chainreactors/malice-network/server/internal/configs"
 	cryptostream "github.com/chainreactors/malice-network/server/internal/stream"
@@ -81,10 +82,17 @@ func (p *PipelineConfig) WrapConn(conn io.ReadWriteCloser) (*cryptostream.Conn, 
 	if p == nil {
 		return nil, errors.New("pipeline config is nil")
 	}
-	crys, err := configs.NewCrypto(p.Encryption.ToProtobuf())
+	enc := p.Encryption.ToProtobuf()
+	logs.Log.Debugf("crypto.wrap - encryption_configs_count=%d", len(enc))
+	for i, e := range enc {
+		logs.Log.Debugf("crypto.wrap - encryption[%d].type=%s encryption[%d].key=%q", i, e.Type, i, e.Key)
+	}
+	crys, err := configs.NewCrypto(enc)
 	if err != nil {
+		logs.Log.Debugf("crypto.wrap - new_crypto_failed error=%q", err)
 		return nil, err
 	}
+	logs.Log.Debugf("crypto.wrap - cryptors_created=%d parser=%s", len(crys), p.Parser)
 	return cryptostream.WrapPeekConn(conn, crys, p.Parser, uint32(p.PacketLength))
 }
 

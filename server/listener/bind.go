@@ -74,7 +74,7 @@ func (pipeline *BindPipeline) Start() error {
 	forward.ListenerId = pipeline.ListenerID
 	core.Forwarders.Add(forward)
 
-	logs.Log.Infof("[pipeline] starting TCP Bind pipeline")
+	logs.Log.Infof("pipeline.bind - start")
 	core.GoGuarded("bind-handler:"+pipeline.Name, pipeline.handler, pipeline.runtimeErrorHandler("handler loop"))
 
 	return nil

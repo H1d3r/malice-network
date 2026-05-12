@@ -75,36 +75,36 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 	for _, tcpPipeline := range cfg.TcpPipelines {
 		pipeline, err := tcpPipeline.ToProtobuf(lns.Name)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to build tcp pipeline config: %v", err)
+			logs.Log.Errorf("listener - build_tcp_pipeline_failed error=%q", err)
 			continue
 		}
 		err = lns.RegisterAndStart(pipeline)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to start tcp pipeline %s: %v", tcpPipeline.Name, err)
+			logs.Log.Errorf("listener - start_tcp_pipeline_failed name=%s error=%q", tcpPipeline.Name, err)
 		}
 	}
 
 	for _, httpPipeline := range cfg.HttpPipelines {
 		pipeline, err := httpPipeline.ToProtobuf(lns.Name)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to build http pipeline config: %v", err)
+			logs.Log.Errorf("listener - build_http_pipeline_failed error=%q", err)
 			continue
 		}
 		err = lns.RegisterAndStart(pipeline)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to start http pipeline %s: %v", httpPipeline.Name, err)
+			logs.Log.Errorf("listener - start_http_pipeline_failed name=%s error=%q", httpPipeline.Name, err)
 		}
 	}
 
 	for _, bindPipeline := range cfg.BindPipelineConfig {
 		pipeline, err := bindPipeline.ToProtobuf(lns.Name)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to build bind pipeline config: %v", err)
+			logs.Log.Errorf("listener - build_bind_pipeline_failed error=%q", err)
 			continue
 		}
 		err = lns.RegisterAndStart(pipeline)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to start bind pipeline %s: %v", bindPipeline.Name, err)
+			logs.Log.Errorf("listener - start_bind_pipeline_failed name=%s error=%q", bindPipeline.Name, err)
 		}
 	}
 
@@ -114,13 +114,13 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 		}
 		pipeline, err := rem.ToProtobuf(lns.Name)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to build rem config %s: %v", rem.Name, err)
+			logs.Log.Errorf("listener - build_rem_failed name=%s error=%q", rem.Name, err)
 			continue
 		}
 
 		_, err = lns.Rpc.RegisterRem(lns.Context(), pipeline)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to register rem %s: %v", rem.Name, err)
+			logs.Log.Errorf("listener - register_rem_failed name=%s error=%q", rem.Name, err)
 			continue
 		}
 
@@ -130,7 +130,7 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 		})
 
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to start rem %s: %v", rem.Name, err)
+			logs.Log.Errorf("listener - start_rem_failed name=%s error=%q", rem.Name, err)
 		}
 	}
 
@@ -140,7 +140,7 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 		}
 		tls, err := newWebsite.TlsConfig.ReadCert()
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to read website cert %s: %v", newWebsite.WebsiteName, err)
+			logs.Log.Errorf("listener - read_website_cert_failed name=%s error=%q", newWebsite.WebsiteName, err)
 			continue
 		}
 
@@ -162,7 +162,7 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 		for _, content := range newWebsite.WebContents {
 			contents[content.Path], err = content.ToProtobuf()
 			if err != nil {
-				logs.Log.Errorf("[listener] failed to build website content %s: %v", content.Path, err)
+				logs.Log.Errorf("listener - build_website_content_failed path=%s error=%q", content.Path, err)
 				contentFailed = true
 				break
 			}
@@ -173,7 +173,7 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 		web.Contents = contents
 		_, err = lns.Rpc.RegisterWebsite(lns.Context(), pipe)
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to register website %s: %v", newWebsite.WebsiteName, err)
+			logs.Log.Errorf("listener - register_website_failed name=%s error=%q", newWebsite.WebsiteName, err)
 			continue
 		}
 
@@ -183,7 +183,7 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 			_, err = lns.Rpc.GenerateAcmeCert(lns.Context(), pipe)
 		}
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to generate cert for website %s: %v", newWebsite.WebsiteName, err)
+			logs.Log.Errorf("listener - generate_website_cert_failed name=%s error=%q", newWebsite.WebsiteName, err)
 			continue
 		}
 
@@ -193,7 +193,7 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 			Pipeline:   pipe,
 		})
 		if err != nil {
-			logs.Log.Errorf("[listener] failed to start website %s: %v", newWebsite.WebsiteName, err)
+			logs.Log.Errorf("listener - start_website_failed name=%s error=%q", newWebsite.WebsiteName, err)
 		}
 	}
 
@@ -371,10 +371,10 @@ func (lns *listener) Handler() error {
 		if handlerErr != nil {
 			status.Status = consts.CtrlStatusFailed
 			status.Error = handlerErr.Error()
-			logs.Log.Errorf("[listener.%s] job ctrl %d %s %s failed: %s", lns.ID(), msg.Id, msg.Job.Name, msg.Ctrl, handlerErr.Error())
+			logs.Log.Errorf("listener.%s - job_ctrl_failed listener=%s ctrl_id=%d job=%s ctrl=%s error=%q", lns.ID(), lns.ID(), msg.Id, msg.Job.Name, msg.Ctrl, handlerErr)
 		} else {
 			status.Status = consts.CtrlStatusSuccess
-			logs.Log.Importantf("[listener.%s] job ctrl %d %s %s success", lns.ID(), msg.Id, msg.Job.Name, msg.Ctrl)
+			logs.Log.Importantf("listener.%s - job_ctrl_success listener=%s ctrl_id=%d job=%s ctrl=%s", lns.ID(), lns.ID(), msg.Id, msg.Job.Name, msg.Ctrl)
 		}
 		if err := stream.Send(status); err != nil {
 			return fmt.Errorf("listener %s job stream send: %w", lns.ID(), err)
@@ -735,11 +735,11 @@ func (lns *listener) generateSecureKeyPair(pipeline *clientpb.Pipeline) error {
 		pipeline.Secure.ImplantKeypair != nil &&
 		pipeline.Secure.ServerKeypair.PrivateKey != "" &&
 		pipeline.Secure.ImplantKeypair.PublicKey != "" {
-		logs.Log.Infof("[secure] pipeline %s already has keypair, skipping generation", pipeline.Name)
+		logs.Log.Infof("secure - pipeline_keypair_exists pipeline=%s action=skip_generation", pipeline.Name)
 		return nil
 	}
 
-	logs.Log.Infof("[secure] generating two keypairs for pipeline %s", pipeline.Name)
+	logs.Log.Infof("secure - generate_keypairs pipeline=%s count=2", pipeline.Name)
 
 	// 生成Server密钥对
 	serverKeyPair, err := cryptography.RandomAgeKeyPair()
@@ -772,8 +772,8 @@ func (lns *listener) generateSecureKeyPair(pipeline *clientpb.Pipeline) error {
 		PrivateKey: implantKeyPair.Private,
 	}
 
-	logs.Log.Infof("[secure] generated keypairs for pipeline %s", pipeline.Name)
-	logs.Log.Infof("[secure] pipeline stores: server_private_key + implant_public_key")
+	logs.Log.Infof("secure - generated_keypairs pipeline=%s", pipeline.Name)
+	logs.Log.Infof("secure - pipeline_stores pipeline=%s values=server_private_key,implant_public_key", pipeline.Name)
 
 	return nil
 }

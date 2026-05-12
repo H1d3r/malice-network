@@ -39,7 +39,7 @@ type listenerSessions struct {
 func (ls *listenerSessions) Add(session *clientpb.Session) {
 	if session != nil {
 		ls.sessions.Store(session.RawId, session)
-		logs.Log.Debugf("[listener] added/updated session %d with KeyPair: %v",
+		logs.Log.Debugf("listener - session_upsert raw=%d keypair=%v",
 			session.RawId, session.KeyPair != nil)
 	}
 }
@@ -66,7 +66,7 @@ func GetConnection(conn *cryptostream.Conn, pipelineID string, secureConfig *imp
 	// across multiple TCPs causes one TCP's EOF to kill the shared Connection,
 	// making the surviving TCP unable to receive tasks via tcp-forward-recv.
 	if existing := Connections.Get(sessionID); existing != nil {
-		logs.Log.Debugf("[connection] replacing existing connection %s (raw ID %d, alive=%v) for new TCP", sessionID, sid, existing.IsAlive())
+		logs.Log.Debugf("connection - replace_existing session=%s raw=%d alive=%v pipeline=%s mode=tcp", sessionID, sid, existing.IsAlive(), pipelineID)
 	}
 	keyPair := GetKeyPairForSession(sid, secureConfig)
 	newConn := NewConnection(conn.Parser, sid, pipelineID, keyPair)
@@ -129,15 +129,15 @@ func GetKeyPairForSession(sid uint32, secureConfig *implanttypes.SecureConfig) *
 // Remove 移除 session
 func (ls *listenerSessions) Remove(rawID uint32) {
 	ls.sessions.Delete(rawID)
-	logs.Log.Debugf("[listener] removed session %d", rawID)
+	logs.Log.Debugf("listener - session_remove raw=%d", rawID)
 }
 
 func NewConnection(p *parser.MessageParser, sid uint32, pipelineID string, keyPair *clientpb.KeyPair) *Connection {
-	logs.Log.Debugf("[connection] creating connection %d with KeyPair: %v", sid, keyPair != nil)
+	logs.Log.Debugf("connection - create raw=%d pipeline=%s keypair=%v", sid, pipelineID, keyPair != nil)
 
 	// 如果有密钥对，创建安全的 parser
 	if keyPair != nil {
-		logs.Log.Debugf("[connection] enabled secure mode for connection %d", sid)
+		logs.Log.Debugf("connection - secure_enabled raw=%d pipeline=%s", sid, pipelineID)
 		p.WithSecure(keyPair)
 	}
 
@@ -205,7 +205,7 @@ func (c *Connection) runtimeErrorHandler(scope string) GoErrorHandler {
 }
 
 func (c *Connection) closeWithError(err error) error {
-	logs.Log.Debugf("[connection] TCP close for connection %s (raw ID %d): %v", c.SessionID, c.RawID, err)
+	logs.Log.Debugf("connection - close session=%s raw=%d reason=%q", c.SessionID, c.RawID, err)
 	c.fail(err)
 	Connections.removeIfSame(c.SessionID, c)
 	return err
@@ -218,7 +218,7 @@ func (c *Connection) runReceiveLoop() error {
 			if !ok {
 				return nil
 			}
-			logs.Log.Debugf("[pipeline] received spite_request %s", req.Spite.Name)
+			logs.Log.Debugf("pipeline - receive_spite_request session=%s raw=%d name=%s", c.SessionID, c.RawID, req.Spite.Name)
 			c.cache.Append(req.Spite)
 		case <-time.After(100 * time.Millisecond):
 		}
@@ -369,9 +369,9 @@ func (c *connections) Remove(sessionID string) {
 func (c *connections) removeIfSame(sessionID string, conn *Connection) {
 	if current := c.Get(sessionID); current == conn {
 		c.connections.Delete(sessionID)
-		logs.Log.Debugf("[connection] removed connection %s from map", sessionID)
+		logs.Log.Debugf("connection - map_remove session=%s", sessionID)
 	} else {
-		logs.Log.Debugf("[connection] connection %s already replaced in map, skip removal", sessionID)
+		logs.Log.Debugf("connection - map_remove_skip session=%s reason=already_replaced", sessionID)
 	}
 }
 

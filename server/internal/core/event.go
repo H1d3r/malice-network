@@ -250,9 +250,9 @@ func (broker *eventBroker) run() error {
 			delete(subscribers, sub)
 		case event := <-broker.publish:
 			if event.Important {
-				logs.Log.Infof("[event.%s] %s", event.EventType, event.String())
+				logs.Log.Infof("event.%s - %s", event.EventType, event.String())
 			} else if event.EventType != consts.EventHeartbeat {
-				logs.Log.Debugf("[event.%s] %s", event.EventType, event.String())
+				logs.Log.Debugf("event.%s - %s", event.EventType, event.String())
 			}
 			broker.lock.Lock()
 			for sub := range subscribers {

@@ -123,7 +123,7 @@ func (pipeline *TCPPipeline) Start() error {
 	if err != nil {
 		return err
 	}
-	logs.Log.Infof("[pipeline] starting TCP pipeline on %s:%d, parser: %s, tls: %t",
+	logs.Log.Infof("pipeline.tcp - start host=%s port=%d parser=%s tls=%t",
 		pipeline.Host, pipeline.Port, pipeline.Parser, pipeline.TLSConfig.Enable)
 	pipeline.Enable = true
 	return nil
@@ -154,7 +154,7 @@ func (pipeline *TCPPipeline) handleWithCmux(ln net.Listener) (net.Listener, erro
 		var err error
 		if pipeline.TLSConfig.MTLS && pipeline.TLSConfig.CA != nil {
 			tlsConfig, err = certutils.GetMTlsConfig(pipeline.TLSConfig.Cert, pipeline.TLSConfig.CA)
-			logs.Log.Infof("[pipeline] mTLS enabled for %s", pipeline.Name)
+			logs.Log.Infof("pipeline.tcp - mtls_enabled pipeline=%s", pipeline.Name)
 		} else {
 			tlsConfig, err = certutils.GetTlsConfig(pipeline.TLSConfig.Cert)
 		}
@@ -194,7 +194,7 @@ func (pipeline *TCPPipeline) HandleConnection(conn net.Conn) {
 		return
 	}
 
-	logs.Log.Debugf("[pipeline.%s] accept from %s", pipeline.Name, conn.RemoteAddr())
+	logs.Log.Debugf("pipeline.tcp - accept pipeline=%s remote=%s", pipeline.Name, conn.RemoteAddr())
 	switch peekConn.Parser.Implant {
 	case consts.ImplantMalefic:
 		pipeline.handleBeacon(peekConn)

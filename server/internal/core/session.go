@@ -121,7 +121,7 @@ func RegisterSession(req *clientpb.RegisterSession) (*Session, error) {
 	// 从pipeline获取预分发的密钥对
 	err = sess.initializeSecureManager(req)
 	if err != nil {
-		logs.Log.Errorf("[secure] failed to initialize pipeline keypair: %v", err)
+		logs.Log.Errorf("secure - init_pipeline_keypair_failed error=%q", err)
 	}
 
 	sess.Ctx, sess.Cancel = context.WithCancel(context.Background())
@@ -1012,12 +1012,12 @@ func (s *Session) initializeSecureManager(req *clientpb.RegisterSession) error {
 	}
 
 	if pipeline == nil || pipeline.Secure == nil || !pipeline.Secure.Enable {
-		logs.Log.Debugf("[secure] pipeline secure mode not enabled for session %s", s.ID)
+		logs.Log.Debugf("secure - pipeline_disabled session=%s", s.ID)
 		return nil
 	}
 
 	if req.RegisterData.Secure == nil || !req.RegisterData.Secure.Enable {
-		logs.Log.Debugf("[secure] session secure mode enabled for session %s", s.ID)
+		logs.Log.Debugf("secure - session_secure_disabled session=%s", s.ID)
 		return nil
 	}
 
@@ -1039,7 +1039,7 @@ func (s *Session) initializeSecureManager(req *clientpb.RegisterSession) error {
 	}
 
 	s.PushCtrl()
-	logs.Log.Infof("[secure] initialized session %s", s.ID)
+	logs.Log.Infof("secure - initialized_session session=%s", s.ID)
 
 	s.SecureManager = NewSecureSpiteManager(s)
 	return nil

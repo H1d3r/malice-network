@@ -1,6 +1,7 @@
 package cryptostream
 
 import (
+	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/server/internal/parser"
 	"github.com/chainreactors/malice-network/server/internal/parser/malefic"
 	"io"
@@ -64,20 +65,27 @@ func WrapPeekConn(conn io.ReadWriteCloser, cryptos []Cryptor, parserName string,
 		return nil, err
 	}
 
+	logs.Log.Debugf("crypto.peek - raw_first_9_bytes=%x", bs)
+	logs.Log.Debugf("crypto.peek - parser=%s cryptors=%d", parserName, len(cryptos))
+
 	var c Cryptor
 	var p *parser.MessageParser
-	for _, c = range cryptos {
+	var i int
+	for i, c = range cryptos {
 		var de []byte
 		de, err = Decrypt(c, bs)
 		if err != nil {
+			logs.Log.Debugf("crypto.peek - cryptor[%d].decrypt_error=%q", i, err)
 			continue
 		}
+		logs.Log.Debugf("crypto.peek - cryptor[%d].decrypted=%x", i, de)
 		if parserName == "auto" {
 			p, err = parser.DetectProtocol(de)
 		} else {
 			p, err = parser.NewParser(parserName)
 		}
 		if err != nil {
+			logs.Log.Debugf("crypto.peek - cryptor[%d].protocol_detect_error=%q", i, err)
 			continue
 		} else {
 			err = nil
@@ -86,6 +94,7 @@ func WrapPeekConn(conn io.ReadWriteCloser, cryptos []Cryptor, parserName string,
 		}
 	}
 	if err != nil {
+		logs.Log.Debugf("crypto.peek - all_cryptors_failed last_error=%q", err)
 		return nil, err
 	}
 

@@ -165,7 +165,7 @@ func (pipeline *HTTPPipeline) Start() error {
 		}, pipeline.runtimeErrorHandler("serve loop"))
 	}
 
-	logs.Log.Infof("[pipeline] starting HTTP pipeline on %s:%d, parser: %s, tls: %t",
+	logs.Log.Infof("pipeline.http - start host=%s port=%d parser=%s tls=%t",
 		pipeline.Host, pipeline.Port, pipeline.Parser, pipeline.TLSConfig.Enable)
 	pipeline.Enable = true
 	return nil
@@ -263,7 +263,7 @@ func (pipeline *HTTPPipeline) handler(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("http pipeline %s wrap conn: %w", pipeline.Name, err)
 		}
 
-		logs.Log.Debugf("[pipeline.%s] accept from %s", pipeline.Name, r.RemoteAddr)
+		logs.Log.Debugf("pipeline.http - accept pipeline=%s remote=%s", pipeline.Name, r.RemoteAddr)
 		switch conn.Parser.Implant {
 		case consts.ImplantMalefic:
 			pipeline.handleMalefic(w, r, conn)

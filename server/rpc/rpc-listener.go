@@ -40,7 +40,7 @@ func (rpc *Server) RegisterListener(ctx context.Context, req *clientpb.RegisterL
 		// which could block or panic during concurrent cleanup.
 		_ = core.Listeners.Stop(req.Name)
 		core.Listeners.Map.Delete(req.Name)
-		logs.Log.Warnf("[server] listener %s re-registering, old state cleaned", req.Name)
+		logs.Log.Warnf("server - listener_reregister name=%s state=old_cleaned", req.Name)
 	}
 
 	core.Listeners.Add(core.NewListener(req.Name, req.Host))
@@ -49,7 +49,7 @@ func (rpc *Server) RegisterListener(ctx context.Context, req *clientpb.RegisterL
 		Op:        consts.CtrlListenerStart,
 		Message:   fmt.Sprintf("Listener %s started at %s", req.Name, req.Host),
 	})
-	logs.Log.Importantf("[server] %s register listener: %s", req.Host, req.Name)
+	logs.Log.Importantf("server - register_listener host=%s name=%s", req.Host, req.Name)
 	return &clientpb.Empty{}, nil
 }
 
@@ -98,9 +98,9 @@ func (rpc *Server) SpiteStream(stream listenerrpc.ListenerRPC_SpiteStreamServer)
 		}
 
 		if size := proto.Size(msg.Spite); size <= 1000 {
-			logs.Log.Debugf("[server.%s] receive spite %s from %s, %v", sess.ID, msg.Spite.Name, msg.ListenerId, msg.Spite)
+			logs.Log.Debugf("server.%s - receive_spite session=%s name=%s listener=%s spite=%v", sess.ID, sess.ID, msg.Spite.Name, msg.ListenerId, msg.Spite)
 		} else {
-			logs.Log.Debugf("[server.%s] receive spite %s from %s, %d bytes", sess.ID, msg.Spite.Name, msg.ListenerId, size)
+			logs.Log.Debugf("server.%s - receive_spite session=%s name=%s listener=%s bytes=%d", sess.ID, sess.ID, msg.Spite.Name, msg.ListenerId, size)
 		}
 
 		ch, ok := sess.GetResp(msg.TaskId)

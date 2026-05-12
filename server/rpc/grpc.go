@@ -128,7 +128,7 @@ func NewClientGRPCServer(serverIP string, debug bool) (*grpc.Server, error) {
 
 // StartClientListener - Start a mutual TLS listener
 func StartClientListener(address string) (*grpc.Server, net.Listener, error) {
-	logs.Log.Importantf("[server] starting gRPC console on %s", address)
+	logs.Log.Importantf("server - start_grpc_console address=%s", address)
 
 	serverIP := ""
 	if serverConfig := configs.GetServerConfig(); serverConfig != nil {

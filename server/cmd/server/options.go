@@ -247,7 +247,7 @@ func (opt *Options) PrepareConfig(defaultConfig []byte) error {
 	configs.CurrentServerConfigFilename = filename
 	// load config
 	if opt.Debug {
-		logs.Log.SetLevel(logs.DebugLevel)
+		ConfigureDebugLogging()
 	}
 	err = opt.Validate()
 	if err != nil {
@@ -336,7 +336,7 @@ func (opt *Options) PrepareServer() error {
 }
 
 func (opt *Options) PrepareListener() error {
-	logs.Log.Importantf("[listener] listener config enabled, Starting listeners")
+	logs.Log.Importantf("listener - config_enabled action=start_listeners")
 	if opt.IP != "" {
 		logs.Log.Infof("manually specified IP: %s will override config: %s", opt.IP, opt.Server.IP)
 		opt.Listeners.IP = opt.IP
