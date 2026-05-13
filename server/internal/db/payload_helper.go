@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,23 +53,27 @@ func readProfileDisk(profilePath string) (implantConfig []byte, preludeConfig []
 
 	resourcesDir := filepath.Join(profilePath, "resources")
 	if fileutils.Exist(resourcesDir) {
-		entries, readErr := os.ReadDir(resourcesDir)
-		if readErr == nil {
-			var resourceEntries []*clientpb.ResourceEntry
-			for _, e := range entries {
-				if !e.IsDir() {
-					content, fErr := os.ReadFile(filepath.Join(resourcesDir, e.Name()))
-					if fErr == nil {
-						resourceEntries = append(resourceEntries, &clientpb.ResourceEntry{
-							Filename: e.Name(),
-							Content:  content,
-						})
-					}
-				}
+		var resourceEntries []*clientpb.ResourceEntry
+		_ = filepath.WalkDir(resourcesDir, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil
 			}
-			if len(resourceEntries) > 0 {
-				resources = &clientpb.BuildResources{Entries: resourceEntries}
+			content, fErr := os.ReadFile(path)
+			if fErr != nil {
+				return nil
 			}
+			rel, relErr := filepath.Rel(resourcesDir, path)
+			if relErr != nil || rel == "." {
+				return nil
+			}
+			resourceEntries = append(resourceEntries, &clientpb.ResourceEntry{
+				Filename: filepath.ToSlash(rel),
+				Content:  content,
+			})
+			return nil
+		})
+		if len(resourceEntries) > 0 {
+			resources = &clientpb.BuildResources{Entries: resourceEntries}
 		}
 	}
 	return
@@ -93,7 +98,14 @@ func writeProfileDisk(profilePath string, implantConfig []byte, preludeConfig []
 			return err
 		}
 		for _, entry := range resources.Entries {
-			if err := os.WriteFile(filepath.Join(resourcesDir, entry.Filename), entry.Content, 0644); err != nil {
+			resourcePath, err := fileutils.SafeJoin(resourcesDir, entry.Filename)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(resourcePath), 0755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(resourcePath, entry.Content, 0644); err != nil {
 				return err
 			}
 		}
@@ -382,7 +394,14 @@ func UpdateProfileDisk(profileName string, implantConfig []byte, preludeConfig [
 			return err
 		}
 		for _, entry := range resources.Entries {
-			if err := os.WriteFile(filepath.Join(resourcesDir, entry.Filename), entry.Content, 0644); err != nil {
+			resourcePath, err := fileutils.SafeJoin(resourcesDir, entry.Filename)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(resourcePath), 0755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(resourcePath, entry.Content, 0644); err != nil {
 				return err
 			}
 		}

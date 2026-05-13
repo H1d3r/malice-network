@@ -89,6 +89,55 @@ func TestWriteAndReadProfileDisk_ImplantOnly(t *testing.T) {
 	}
 }
 
+func TestWriteAndReadProfileDisk_NestedResources(t *testing.T) {
+	dir := t.TempDir()
+
+	implant := []byte("basic:\n  name: nested\n")
+	resources := &clientpb.BuildResources{
+		Entries: []*clientpb.ResourceEntry{
+			{Filename: "a.bin", Content: []byte("aaa")},
+			{Filename: "nested/b.bin", Content: []byte("bbb")},
+			{Filename: "nested/deeper/c.bin", Content: []byte("ccc")},
+		},
+	}
+
+	if err := writeProfileDisk(dir, implant, nil, resources); err != nil {
+		t.Fatalf("writeProfileDisk failed: %v", err)
+	}
+
+	for _, filename := range []string{
+		"a.bin",
+		"nested/b.bin",
+		"nested/deeper/c.bin",
+	} {
+		if _, err := os.Stat(filepath.Join(dir, "resources", filepath.FromSlash(filename))); err != nil {
+			t.Fatalf("resource %s not found: %v", filename, err)
+		}
+	}
+
+	_, _, gotResources, err := readProfileDisk(dir)
+	if err != nil {
+		t.Fatalf("readProfileDisk failed: %v", err)
+	}
+	if gotResources == nil || len(gotResources.Entries) != 3 {
+		t.Fatalf("resources count: got %v, want 3", gotResources)
+	}
+
+	resourceMap := make(map[string]string)
+	for _, e := range gotResources.Entries {
+		resourceMap[e.Filename] = string(e.Content)
+	}
+	if resourceMap["a.bin"] != "aaa" {
+		t.Errorf("resource a.bin: got %q, want %q", resourceMap["a.bin"], "aaa")
+	}
+	if resourceMap["nested/b.bin"] != "bbb" {
+		t.Errorf("resource nested/b.bin: got %q, want %q", resourceMap["nested/b.bin"], "bbb")
+	}
+	if resourceMap["nested/deeper/c.bin"] != "ccc" {
+		t.Errorf("resource nested/deeper/c.bin: got %q, want %q", resourceMap["nested/deeper/c.bin"], "ccc")
+	}
+}
+
 func TestReadProfileDisk_MissingImplant(t *testing.T) {
 	dir := t.TempDir()
 
