@@ -25,6 +25,9 @@ jobs:
       - name: Go mod tidy
         run: go mod tidy
 
+      - name: Install embedded build assets
+        run: go run ./scripts/pre_install.go
+
       - name: Go vet
         run: go vet ./...
 
@@ -56,6 +59,9 @@ jobs:
       - name: Go mod tidy
         run: go mod tidy
 
+      - name: Install embedded build assets
+        run: go run ./scripts/pre_install.go
+
       - name: Race detection — core, parser, stream
         run: >-
           go test -race -count=1 -timeout 300s
@@ -79,6 +85,9 @@ jobs:
 
       - name: Go mod tidy
         run: go mod tidy
+
+      - name: Install embedded build assets
+        run: go run ./scripts/pre_install.go
 
       - name: Discover mock implant packages
         shell: bash
@@ -106,6 +115,9 @@ jobs:
 
       - name: Go mod tidy
         run: go mod tidy
+
+      - name: Install embedded build assets
+        run: go run ./scripts/pre_install.go
 
       - name: Discover integration packages
         shell: bash
