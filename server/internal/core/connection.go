@@ -52,8 +52,8 @@ func (ls *listenerSessions) Get(rawID uint32) *clientpb.Session {
 	return nil
 }
 
-// GetConnection 统一的连接获取/创建函数 (适用于 TCP 和 HTTP pipeline)
-// 从 cryptostream.Conn 中提取 SID 并获取/创建连接
+// GetConnection 统一的连接获取/创建函数 (适用于 TCP pipeline)
+// 每个 TCP 连接创建独立 Connection，避免一个 EOF 杀死共享 Connection。
 func GetConnection(conn *cryptostream.Conn, pipelineID string, secureConfig *implanttypes.SecureConfig) (*Connection, error) {
 	sid, err := cryptostream.PeekSid(conn)
 	if err != nil {
@@ -62,12 +62,31 @@ func GetConnection(conn *cryptostream.Conn, pipelineID string, secureConfig *imp
 
 	sessionID := hash.Md5Hash(encoders.Uint32ToBytes(sid))
 
-	// Each TCP connection gets its own Connection object. Reusing a Connection
-	// across multiple TCPs causes one TCP's EOF to kill the shared Connection,
-	// making the surviving TCP unable to receive tasks via tcp-forward-recv.
 	if existing := Connections.Get(sessionID); existing != nil {
 		logs.Log.Debugf("connection - replace_existing session=%s raw=%d alive=%v pipeline=%s mode=tcp", sessionID, sid, existing.IsAlive(), pipelineID)
 	}
+	keyPair := GetKeyPairForSession(sid, secureConfig)
+	newConn := NewConnection(conn.Parser, sid, pipelineID, keyPair)
+	Connections.Add(newConn)
+	return newConn, nil
+}
+
+// GetOrReuseConnection 复用已有连接 (适用于 HTTP simplex pipeline)
+// HTTP 每个请求是短生命周期调用，不存在 EOF 互杀问题，
+// 复用已有 Connection 让 cache 能跨请求积累命令。
+func GetOrReuseConnection(conn *cryptostream.Conn, pipelineID string, secureConfig *implanttypes.SecureConfig) (*Connection, error) {
+	sid, err := cryptostream.PeekSid(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionID := hash.Md5Hash(encoders.Uint32ToBytes(sid))
+
+	if existing := Connections.Get(sessionID); existing != nil && existing.IsAlive() {
+		existing.LastMessage = time.Now()
+		return existing, nil
+	}
+
 	keyPair := GetKeyPairForSession(sid, secureConfig)
 	newConn := NewConnection(conn.Parser, sid, pipelineID, keyPair)
 	Connections.Add(newConn)
