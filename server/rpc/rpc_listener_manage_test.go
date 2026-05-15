@@ -6,6 +6,8 @@ import (
 
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/server/internal/core"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ---------------------------------------------------------------------------
@@ -77,25 +79,66 @@ func TestRegisterListener_CreatesNew(t *testing.T) {
 	}
 }
 
-func TestRegisterListener_Idempotent(t *testing.T) {
+func TestRegisterListener_RejectsActiveDuplicate(t *testing.T) {
 	_ = newRPCTestEnv(t)
 
-	for i := 0; i < 3; i++ {
-		_, err := (&Server{}).RegisterListener(context.Background(), &clientpb.RegisterListener{
-			Name: "idempotent-listener",
-			Host: "10.0.0.2",
-		})
-		if err != nil {
-			t.Fatalf("RegisterListener attempt %d error: %v", i+1, err)
-		}
+	_, err := (&Server{}).RegisterListener(context.Background(), &clientpb.RegisterListener{
+		Name: "active-listener",
+		Host: "10.0.0.2",
+	})
+	if err != nil {
+		t.Fatalf("RegisterListener error: %v", err)
 	}
 
-	lns, err := core.Listeners.Get("idempotent-listener")
+	_, err = (&Server{}).RegisterListener(context.Background(), &clientpb.RegisterListener{
+		Name: "active-listener",
+		Host: "10.0.0.2",
+	})
+	if err == nil {
+		t.Fatal("expected duplicate active listener registration to fail")
+	}
+	if status.Code(err) != codes.AlreadyExists {
+		t.Fatalf("RegisterListener duplicate error code = %v, want %v", status.Code(err), codes.AlreadyExists)
+	}
+
+	lns, err := core.Listeners.Get("active-listener")
 	if err != nil {
-		t.Fatalf("listener not found after re-registration: %v", err)
+		t.Fatalf("listener not found after registration: %v", err)
 	}
 	if lns.IP != "10.0.0.2" {
 		t.Fatalf("listener IP = %q, want %q", lns.IP, "10.0.0.2")
+	}
+}
+
+func TestRegisterListener_ReRegisterAfterStop(t *testing.T) {
+	_ = newRPCTestEnv(t)
+
+	_, err := (&Server{}).RegisterListener(context.Background(), &clientpb.RegisterListener{
+		Name: "restartable-listener",
+		Host: "10.0.0.2",
+	})
+	if err != nil {
+		t.Fatalf("RegisterListener error: %v", err)
+	}
+
+	if err := core.Listeners.Stop("restartable-listener"); err != nil {
+		t.Fatalf("Stop listener error: %v", err)
+	}
+
+	_, err = (&Server{}).RegisterListener(context.Background(), &clientpb.RegisterListener{
+		Name: "restartable-listener",
+		Host: "10.0.0.3",
+	})
+	if err != nil {
+		t.Fatalf("RegisterListener after stop error: %v", err)
+	}
+
+	lns, err := core.Listeners.Get("restartable-listener")
+	if err != nil {
+		t.Fatalf("listener not found after re-registration: %v", err)
+	}
+	if lns.IP != "10.0.0.3" {
+		t.Fatalf("listener IP = %q, want %q", lns.IP, "10.0.0.3")
 	}
 }
 
