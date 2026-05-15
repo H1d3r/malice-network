@@ -283,6 +283,26 @@ func (opt *Options) PrepareServer() error {
 		logs.Log.Warnf("failed to seed default authz rules: %v", err)
 	}
 
+	profileRoots := []string{filepath.Join(configs.SourceCodePath, "profiles")}
+	maleficRootProfiles := filepath.Join(configs.MaleficRoot, "profiles")
+	if maleficRootProfiles != profileRoots[0] {
+		profileRoots = append(profileRoots, maleficRootProfiles)
+	}
+	for _, profilesRoot := range profileRoots {
+		if result, err := db.RegisterProfileTemplates(profilesRoot); err != nil {
+			logs.Log.Warnf("failed to register profile templates from %s: %v", profilesRoot, err)
+		} else if result.Created > 0 || result.SkippedDeleted > 0 || result.SkippedInvalid > 0 {
+			logs.Log.Infof(
+				"profile templates checked root=%s created=%d existing=%d deleted=%d invalid=%d",
+				profilesRoot,
+				result.Created,
+				result.SkippedExisting,
+				result.SkippedDeleted,
+				result.SkippedInvalid,
+			)
+		}
+	}
+
 	err = saas.RegisterLicense()
 	if err != nil {
 		logs.Log.Warnf("register community license error %v", err)

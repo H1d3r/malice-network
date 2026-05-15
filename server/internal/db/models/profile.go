@@ -12,6 +12,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	ProfileSourceUser     = "user"
+	ProfileSourceTemplate = "source_template"
+)
+
 type Profile struct {
 	ID uuid.UUID `gorm:"primaryKey;->;<-:create;type:uuid;"`
 
@@ -28,7 +33,10 @@ type Profile struct {
 	// BasicPipeline 和 PulsePipeline
 	Pipeline *Pipeline `gorm:"foreignKey:PipelineID;references:Name;-:migration;"`
 
-	CreatedAt time.Time `gorm:"->;<-:create;"`
+	Source     string         `gorm:"type:string;index;default:'user'"`
+	SourceHash string         `gorm:"type:string;index;default:''"`
+	CreatedAt  time.Time      `gorm:"->;<-:create;"`
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
 }
 
 func (p *Profile) BeforeCreate(tx *gorm.DB) (err error) {

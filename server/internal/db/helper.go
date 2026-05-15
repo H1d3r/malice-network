@@ -637,6 +637,12 @@ func NewProfileQuery() *ProfileQuery {
 	return &ProfileQuery{db: Session()}
 }
 
+// Unscoped includes soft-deleted profiles in the query.
+func (q *ProfileQuery) Unscoped() *ProfileQuery {
+	q.db = q.db.Unscoped()
+	return q
+}
+
 // WhereName filters by profile name
 func (q *ProfileQuery) WhereName(name string) *ProfileQuery {
 	q.db = q.db.Where("name = ?", name)

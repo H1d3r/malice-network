@@ -1,12 +1,15 @@
 package db
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/chainreactors/IoM-go/consts"
@@ -26,6 +29,13 @@ import (
 // ============================================
 // Profile Operations
 // ============================================
+
+type ProfileTemplateSeedResult struct {
+	Created         int
+	SkippedExisting int
+	SkippedDeleted  int
+	SkippedInvalid  int
+}
 
 // validateProfileName validates the profile name
 func validateProfileName(name string) error {
@@ -79,6 +89,32 @@ func readProfileDisk(profilePath string) (implantConfig []byte, preludeConfig []
 	return
 }
 
+func profileContentHash(implantConfig []byte, preludeConfig []byte, resources *clientpb.BuildResources) string {
+	hash := sha256.New()
+	hash.Write([]byte("implant.yaml\x00"))
+	hash.Write(implantConfig)
+	hash.Write([]byte("\x00"))
+	if preludeConfig != nil {
+		hash.Write([]byte("prelude.yaml\x00"))
+		hash.Write(preludeConfig)
+		hash.Write([]byte("\x00"))
+	}
+	if resources != nil && len(resources.Entries) > 0 {
+		entries := append([]*clientpb.ResourceEntry(nil), resources.Entries...)
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Filename < entries[j].Filename
+		})
+		for _, entry := range entries {
+			hash.Write([]byte("resources/"))
+			hash.Write([]byte(entry.Filename))
+			hash.Write([]byte("\x00"))
+			hash.Write(entry.Content)
+			hash.Write([]byte("\x00"))
+		}
+	}
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
 // writeProfileDisk writes configuration files to the disk directory.
 func writeProfileDisk(profilePath string, implantConfig []byte, preludeConfig []byte, resources *clientpb.BuildResources) error {
 	if err := os.MkdirAll(profilePath, 0700); err != nil {
@@ -121,10 +157,12 @@ func NewProfile(profile *clientpb.Profile) error {
 	}
 
 	// Check if profile name already exists
-	_, err := NewProfileQuery().WhereName(profile.Name).First()
+	existingProfile, err := NewProfileQuery().Unscoped().WhereName(profile.Name).First()
 	if err == nil {
-		// Found existing profile with same name, return friendly error message
-		return nil
+		if !existingProfile.DeletedAt.Valid {
+			// Found existing active profile with same name, return friendly error message
+			return nil
+		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		// If it's not "record not found" error, it's another database error
 		return err
@@ -168,6 +206,9 @@ func NewProfile(profile *clientpb.Profile) error {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return err
+	}
+	if existingProfile != nil && existingProfile.DeletedAt.Valid {
+		id = existingProfile.ID
 	}
 	profilePath := filepath.Join(configs.ProfilePath, id.String())
 
@@ -235,9 +276,98 @@ func NewProfile(profile *clientpb.Profile) error {
 		Name:       profile.Name,
 		ParamsData: profile.Params,
 		PipelineID: profile.PipelineId,
+		Source:     models.ProfileSourceUser,
+	}
+
+	if existingProfile != nil && existingProfile.DeletedAt.Valid {
+		return Session().Unscoped().
+			Model(&models.Profile{}).
+			Where("id = ?", existingProfile.ID).
+			Updates(map[string]interface{}{
+				"name":        model.Name,
+				"params":      model.ParamsData,
+				"pipeline_id": model.PipelineID,
+				"source":      model.Source,
+				"source_hash": "",
+				"deleted_at":  nil,
+			}).Error
 	}
 
 	return Session().Create(model).Error
+}
+
+func RegisterProfileTemplates(profilesRoot string) (*ProfileTemplateSeedResult, error) {
+	result := &ProfileTemplateSeedResult{}
+	if profilesRoot == "" {
+		return result, nil
+	}
+
+	entries, err := os.ReadDir(profilesRoot)
+	if errors.Is(err, os.ErrNotExist) {
+		return result, nil
+	}
+	if err != nil {
+		return result, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		name := entry.Name()
+		templatePath := filepath.Join(profilesRoot, name)
+		if !fileutils.Exist(filepath.Join(templatePath, "implant.yaml")) {
+			result.SkippedInvalid++
+			continue
+		}
+
+		existingProfile, err := NewProfileQuery().Unscoped().WhereName(name).First()
+		if err == nil {
+			if existingProfile.DeletedAt.Valid {
+				result.SkippedDeleted++
+			} else {
+				result.SkippedExisting++
+			}
+			continue
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return result, err
+		}
+
+		implantConfig, preludeConfig, resources, err := readProfileDisk(templatePath)
+		if err != nil {
+			result.SkippedInvalid++
+			logs.Log.Warnf("skip profile template %s: %v", name, err)
+			continue
+		}
+		if _, err := implanttypes.LoadProfile(implantConfig); err != nil {
+			result.SkippedInvalid++
+			logs.Log.Warnf("skip profile template %s: invalid implant.yaml: %v", name, err)
+			continue
+		}
+
+		id, err := uuid.NewV4()
+		if err != nil {
+			return result, err
+		}
+		if err := writeProfileDisk(filepath.Join(configs.ProfilePath, id.String()), implantConfig, preludeConfig, resources); err != nil {
+			return result, err
+		}
+
+		model := &models.Profile{
+			ID:         id,
+			Name:       name,
+			Source:     models.ProfileSourceTemplate,
+			SourceHash: profileContentHash(implantConfig, preludeConfig, resources),
+		}
+		if err := Session().Create(model).Error; err != nil {
+			return result, err
+		}
+		result.Created++
+	}
+
+	return result, nil
 }
 func GetProfile(name string) (*implanttypes.ProfileConfig, error) {
 	profileModel, err := NewProfileQuery().WhereName(name).WithPipeline().First()
