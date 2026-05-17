@@ -27,6 +27,10 @@ func (f *fakeImplantRPC) WaitTaskFinish(ctx context.Context, in *clientpb.Task, 
 	return nil, nil
 }
 
+func (f *fakeImplantRPC) Events(ctx context.Context, in *clientpb.Empty, opts ...grpc.CallOption) (clientrpc.MaliceRPC_EventsClient, error) {
+	return nil, context.Canceled
+}
+
 func TestMakeRunnersPreSelectsLocalSessionAndSwitchesMenu(t *testing.T) {
 	con := newImplantTestConsole(t, &fakeImplantRPC{})
 	sess := addImplantTestSession(t, con, "implant-pre")

@@ -63,8 +63,14 @@ func TestExecCommandConformance(t *testing.T) {
 				if req.Path != `C:\Windows\System32\cmd.exe` {
 					t.Fatalf("shell path = %q, want cmd.exe", req.Path)
 				}
-				if len(req.Args) != 2 || req.Args[0] != "/c" || req.Args[1] != "whoami /all" {
-					t.Fatalf("shell args = %#v, want [/c \"whoami /all\"]", req.Args)
+				wantArgs := []string{"/S", "/c", "whoami /all"}
+				if len(req.Args) != len(wantArgs) {
+					t.Fatalf("shell args = %#v, want %#v", req.Args, wantArgs)
+				}
+				for i := range wantArgs {
+					if req.Args[i] != wantArgs[i] {
+						t.Fatalf("shell args = %#v, want %#v", req.Args, wantArgs)
+					}
 				}
 				if !req.Realtime || !req.Output {
 					t.Fatalf("shell flags = %#v, want realtime=true output=true", req)
@@ -77,8 +83,17 @@ func TestExecCommandConformance(t *testing.T) {
 			Argv: []string{consts.ModuleAliasShell, "--quiet", "dir"},
 			Assert: func(t testing.TB, h *testsupport.Harness, err error) {
 				req, md := testsupport.MustSingleCall[*implantpb.ExecRequest](t, h, "Execute")
-				if req.Path != `C:\Windows\System32\cmd.exe` || len(req.Args) != 2 || req.Args[1] != "dir" {
-					t.Fatalf("shell quiet request = %#v", req)
+				if req.Path != `C:\Windows\System32\cmd.exe` {
+					t.Fatalf("shell quiet path = %q, want cmd.exe", req.Path)
+				}
+				wantArgs := []string{"/S", "/c", "dir"}
+				if len(req.Args) != len(wantArgs) {
+					t.Fatalf("shell quiet args = %#v, want %#v", req.Args, wantArgs)
+				}
+				for i := range wantArgs {
+					if req.Args[i] != wantArgs[i] {
+						t.Fatalf("shell quiet args = %#v, want %#v", req.Args, wantArgs)
+					}
 				}
 				if !req.Realtime || req.Output {
 					t.Fatalf("shell quiet flags = %#v, want realtime=true output=false", req)
