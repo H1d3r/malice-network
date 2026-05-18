@@ -269,7 +269,7 @@ func TestBindPipelineStartReturnsForwardCreationError(t *testing.T) {
 	pipeline, err := NewBindPipeline(&failingBindRPCClient{err: want}, &clientpb.Pipeline{
 		Name:       "bind-start-fail",
 		ListenerId: "listener-1",
-		Enable:     true,
+		Enable:     false,
 		Body: &clientpb.Pipeline_Bind{
 			Bind: &clientpb.BindPipeline{},
 		},

@@ -25,7 +25,6 @@ func NewBindPipeline(rpc bindRPCClient, pipeline *clientpb.Pipeline) (*BindPipel
 	pp := &BindPipeline{
 		rpc:            rpc,
 		Name:           pipeline.Name,
-		Enable:         pipeline.Enable,
 		CertName:       pipeline.CertName,
 		PipelineConfig: core.FromPipeline(pipeline),
 	}
@@ -51,6 +50,7 @@ func (pipeline *BindPipeline) ToProtobuf() *clientpb.Pipeline {
 		Type:       consts.BindPipeline,
 		ListenerId: pipeline.ListenerID,
 		CertName:   pipeline.CertName,
+		Parser:     pipeline.Parser,
 		Body: &clientpb.Pipeline_Bind{
 			Bind: &clientpb.BindPipeline{
 				Name:       pipeline.Name,
@@ -64,7 +64,7 @@ func (pipeline *BindPipeline) ToProtobuf() *clientpb.Pipeline {
 }
 
 func (pipeline *BindPipeline) Start() error {
-	if !pipeline.Enable {
+	if pipeline.Enable {
 		return nil
 	}
 	forward, err := core.NewForward(pipeline.rpc, pipeline)
@@ -75,6 +75,7 @@ func (pipeline *BindPipeline) Start() error {
 	core.Forwarders.Add(forward)
 
 	logs.Log.Infof("pipeline.bind - start")
+	pipeline.Enable = true
 	core.GoGuarded("bind-handler:"+pipeline.Name, pipeline.handler, pipeline.runtimeErrorHandler("handler loop"))
 
 	return nil
@@ -120,25 +121,13 @@ func (pipeline *BindPipeline) handlerReq(req *clientpb.SpiteRequest) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var connect *core.Connection
-	if req.Spite.Name == consts.ModuleInit {
-		err := peekConn.Parser.WritePacket(peekConn, types.BuildOneSpites(req.Spite), req.Session.RawId)
-		if err != nil {
-			logs.Log.Errorf("failed to send init packet: %v", err)
-			return err
-		}
-		keyPair := core.GetKeyPairForSession(req.Session.RawId, pipeline.SecureConfig)
-		connect = core.NewConnection(peekConn.Parser, req.Session.RawId, pipeline.Name, keyPair)
-		core.Connections.Add(connect)
-	} else {
-		connect, err = core.GetConnection(peekConn, pipeline.Name, pipeline.SecureConfig)
-		if err != nil {
-			return err
-		}
-		if err := core.Connections.Push(connect.SessionID, req); err != nil {
-			return fmt.Errorf("bind pipeline %s push: %w", pipeline.Name, err)
-		}
+	if err := peekConn.Parser.WritePacket(peekConn, types.BuildOneSpites(req.Spite), req.Session.RawId); err != nil {
+		logs.Log.Errorf("failed to send bind packet: %v", err)
+		return err
 	}
+	keyPair := core.GetKeyPairForSession(req.Session.RawId, pipeline.SecureConfig)
+	connect := core.NewConnection(peekConn.Parser, req.Session.RawId, pipeline.Name, keyPair)
+	core.Connections.Add(connect)
 
 	err = connect.Handler(ctx, peekConn)
 	if err != nil {

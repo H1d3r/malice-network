@@ -102,7 +102,7 @@ bind --listener listener
 `,
 	}
 
-	common.BindFlag(bindCmd, func(f *pflag.FlagSet) {
+	common.BindFlag(bindCmd, common.EncryptionFlagSet, func(f *pflag.FlagSet) {
 		f.String("listener", "", "listener id")
 	})
 

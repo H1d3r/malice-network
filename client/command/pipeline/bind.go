@@ -28,6 +28,11 @@ func NewBindPipelineCmd(cmd *cobra.Command, con *core.Console) error {
 	if parser == "default" {
 		parser = consts.ImplantMalefic
 	}
+	if len(encryption) == 0 || encryption[0].Type == "" && encryption[0].Key == "" {
+		encryption = []*clientpb.Encryption{{Type: consts.CryptorAES, Key: "maliceofinternal"}}
+	} else if encryption[0].Type == "" || encryption[0].Key == "" {
+		return fmt.Errorf("bind pipeline encryption requires both --encryption-type and --encryption-key")
+	}
 	pipeline := &clientpb.Pipeline{
 		Encryption: encryption,
 		Tls:        tls,
