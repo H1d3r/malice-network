@@ -1,10 +1,10 @@
-# Proposal: Agent Skill System
+# Agent Skill System
 
 ## Overview
 
 Introduce a `skill` command to the malice-network client that provides reusable, template-driven prompt injection for LLM agent sessions. Skills are pre-authored SKILL.md files following the [Agent Skills](https://agentskills.io/specification) open standard, enabling operators to execute complex multi-step operations with a single command.
 
-The core insight: **skill is a high-level abstraction over poison**. Rather than crafting natural-language prompts ad-hoc, operators select from a library of battle-tested prompt templates that encode operational tradecraft.
+The core insight: **skill is a high-level abstraction over poison** . Rather than crafting natural-language prompts ad-hoc, operators select from a library of battle-tested prompt templates that encode operational tradecraft.
 
 ## Architecture
 
@@ -106,6 +106,7 @@ The `formatLLMEvent` renderer used by both `tapping` and `poison` was redesigned
 ```
 
 The `|` separator provides an at-a-glance event type indicator:
+
 - `text` — LLM generated text content
 - `⚡name` — LLM invoked a tool
 - `↩result` — tool results returned to LLM

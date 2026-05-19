@@ -1,9 +1,13 @@
-## embed mal
+---
+title: 内置 MAL 操作
+---
+
+## 嵌入式 MAL
 
 在 IoM 的 v0.1.1 中集成了一系列内置的 embed 功能:
 ![mal_intl_help.png](../assets/embed/usage/mal_intl_help.png)
 
-可以在[MAL 插件开发 - Embed](../development/mal/embed.md)中找到所有的相关命令
+完整的 Lua API 参考见 [Reference / Lua API](../reference/lua-api/builtin.md)。
 
 ### askcreds
 
@@ -83,6 +87,7 @@ dump_sam 用于导出 SAM, SECURITY, SYSTEM 三个注册表文件
 dump_sam --location [location]
 ```
 Flags如下：
+
 - --location: folder to save (optional) (default:  C:\Windows\Temp\ )
 
 ![img_2.png](../assets/embed/usage/dump_sam.png)
@@ -146,6 +151,7 @@ kill_defender 用于杀死或检查 Windows Defender
 kill_defender --action [action]
 ```
 Flags如下：
+
 - --action 表示动作, 可以是 kill/check
 
 ![img_5.png](../assets/embed/usage/kill_defender_tui.png)
@@ -156,6 +162,7 @@ klist 用于与缓存的 Kerberos 票据交互
 klist --action [action] --spn [spn]
 ```
 Flags如下：
+
 - --action 表示动作, 可以是 get/purge/empty
 - --spn 表示目标 SPN, 当动作是 get 时需要指定
 
@@ -167,6 +174,7 @@ ldapsearch 用于执行 LDAP 查询
 ldapsearch --query [query] --attributes [attributes] --result-count [result-count] --hostname [hostname] --domain [domain]
 ```
 Flags如下：
+
 - --query 表示查询语句
 - --attributes 表示查询的属性
 - --result-count 表示查询结果的数量
@@ -231,6 +239,7 @@ nanodump 用于导出 lsass 内存转储
 nanodump --options [options]
 ```
 Flags如下：
+
 - --options 表示 nanodump 的参数, 与单行的 nanodump 一致
 
 ![img_9.png](../assets/embed/usage/nanodump_tui.png)
@@ -249,7 +258,7 @@ net user enum # 枚举用户
 
 net user query 可以查询用户信息
 ```
-net user query --username [username] --domain [domain](optional)
+net user query --username [username] --domain <domain>  # optional
 ```
 
 ![img.png](../assets/embed/usage/net_user_query.png)
@@ -264,6 +273,7 @@ nslookup --host [host] --server [server] --record-type [record-type] # 带参数
 ```
 
 Flags如下：
+
 - --host 表示目标主机
 - --server 表示 DNS 服务器
 - --record-type 表示记录类型(A, NS, CNAME, MX, AAAA, etc.)
@@ -279,6 +289,7 @@ pingscan 用于执行 ping 扫描.
 pingscan --target [target]
 ```
 Flags如下：
+
 - --target 表示目标主机(可以参考的格式有 192.168.1.1, 192.168.1.1-192.168.1.255, 192.168.1.0/24)
 
 ![img.png](../assets/embed/usage/pingscan_tui.png)
@@ -292,6 +303,7 @@ portscan --target [target] --ports [ports]
 ```
 
 Flags如下：
+
 - --target 表示目标主机(可以参考的格式有 192.168.1.1, 192.168.1.1-192.168.1.255, 192.168.1.0/24)
 - --ports 表示目标端口(可以参考的格式有 80,443,8080 或 1-1000)
 
@@ -304,6 +316,7 @@ readfile 用于读取文件内容
 readfile --filepath [filepath]
 ```
 Flags如下：
+
 - --filepath 表示目标文件路径
 
 ![readfile](../assets/embed/usage/common/readfile.png)
@@ -326,6 +339,7 @@ screenshot --filename [filename]
 ```
 
 Flags如下：
+
 - --filename 表示截屏文件名(默认为 screenshot.jpg)
 
 ![img.png](../assets/embed/usage/screenshot_tui.png)
@@ -350,6 +364,7 @@ wifi dump --profilename [profilename] # 导出WiFi详细配置
 ```
 
 Flags如下：
+
 - --profilename 表示 WiFi 名称
 
 ![img.png](../assets/embed/usage/wifi_enum_tui.png)

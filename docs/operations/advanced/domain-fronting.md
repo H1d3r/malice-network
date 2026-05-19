@@ -1,4 +1,8 @@
-# 使用Cloudflare进行CDN前置
+---
+title: CDN 前置
+---
+
+# 使用 Cloudflare 进行 CDN 前置
 
 IOM内置了HTTPS, 所以你可以使用CDN、云函数等来隐藏IOM服务
 

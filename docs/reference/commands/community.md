@@ -1,3 +1,7 @@
+---
+title: Community MAL
+---
+
 ## community
 ### askcreds
 

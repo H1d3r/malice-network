@@ -1,3 +1,7 @@
+---
+title: MAL Embed API
+---
+
 ## community
 ### askcreds
 

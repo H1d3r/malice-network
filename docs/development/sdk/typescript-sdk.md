@@ -1,4 +1,4 @@
-# IoM TypeScript SDK 使用指南
+# TypeScript
 
 IoM TypeScript SDK 是一个共享的 gRPC 客户端库，用于 VSCode 扩展和 Web 应用开发。
 

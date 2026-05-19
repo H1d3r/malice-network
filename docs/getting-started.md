@@ -1,4 +1,4 @@
-# Malice Network 快速开始
+# 快速开始
 
 本文档说明发布产物、初始化启动、凭证登录和首次构建流程。内容基于当前仓库代码和发布配置。
 
@@ -102,7 +102,7 @@ cd /opt/iom/malice-network
 更详细的 listener 和 pipeline 说明看：
 
 - [server/listeners.md](server/listeners.md)
-- [custom-pipeline-guide.md](custom-pipeline-guide.md)
+- [development/custom-pipeline-guide.md](development/custom-pipeline-guide.md)
 
 ## 5. 首次构建 Artifact
 
@@ -129,7 +129,6 @@ Malice Network 的构建入口位于 client，基本流程如下：
 
 ## 6. 相关文档
 
-- Client 命令总览: [client/commands.md](client/commands.md)
+- Client 命令体系: [client/](client/)
 - MAL 插件开发: [development/mal/](development/mal/)
-- Implant 概览: [implant/overview.md](implant/overview.md)
 - 架构图: [concept.md](concept.md)

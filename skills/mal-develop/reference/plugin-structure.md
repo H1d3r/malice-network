@@ -50,6 +50,7 @@ depend_armory:
 ## Entry File (main.lua)
 
 The entry file is executed when the plugin is loaded. It typically does two things:
+
 1. Import sub-modules
 2. Register commands
 

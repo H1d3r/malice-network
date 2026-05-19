@@ -1,3 +1,7 @@
+---
+title: Implant
+---
+
 ## implant
 ### info
 
@@ -396,7 +400,7 @@ load_addon [flags]
 **Examples**
 
 addon default name is filename, default module is selected based on the file extension
-~~~	
+~~~
 load_addon gogo.exe
 ~~~
 assigns an alias name gogo to the addon, and the specified module is execute_exe
@@ -982,8 +986,10 @@ shell [cmdline] [flags]
 **Options**
 
 ```
-  -f, --file string   save output to file path
-  -q, --quiet         disable output
+  -f, --file string    save output to file path
+  -q, --quiet          disable output
+  -r, --realtime       stream output in realtime (default true)
+  -s, --shell string   custom shell path (e.g. /bin/bash, /bin/ash)
 ```
 
 ## sys
@@ -1034,7 +1040,7 @@ env set [env-key] [env-value]
 
 ~~~
 	setenv key1 value1
-	~~~
+~~~
 
 **SEE ALSO**
 
@@ -1052,7 +1058,7 @@ env unset [env-key]
 
 ~~~
 	unsetenv key1
-	~~~
+~~~
 
 **SEE ALSO**
 
@@ -1122,7 +1128,7 @@ wmi_execute [flags]
 Execute a WMI method:
 ~~~
 wmi_execute --namespace <namespace> --class_name <classname> --method_name <method_name> --params <key1>=<value1>,<key2>=<value2>
-  ~~~
+~~~
 Execute a WMI method to create a new process:
 ~~~
 wmi_execute --namespace root\cimv2 --class_name Win32_Process --method_name Create --params CommandLine=notepad.exe
@@ -1154,9 +1160,9 @@ wmi_query [flags]
 **Examples**
 
 Perform a WMI query in the root\\cimv2 namespace:
-  ~~~
+~~~
   wmi_query --namespace root\\cimv2 --args "SELECT * FROM Win32_Process"
-  ~~~
+~~~
 
 **Options**
 
@@ -1199,9 +1205,9 @@ service create [flags]
 **Examples**
 
 Create a new service named "example_service":
-  ~~~
+~~~
   service create --name example_service --display "Example Service" --path /path/to/executable --start_type AutoStart --error Normal
-  ~~~
+~~~
 
 **Options**
 
@@ -1234,9 +1240,9 @@ service delete [name]
 **Examples**
 
 Delete a service named "ExampleService":
-  ~~~
+~~~
   service delete ExampleService
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1257,9 +1263,9 @@ service list
 **Examples**
 
 List all services:
-  ~~~
+~~~
   service list
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1280,9 +1286,9 @@ service query [service_name]
 **Examples**
 
 Query the status of a service named "example_service":
-  ~~~
+~~~
   service query example_service
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1303,9 +1309,9 @@ service start [service_name]
 **Examples**
 
 Start a service named "example_service":
-  ~~~
+~~~
   service start example_service
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1326,9 +1332,9 @@ service stop [service_name]
 **Examples**
 
 Stop a service named "example_service":
-  ~~~
+~~~
   service stop example_service
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1365,11 +1371,11 @@ reg add [path] [flags]
 **Examples**
 
 Add or modify a registry key:
-  ~~~
+~~~
   reg add HKEY_LOCAL_MACHINE\SOFTWARE\Example -v TestValue -t REG_DWORD -d 1
   reg add HKEY_LOCAL_MACHINE\SOFTWARE\Example -v TestString -t REG_SZ -d "Hello World"
   reg add HKEY_LOCAL_MACHINE\SOFTWARE\Example -v TestBinary -t REG_BINARY -d 01020304
-  ~~~
+~~~
 
 **Options**
 
@@ -1398,9 +1404,9 @@ reg delete [path] [key]
 **Examples**
 
 Delete a registry key:
-  ~~~
+~~~
   reg delete HKEY_LOCAL_MACHINE\SOFTWARE\Example TestKey
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1421,9 +1427,9 @@ reg list_key [path]
 **Examples**
 
 List subkeys in a registry path:
-  ~~~
+~~~
   reg list_key HKEY_LOCAL_MACHINE\SOFTWARE\Example
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1444,9 +1450,9 @@ reg list_value [path]
 **Examples**
 
 List values in a registry path:
-  ~~~
+~~~
   reg list_value HKEY_LOCAL_MACHINE\SOFTWARE\Example
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1467,9 +1473,9 @@ reg query [path] [key]
 **Examples**
 
 Query a registry key:
-  ~~~
+~~~
   reg query HKEY_LOCAL_MACHINE\SOFTWARE\Example TestKey
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1508,9 +1514,9 @@ taskschd create [flags]
 **Examples**
 
 Create a scheduled task:
-  ~~~
+~~~
   taskschd create --name ExampleTask --path /path/to/executable --trigger_type AtLogon --start_boundary "2023-10-10T09:00:00"
-  ~~~
+~~~
 
 **Options**
 
@@ -1542,9 +1548,9 @@ taskschd delete [name] [flags]
 **Examples**
 
 Delete a scheduled task:
-  ~~~
+~~~
   taskschd delete ExampleTask
-  ~~~
+~~~
 
 **Options**
 
@@ -1571,9 +1577,9 @@ taskschd list
 **Examples**
 
 List all scheduled tasks:
-  ~~~
+~~~
   taskschd list
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -1594,9 +1600,9 @@ taskschd query [name] [flags]
 **Examples**
 
 Query the configuration of a scheduled task:
-  ~~~
+~~~
   taskschd query ExampleTask
-  ~~~
+~~~
 
 **Options**
 
@@ -1623,9 +1629,9 @@ taskschd run [name] [flags]
 **Examples**
 
 Run a scheduled task immediately:
-  ~~~
+~~~
   taskschd run ExampleTask
-  ~~~
+~~~
 
 **Options**
 
@@ -1652,9 +1658,9 @@ taskschd start [name] [flags]
 **Examples**
 
 Start a scheduled task:
-  ~~~
+~~~
   taskschd start ExampleTask
-  ~~~
+~~~
 
 **Options**
 
@@ -1681,9 +1687,9 @@ taskschd stop [name] [flags]
 **Examples**
 
 Stop a scheduled task:
-  ~~~
+~~~
   taskschd stop ExampleTask
-  ~~~
+~~~
 
 **Options**
 
@@ -1706,9 +1712,9 @@ getsystem
 **Examples**
 
 Attempt to elevate privileges:
-  ~~~
+~~~
   getsystem
-  ~~~
+~~~
 
 ### privs
 
@@ -1721,9 +1727,9 @@ privs
 **Examples**
 
 List available privileges:
-  ~~~
+~~~
   privs
-  ~~~
+~~~
 
 ### rev2self
 
@@ -1736,9 +1742,9 @@ rev2self
 **Examples**
 
 Revert to the original token:
-  ~~~
+~~~
   rev2self
-  ~~~
+~~~
 
 ### runas
 
@@ -1751,9 +1757,9 @@ runas --username [username] --domain [domain] --password [password] --path [path
 **Examples**
 
 Run a program as a different user:
-  ~~~
+~~~
   runas --username admin --domain EXAMPLE --password admin123 --path /path/to/program --args "arg1 arg2" --use-profile --use-env
-  ~~~
+~~~
 
 **Options**
 
@@ -2085,9 +2091,9 @@ pipe read [pipe_name]
 **Examples**
 
 Read data from pipe:
-  ~~~
+~~~
   pipe read \\.\pipe\test_pipe
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -2108,13 +2114,13 @@ pipe server [action] [pipe_name]
 **Examples**
 
 Pipe server operations:
-  ~~~
+~~~
   pipe server start \\.\pipe\mypipe       # Start a pipe server
   pipe server stop \\.\pipe\mypipe       # Stop a pipe server
   pipe server list               # List all running pipe servers
   pipe server status \\.\pipe\mypipe      # Check server status and cache size
   pipe server clear \\.\pipe\mypipe       # Clear cached data for a pipe
-  ~~~
+~~~
 
 **SEE ALSO**
 
@@ -2135,9 +2141,9 @@ pipe upload [pipe_name] [file_path]
 **Examples**
 
 Upload file to pipe:
-  ~~~
+~~~
   pipe upload \\.\pipe\test_pipe /path/to/file
-  ~~~
+~~~
 
 **SEE ALSO**
 

@@ -1,3 +1,7 @@
+---
+title: Client
+---
+
 ## generic
 ### !
 
@@ -326,6 +330,7 @@ load /tmp/chrome-dump
 Sliver macros have the following structure (example for the chrome-dump macro): 
 
 chrome-dump 
+
 * chrome-dump.dll 
 * chrome-dump.so 
 * manifest.json
@@ -1670,7 +1675,7 @@ Register a new website
 
 **Description**
 
-Register a new website with the specified listener. If **name** is not provided, it will be generated in the format **listenerID_web_port**.
+Register a new website with the specified listener. If **name** is not provided, it will be generated in the format **listenerID_web_port** .
 
 ```
 website [flags]
@@ -2478,7 +2483,7 @@ build beacon --wizard
       --profile string                  profile name
       --proxy-url string                proxy URL
       --proxy-use-env                   Use environment proxy settings
-      --rem string                      Legacy REM static link flag
+      --rem string                      REM pipeline name or direct link address (e.g., rem_default or tcp://cdn:5555)
       --resources-path string           path to resources directory
       --retry int                       retry count (default -1)
       --secure                          Enable secure communication
@@ -2550,7 +2555,7 @@ build bind --target x86_64-pc-windows-gnu --profile tcp_default --source saas
       --profile string                  profile name
       --proxy-url string                proxy URL
       --proxy-use-env                   Use environment proxy settings
-      --rem string                      Legacy REM static link flag
+      --rem string                      REM pipeline name or direct link address (e.g., rem_default or tcp://cdn:5555)
       --resources-path string           path to resources directory
       --retry int                       retry count (default -1)
       --secure                          Enable secure communication
@@ -2847,7 +2852,7 @@ Load an existing implant profile
 **Description**
 
 
-The **profile load** command requires a valid configuration file path (e.g., **config.yaml**) to load settings. This file specifies attributes necessary for generating the compile profile.
+The **profile load** command requires a valid configuration file path (e.g., **config.yaml** ) to load settings. This file specifies attributes necessary for generating the compile profile.
 
 
 ```

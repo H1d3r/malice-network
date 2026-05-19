@@ -7,6 +7,7 @@ Each case records the full context of a real operation, serving as a reference f
 Format: `<operation-type>-<security-product>.md`
 
 Examples:
+
 - `cred-dump-defender.md` — credential harvesting in a Defender environment
 - `uac-bypass-crowdstrike.md` — UAC bypass in a CrowdStrike environment
 - `lateral-wmi-no-av.md` — WMI lateral movement with no AV present
@@ -66,6 +67,7 @@ Analysis: [Why it succeeded or failed]
 After each operation conducted through the iom-opsec skill, if the result has reference value (especially failed cases), it should be recorded as a new case and stored in the `reference/cases/` directory.
 
 Characteristics of a valuable case:
+
 - A technique was blocked by a specific AV (can be skipped directly in the future)
 - A detection blind spot was discovered in a specific AV
 - An unconventional but effective operation path was found

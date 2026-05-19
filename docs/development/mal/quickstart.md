@@ -1,4 +1,8 @@
-# MAL 插件快速开始
+---
+title: 快速开始
+---
+
+# 快速开始
 
 ## 简介
 
@@ -66,12 +70,13 @@ command(name, function, help, ttp)
 ```
 
 参数说明：
+
 - `name`: 命令名称，支持多级命令（用 `:` 分隔）
 - `function`: 执行的 Lua 函数
 - `help`: 命令帮助信息
 - `ttp`: MITRE ATT&CK TTP 编号
 
-详细文档：[builtin.md](builtin.md#command)
+详细文档：[MAL Builtin API](/IoM/reference/lua-api/builtin/#command)
 
 ### 基础用法
 
@@ -111,6 +116,7 @@ command("mimikatz:common:hello", hello, "print hello world", "T1000")
 ### 参数处理
 
 命令行输入分为：
+
 - `args`: 位置参数，如 `hello arg1 arg2`
 - `flags`: 标志参数，如 `hello -s` 或 `hello --long`
 - `cmdline`: 完整命令行字符串
@@ -202,9 +208,9 @@ bind_args_completer(rem_socks_cmd, { rem_completer() })
 
 MAL 将 API 分为三个 package：
 
-- [builtin](builtin.md) - 直接可用的核心 API
-- [rpc](rpc.md) - gRPC 相关 API 的 Lua 实现
-- [beacon](beacon.md) - CobaltStrike 兼容层 API，实现 AggressiveScript 中 `b` 开头函数
+- [builtin](/IoM/reference/lua-api/builtin/) - 直接可用的核心 API
+- [rpc](/IoM/reference/lua-api/rpc/) - gRPC 相关 API 的 Lua 实现
+- [beacon](/IoM/reference/lua-api/beacon/) - CobaltStrike 兼容层 API，实现 AggressiveScript 中 `b` 开头函数
 
 ### Lua 标准库
 
@@ -339,7 +345,7 @@ local beacon = require("beacon")
 beacon.bexecute(active(), "whoami")
 ```
 
-支持的所有 AggressiveScript 风格 API 文档：[beacon.md](beacon.md)
+支持的所有 AggressiveScript 风格 API 文档：[MAL Beacon API](/IoM/reference/lua-api/beacon/)
 
 ### 创建 Protobuf Message
 

@@ -10,9 +10,9 @@
 
 Listener 是 malice-network 的分布式通信层，与 Server 解耦设计：
 
-- **分布式部署**：可以独立部署在任意服务器上，不需要与 Server 同机
-- **与 Server 解耦**：通过 gRPC Stream 与 Server 全双工通信，独立运行和故障隔离
-- **多 Pipeline 承载**：每个 Listener 可运行多个不同类型的 Pipeline
+- **分布式部署** ：可以独立部署在任意服务器上，不需要与 Server 同机
+- **与 Server 解耦** ：通过 gRPC Stream 与 Server 全双工通信，独立运行和故障隔离
+- **多 Pipeline 承载** ：每个 Listener 可运行多个不同类型的 Pipeline
 
 ```
 ┌─────────┐  gRPC/mTLS  ┌──────────┐
@@ -58,6 +58,7 @@ Pipeline 的 TLS 支持两种配置方式：
 
     ```yaml
     tcp:
+      
       - name: tcp
         tls:
           enable: true                # 使用自签名证书

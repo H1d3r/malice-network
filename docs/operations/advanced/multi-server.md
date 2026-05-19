@@ -1,8 +1,12 @@
+---
+title: 多服务器连接
+---
+
 # 多目标配置
 
 IoM在0.1.2版本开始支持多服务器配置。当主服务器失效时，会自动切换到备用服务器。
 
-**注意**: 目前只能同时启用一种通信协议，不同协议的配置需要分别使用。
+**注意** : 目前只能同时启用一种通信协议，不同协议的配置需要分别使用。
 
 ## HTTP 协议
 
@@ -117,7 +121,8 @@ targets:
 
 ```
 
-**配置说明**:
+**配置说明** :
+
 - `tls.enable`: 启用TLS加密
 - `tls.sni`: 使用域名时建议配置SNI
 - `tls.skip_verification`: 跳过证书验证
@@ -146,7 +151,8 @@ targets:
 
 ```
 
-**配置说明**:
+**配置说明** :
+
 - 最简单的配置方式，仅需指定地址
 - 支持IP地址和域名
 - 无加密传输，适用于内网环境
@@ -212,7 +218,8 @@ targets:
       link: "tcp://user:pass@secondary.example.com:34996?wrapper=demo"
 ```
 
-**配置说明**:
+**配置说明** :
+
 - REM 协议通过 `link` 字段指定完整的 rem 连接地址
 - link 格式: `[transport]://[key]:@[host]:[port]?wrapper=[]&tls=[bool]`
 - 详细参数请参阅 [rem 文档](/rem/usage/#console)

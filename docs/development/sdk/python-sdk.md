@@ -1,4 +1,4 @@
-# IoM Python SDK 使用指南
+# Python
 
 IoM Python SDK 是一个现代异步客户端库，用于与 Malice Network C2 框架进行交互。
 
@@ -92,7 +92,7 @@ result = await client.wait_task_finish(task)
 
 ### Spite - 通讯消息
 
-对应 [Spite 协议](../protocol/)，SDK 自动处理 Spite 的序列化和反序列化。
+对应 [核心概念](../../concept.md) 中的数据面说明，SDK 自动处理 Spite 的序列化和反序列化。
 
 ```python
 # Request/Response 都是 Spite 的 body

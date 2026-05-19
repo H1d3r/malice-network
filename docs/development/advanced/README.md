@@ -1,15 +1,14 @@
 # 高级开发主题
 
-本目录包含 malice-network 的高级开发主题文档。
+本目录预留给需要单独展开的高级开发主题。当前主要开发资料集中在上级目录和模块文档中。
 
 ## 文档列表
 
-- [架构深入](architecture-deep-dive.md) - 深入架构分析
-- [性能优化](performance.md) - 性能优化指南
-- [安全考虑](security.md) - 安全设计与实现
+- [贡献指南](../contributing.md) - 开发环境、PR 流程与检查项
+- [自定义 Pipeline](../custom-pipeline-guide.md) - ListenerRPC 外部 Pipeline 接入
+- [AI 集成指南](../ai-integration.md) - MCP、SDK as Tool 与外部集成边界
 
 ## 相关文档
 
-- [架构概览](../../architecture.md) - 系统架构说明
-- [设计哲学](../../design.md) - 设计理念与决策
+- [核心概念](../../concept.md) - 架构与协议边界
 - [开发指南](../) - 开发文档索引

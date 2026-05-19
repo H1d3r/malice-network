@@ -5,13 +5,12 @@
 ## 文档列表
 
 - [贡献指南](contributing.md) - 环境配置、Command/RPC 开发、PR 流程
-- [测试文档](testing.md) - 测试框架与规范
 - [自定义 Pipeline](custom-pipeline-guide.md) - 自定义 Pipeline 开发
-- [AI 集成指南](ai-integration.md) - MCP、SDK as Tool、FFI 集成
+- [AI 集成指南](ai-integration.md) - MCP、SDK as Tool 与外部集成边界
 
 ## 子目录
 
-- [协议文档](protocol/) - gRPC、Spite、MCP 协议规范
+- [核心概念](../concept.md) - 架构与协议边界
 - [MAL 插件开发](mal/) - MAL 插件系统完整文档
 - [SDK 文档](sdk/) - Go、Python、TypeScript SDK 使用指南
 
@@ -21,6 +20,4 @@
 
 ## 相关文档
 
-- [架构概览](../concept.md) - 系统架构说明
-- [设计哲学](../design.md) - 设计理念与决策
 - [核心概念](../concept.md) - 核心概念说明

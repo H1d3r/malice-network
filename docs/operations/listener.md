@@ -1,12 +1,16 @@
-Listener 是 **IoM 中的分布式监听服务**，负责与 Implant 建立和维持实际的通信。
+---
+title: Listener 与 Pipeline
+---
 
-- **分布式部署**：可以部署在任意服务器上，而不是和IoM Server绑定。
+Listener 是 **IoM 中的分布式监听服务** ，负责与 Implant 建立和维持实际的通信。
+
+- **分布式部署** ：可以部署在任意服务器上，而不是和IoM Server绑定。
     
-- **与 Server 解耦**：通过 gRPC Stream 与 Server 全双工通信，实现独立运行和故障隔离。
+- **与 Server 解耦** ：通过 gRPC Stream 与 Server 全双工通信，实现独立运行和故障隔离。
     
-- **多形态支持**：可根据需要伪装或隐藏通信方式。
+- **多形态支持** ：可根据需要伪装或隐藏通信方式。
     
-- **实时交互**：保持 Implant 与 Server 的实时双向通信。
+- **实时交互** ：保持 Implant 与 Server 的实时双向通信。
 
 > **Tip:**
 	具体架构在[Listener 架构](../server/listeners.md)查看
@@ -93,7 +97,7 @@ listeners:
 
 pipeline是数据管道，Listener与Implant/WebShell交互的具体实现。
 
-**概念说明**: Pipeline相当于传统C2框架中的Listener概念，但IoM进一步细分了其实现。每个Listener可以运行多个Pipeline，Pipeline负责与Implant的具体交互。
+**概念说明** : Pipeline相当于传统C2框架中的Listener概念，但IoM进一步细分了其实现。每个Listener可以运行多个Pipeline，Pipeline负责与Implant的具体交互。
 
 > **Tip:**
 	具体架构在[Listener 操作](listener.md)查看
@@ -219,7 +223,7 @@ website add /path/to/file --website web-test --path /path
 
 > **Tip:** "rem指南" 
 	在 IoM 中，绝大部分网络相关功能都基于 **rem** 实现。因此，在使用这些功能前，建议先阅读 [rem](/rem) 文档，以便更好地熟悉其用法。  
-    关于在 implant 中如何使用 **rem**，可参考 [rem_usage](proxy.md)。
+    关于在 implant 中如何使用 **rem** ，可参考 [rem_usage](proxy.md)。
 #### bind (Unstable)
 
 当您需要启动一个新的bind pipeline的时候， 可以在config.yaml中的对应listener下增加一个bind配置。
@@ -357,6 +361,7 @@ pipeline start tcp --cert-name cert-name
       body_prefix: "<!-- prefix marker -->"   # 每个 HTTP 响应 body 前缀内容 
       body_suffix: "<!-- suffix marker -->"   # 每个 HTTP 响应 body 后缀内容
 ```
+
 - **`headers`**：  
     可以定义多个 HTTP 响应头，例如伪装成 Nginx/Apache，或者返回自定义的 Content-Type。
 

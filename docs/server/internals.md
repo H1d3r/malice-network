@@ -43,9 +43,9 @@ Server 通过 gRPC 暴露三类服务，分别面向不同的调用方：
 请求 → logInterceptor → auditInterceptor → authInterceptor → Handler
 ```
 
-- **logInterceptor**：记录所有 RPC 调用到日志
-- **auditInterceptor**：按 Session 记录请求/响应详情（受 `audit` 级别控制）
-- **authInterceptor**：执行 mTLS 认证 + RBAC 授权
+- **logInterceptor** ：记录所有 RPC 调用到日志
+- **auditInterceptor** ：按 Session 记录请求/响应详情（受 `audit` 级别控制）
+- **authInterceptor** ：执行 mTLS 认证 + RBAC 授权
 
 ### Listener 双向流
 
@@ -103,9 +103,9 @@ contexts/<sessionID>/
 
 Server 重启时自动恢复运行时状态：
 
-1. **Session 恢复**：从数据库加载存活的 Session，重建内存对象
-2. **Pipeline 恢复**：从数据库加载已启用的 Pipeline，通过 JobCtrl 重新启动
-3. **Website 恢复**：重新启动已注册的 Website Pipeline
+1. **Session 恢复** ：从数据库加载存活的 Session，重建内存对象
+2. **Pipeline 恢复** ：从数据库加载已启用的 Pipeline，通过 JobCtrl 重新启动
+3. **Website 恢复** ：重新启动已注册的 Website Pipeline
 
 ## 审计机制
 
@@ -120,9 +120,9 @@ Server 重启时自动恢复运行时状态：
 
 ### 审计数据来源
 
-- **数据库**：Task 元数据（ID、时间、描述）
-- **文件系统**：`contexts/<sessionID>/tasks/` 下的 protobuf 文件
-- **格式**：每个审计条目包含 Task 上下文、命令内容、请求/响应、时间戳
+- **数据库** ：Task 元数据（ID、时间、描述）
+- **文件系统** ：`contexts/<sessionID>/tasks/` 下的 protobuf 文件
+- **格式** ：每个审计条目包含 Task 上下文、命令内容、请求/响应、时间戳
 
 ### 日志轮转
 
@@ -181,7 +181,7 @@ Server 为 Client 侧的 AI Agent 提供 LLM Provider 桥接服务。
 ### 调用流程
 
 ```
-Client (chat/poison)
+Client (chat/skill)
     ↓ MaliceRPC
 Server LLM Proxy
     ↓ POST /chat/completions

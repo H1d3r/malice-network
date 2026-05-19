@@ -16,11 +16,11 @@ guardrail:
 
 ### 参数说明
 
-- **enable**: 控制是否启用 Guardrail 功能
-- **require_all**:
+- **enable** : 控制是否启用 Guardrail 功能
+- **require_all** :
   - `true` (AND 模式): 所有配置的条件都必须满足，implant 才会执行
   - `false` (OR 模式): 任意一个条件满足，implant 即可执行
-- **白名单字段**: 支持使用 `*` 通配符进行模糊匹配
+- **白名单字段** : 支持使用 `*` 通配符进行模糊匹配
 
 ## 使用示例
 
@@ -60,7 +60,8 @@ guardrail:
     - "*.test.local"
 ```
 
-**效果**: implant 会在满足以下任一条件的主机上运行：
+**效果** : implant 会在满足以下任一条件的主机上运行：
+
 - IP 地址在 `10.0.*.*` 网段，或
 - 用户名包含 `admin` 或以 `test` 开头，或
 - 服务器名包含 `-test-` 或以 `pentest` 开头，或

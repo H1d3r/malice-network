@@ -1,17 +1,21 @@
+---
+title: 构建与 Profile
+---
 
 在IoM中，implant的相关特性是由编译使用的profile决定的。在编译之前首先要准备好需要的profile。
 ## profile 准备
 
-!!! info "目前在pipeline启动时，服务端会自动生成能和该pipeline通信的profile"
+!!! info "自动生成 profile"
+    目前在pipeline启动时，服务端会自动生成能和该pipeline通信的profile
 
 自定义profile需要先下载 https://github.com/chainreactors/malefic/blob/master/config.yaml 。
 profile的配置结构主要分为大部分：
 
-- **basic**：用于连接的参数配置
+- **basic** ：用于连接的参数配置
      
-- **implants**：implant 的功能性配置
+- **implants** ：implant 的功能性配置
 	
-- **build**：构建时的编译及混淆选项
+- **build** ：构建时的编译及混淆选项
 ### basic
 `basic` 部分主要用于连接参数配置，包括 **目标地址、协议、加密、代理、心跳、HTTP 伪装头** 等。
 #### 目标与协议
@@ -27,10 +31,10 @@ basic:
     
 - `protocol` : 通信协议可以配置为tcp和http。
 
-!!!tip "`targets` 和 `protocol` 必须与 listener 中 pipeline 的通信配置一致"  
-	由于 Implant 与 listener 的 pipeline 直接通信，因此 Implant 中的 `targets` 与 `protocol` 配置需要与 pipeline 保持一致。
-	  
-	有关 pipeline 的 TCP 与 HTTP 配置，请参见 [Listener 操作](listener.md)。
+!!! tip "`targets` 和 `protocol` 必须与 listener 中 pipeline 的通信配置一致"  
+    由于 Implant 与 listener 的 pipeline 直接通信，因此 Implant 中的 `targets` 与 `protocol` 配置需要与 pipeline 保持一致。
+      
+    有关 pipeline 的 TCP 与 HTTP 配置，请参见 [Listener 操作](listener.md)。
 #### REM 信道上线
 
 REM 是 IoM 基于[rem](/rem)自定义协议，支持更灵活的流量伪装，其中`link` 格式为`[transport]://[key]:@[host]:[port]?wrapper=[]&tls=[bool]&tlsintls=[bool]&compress=[bool]`, 详细参数请阅读[rem参数解释](https://wiki.chainreactors.red/rem/usage/#console)
@@ -44,7 +48,8 @@ targets:
       link: "tcp://username:password@127.0.0.1:34996?wrapper=ls..."
 ```
 
-!!!tip "IoM 中的大多数网络功能均依赖 **rem** 实现。为了更高效地使用这些功能，建议在操作前先查阅 [rem](/rem) 文档"
+!!! tip "rem 文档"
+    IoM 中的大多数网络功能均依赖 **rem** 实现。为了更高效地使用这些功能，建议在操作前先查阅 [rem](/rem) 文档
 
 #### TLS加密
 当通信的pipeline开启了tls，需要在profile中开启 `tls` 配置：
@@ -56,9 +61,9 @@ targets:
     skip_verification: true
 ```
 
-!!!tip
-	 您可以在listener的config.yaml中找到tls配置，来确定是否需要打开tls配置。
-	 listener的pipeline的tls配置可以在[Listener 操作 - TLS](listener.md)查阅。
+!!! tip "TLS 配置"
+    您可以在listener的config.yaml中找到tls配置，来确定是否需要打开tls配置。
+    listener的pipeline的tls配置可以在[Listener 操作 - TLS](listener.md)查阅。
 
 #### HTTP 请求伪装
 当通信协议为http时，您可以配置 HTTP 请求的路径、方法与 Header 信息：
@@ -83,7 +88,8 @@ basic:
 #### Encryption
 当通信的pipeline配置了 `Encryption` 信息，profile也需要同步设置  `encryption` 和 `key` 字段 ，两者内容和需要保持一致。
 
-!!! tip "关于pipeline的Encryption信息，请参阅[Listener 操作 - Encryption](listener.md)"
+!!! tip "Encryption 配置"
+    关于pipeline的Encryption信息，请参阅[Listener 操作 - Encryption](listener.md)
 
 ```yaml
 basic:
@@ -91,11 +97,12 @@ basic:
   key: maliceofinternal
 ```
 
-!!!tip "有关basic配置的更多信息，请参阅 [构建操作](build.md)"
+!!! tip "basic 配置"
+    有关basic配置的更多信息，请参阅 [构建操作](build.md)
 
 ### implants
 
-implant的功能性配置，决定 **运行时行为** 和 **模块加载策略**。
+implant的功能性配置，决定 **运行时行为** 和 **模块加载策略** 。
 
 您可以根据实际需求来配置beacon或者modules的内置模块，以下是一个implants示例:
 ```yaml
@@ -127,7 +134,9 @@ implants:
   autorun: "autorun.yaml"
 ```
 
-!!!tip "有关implant配置的更多信息，请参阅 [构建操作](build.md)"
+!!! tip "implant 配置"
+    有关implant配置的更多信息，请参阅 [构建操作](build.md)
+
 ### build
 
  `build` 主要控制 **构建方式、混淆参数、PE 文件元信息** 等。
@@ -146,20 +155,20 @@ build:
 ```
 在这个例子中，`build` 配置包含以下字段：
 
-- **zigbuild**：是否启用 Zig 编译器来构建 payload。
+- **zigbuild** ：是否启用 Zig 编译器来构建 payload。
     
-- **remap**：是否刷新路径映射。
+- **remap** ：是否刷新路径映射。
     
-- **ollvm.enable**：是否启用 OLLVM 混淆。
+- **ollvm.enable** ：是否启用 OLLVM 混淆。
     
-- **metadata.original_filename**：生成的可执行文件原始文件名。
+- **metadata.original_filename** ：生成的可执行文件原始文件名。
     
-- **metadata.file_description**：文件描述信息。
+- **metadata.file_description** ：文件描述信息。
     
-- **metadata.require_admin**：是否要求管理员权限。
+- **metadata.require_admin** ：是否要求管理员权限。
 
-!!!tip
-	  `build` 部分的ollvm混淆拥有多种设置，也设置更多的自定义元信息字段。有关更多build的配置信息，请参阅 [构建操作](build.md)。
+!!! tip "build 配置"
+    `build` 部分的ollvm混淆拥有多种设置，也设置更多的自定义元信息字段。有关更多build的配置信息，请参阅 [构建操作](build.md)。
 
 ### 新建profile
 您也可以使用 `profile new` 新建一个默认的profile，在IoM中，profile是与pipeline绑定的，在编译前，profile中的 `basic` 的 `target` 、 `protocol` 和 `tls` 配置会自动使用pipeline的配置。
@@ -189,7 +198,8 @@ profile load config.yaml --name test --pipeline tcp
     在编译时，命令行内联参数会覆盖 profile 中的同名配置。
     例如 `build beacon --profile tcp_default --addresses tcp://127.0.0.1:5001` 会以命令行提供的地址覆盖 `basic.targets`。
 
-!!!tip "有关implant的简单介绍可以查看[核心概念](../concept.md)"
+!!! tip "核心概念"
+    有关implant的简单介绍可以查看[核心概念](../concept.md)
 
 ### 编译命令
 
@@ -198,11 +208,11 @@ build beacon --profile tcp_default --target x86_64-unknown-linux-musl --source s
 ```
 在这个示例中，`build` 命令包含以下参数：
 
-- **profile**：指定要使用的构建配置文件名称，必填项。
+- **profile** ：指定要使用的构建配置文件名称，必填项。
     
-- **target**：指定构建目标平台和架构，必填项，例如 `"x86_64-pc-windows-gnu"` 或 `"x86_64-unknown-linux-musl"` 。
+- **target** ：指定构建目标平台和架构，必填项，例如 `"x86_64-pc-windows-gnu"` 或 `"x86_64-unknown-linux-musl"` 。
     
-- **source**：指定构建来源，可以是 `docker`、`action` 或 `saas` ，若没有指定，则会寻找可用的编译平台来编译 。
+- **source** ：指定构建来源，可以是 `docker`、`action` 或 `saas` ，若没有指定，则会寻找可用的编译平台来编译 。
 
 !!! tip "target与source说明"
     target架构列表详见 [构建操作](build.md)
@@ -237,11 +247,13 @@ build beacon --profile tcp_default --target x86_64-unknown-linux-musl --addresse
 build beacon --profile tcp_default --target x86_64-unknown-linux-musl --addresses tcp://10.0.0.1:5001 --rem tcp://cdn.example.com:5555
 ```
 
-!!!tip "更多有关 `build beacon` 命令的编译选项，请参阅 [构建操作](build.md)"
+!!! tip "更多编译选项"
+    更多有关 `build beacon` 命令的编译选项，请参阅 [构建操作](build.md)
 
 
-在gui上，您需要在artifacts页面，在对应的profile行上点击build，选择beacon后，根据需求，在对应配置行上填入信息，进行编译。
-![image-20250817183527224752](../assets/usage/build/build_beacon_gui.png)
+    在gui上，您需要在artifacts页面，在对应的profile行上点击build，选择beacon后，根据需求，在对应配置行上填入信息，进行编译。
+    ![image-20250817183527224752](../assets/usage/build/build_beacon_gui.png)
+
 #### 编译pulse
 
 **pulse** 是一个轻量级的上线马，体积只有 4KB，功能类似于 CS 的 artifact。
@@ -256,11 +268,12 @@ build pulse --profile tcp_default --target x86_64-pc-windows-gnu
 build pulse --profile tcp_default --target x86_64-pc-windows-gnu --artifact-id 3
 ```
 
-!!!tip "更多有关 `build pulse` 命令的编译选项，请参阅 [构建操作](build.md)"
+!!! tip "更多编译选项"
+    更多有关 `build pulse` 命令的编译选项，请参阅 [构建操作](build.md)
 
-在gui上，您需要在选择pulse后，填入artifact-id后进行编译。
+    在gui上，您需要在选择pulse后，填入artifact-id后进行编译。
 
-![image-20250817184427224752](../assets/usage/build/build_pulse_artifactID_gui.png)
+    ![image-20250817184427224752](../assets/usage/build/build_pulse_artifactID_gui.png)
 
 #### 编译prelude
 
@@ -273,11 +286,12 @@ build pulse --profile tcp_default --target x86_64-pc-windows-gnu --artifact-id 3
 build prelude  --profile prelude-profile  --target x86_64-pc-windows-gnu --autorun autorun.zip
 ```
 
-!!!tip "更多有关 `build prelude` 命令的编译选项，请参阅 [构建操作](build.md)"
+!!! tip "更多编译选项"
+    更多有关 `build prelude` 命令的编译选项，请参阅 [构建操作](build.md)
 
-在gui上，您需要在选择prelude后，填入zip文件路径后进行编译。
+    在gui上，您需要在选择prelude后，填入zip文件路径后进行编译。
 
-![image-20250817185927224752](../assets/usage/build/build_prelude_gui.png)
+    ![image-20250817185927224752](../assets/usage/build/build_prelude_gui.png)
 
 #### 编译modules
 
@@ -293,13 +307,14 @@ build modules --modules execute_exe,execute_dll --profile tcp_default --target x
 build modules --3rd rem --profile tcp_default --target x86_64-pc-windows-gnu
 ```
 
-!!!tip "更多有关 `build modules` 命令的编译选项，请参阅 [构建操作](build.md)"
+!!! tip "更多编译选项"
+    更多有关 `build modules` 命令的编译选项，请参阅 [构建操作](build.md)
 
-在gui上，您需要在选择modules后，在对应的插件行上填入需要的插件，然后进行编译。
+    在gui上，您需要在选择modules后，在对应的插件行上填入需要的插件，然后进行编译。
 
-![image-20250817183827224752](../assets/usage/build/build_modules_gui.png)
+    ![image-20250817183827224752](../assets/usage/build/build_modules_gui.png)
 
-![image-20250817183927224752](../assets/usage/build/build_3rd_gui.png)
+    ![image-20250817183927224752](../assets/usage/build/build_3rd_gui.png)
 
 ### artifact 
 
@@ -320,10 +335,11 @@ artifact list
 ```bash
 artifact download artifact-name --format raw
 ```
-!!!tip "更多的format格式， 请参阅[构建操作](build.md)"
+!!! tip "artifact 下载格式"
+    更多的format格式， 请参阅[构建操作](build.md)
 
-在gui上，您需要在artifact页面上点击对应的artifact行上的download按钮，即可下载artifact源文件到指定路径。
-![image-20250817190327224752](../assets/usage/build/artifact_download.png)
+    在gui上，您需要在artifact页面上点击对应的artifact行上的download按钮，即可下载artifact源文件到指定路径。
+    ![image-20250817190327224752](../assets/usage/build/artifact_download.png)
 
 当artifact编译失败时，可以通过以下命令来查看log(目前支持查看docker，后续会加上saas）：
 

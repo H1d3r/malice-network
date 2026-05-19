@@ -5,6 +5,7 @@
 A Session represents an active connection between an implant and the C2 server.
 
 **Key attributes:**
+
 - `SessionId` — unique identifier (MD5 hash), supports prefix matching
 - System info — OS, architecture, hostname, username, process info
 - Privilege flag — `*` indicates admin/elevated privileges
@@ -30,6 +31,7 @@ Session data is persisted to the database and automatically restored after a ser
 A Listener is a network service that accepts implant connections. Each listener can manage multiple pipelines.
 
 **Types:**
+
 - **TCP** — direct TCP connection
 - **HTTP/HTTPS** — HTTP-based transport
 - **Bind** — reverse bind mode
@@ -45,11 +47,13 @@ Listeners communicate with the server via the `ListenerRPC` gRPC service.
 ## Pipeline
 
 A Pipeline is a concrete transport channel under a listener, responsible for:
+
 - Encryption (TLS, custom encryption)
 - Protocol parsing and frame handling
 - Carrying the actual implant connections
 
 **Types:**
+
 - **TCP Pipeline** — raw TCP, supports TLS/mTLS
 - **HTTP Pipeline** — HTTP(S) transport
 - **Bind Pipeline** — reverse connection
@@ -70,6 +74,7 @@ pipeline stop --name my_tcp                      # Stop a pipeline
 A Task is an execution unit sent to the implant. Every command execution creates a task.
 
 **Key attributes:**
+
 - `TaskId` — unique identifier
 - Type — the corresponding command name
 - Status — Created → Running → Finished / Cancelled
@@ -91,6 +96,7 @@ When executing commands via the MCP `execute_command` tool, the system automatic
 A Module is a capability category declared by the implant. Different implant builds can include different module combinations.
 
 **Common modules:**
+
 - `exec` — command execution
 - `ls`, `pwd`, `cd`, `cat` — file system
 - `upload`, `download` — file transfer
@@ -111,6 +117,7 @@ modules load <addon>             # Load an extension module
 An Event is a real-time notification pushed by the server to all connected clients.
 
 **Event types:**
+
 - `EventSession` — session online, offline, or updated
 - `EventTask` — task status change (started, completed, cancelled)
 - `EventPipeline` — pipeline status change

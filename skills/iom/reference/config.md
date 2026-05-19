@@ -42,6 +42,7 @@ log:
 ```
 
 These can also be overridden via startup parameters:
+
 - `--mcp 127.0.0.1:5005` overrides the MCP address
 - `--rpc 127.0.0.1:15004` overrides the RPC address
 

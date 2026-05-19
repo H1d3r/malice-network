@@ -1,3 +1,7 @@
+---
+title: MAL Builtin API
+---
+
 ## artifact
 
 ### artifact_bin

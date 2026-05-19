@@ -13,6 +13,7 @@ curl -L "https://raw.githubusercontent.com/chainreactors/malice-network/master/i
 ```
 
 **系统要求：**
+
 - 操作系统：Ubuntu、Debian 或 CentOS
 - 权限：root 或 sudo
 - 网络连接：可访问 `github.com`、`ghcr.io`、`docker.com`
@@ -48,6 +49,7 @@ sudo -E bash install.sh
    ```
 
 **安装脚本自动完成：**
+
 1. 检查基础依赖（`curl`、`unzip`）
 2. 下载并安装 Malice Network 服务端及客户端
 3. 下载 `malefic.zip`，并解压到 `./malefic/source_code`
@@ -157,6 +159,7 @@ cd /opt/iom/malice-network
 ```
 
 Server 启动后生成两个配置文件：
+
 - `listener.auth` - Listener 凭证
 - `admin_[server_ip].auth` - Client 登录凭证
 
@@ -167,6 +170,7 @@ Server 启动后生成两个配置文件：
 ```
 
 Client 会自动连接 Server 并将凭证移动到用户配置目录：
+
 - Windows: `C:\Users\user\.config\malice\configs`
 - Linux: `/home/[username]/.config/malice/configs`
 - macOS: `/Users/[username]/.config/malice/configs`
@@ -184,6 +188,7 @@ Client 会自动连接 Server 并将凭证移动到用户配置目录：
 ### 下载文件
 
 从 [Releases](https://github.com/chainreactors/malice-network/releases/tag/nightly) 下载：
+
 - `iom.vsix` - VSCode 插件
 - `iom_*` - Client 文件
 

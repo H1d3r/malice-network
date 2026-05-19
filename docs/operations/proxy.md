@@ -1,3 +1,7 @@
+---
+title: REM 代理与隧道
+---
+
 
 
 在IoM中，绝大部分网络相关功能都基于rem实现。 但因为rem并非基于rust实现， 但出于多种因素考虑， rem没有成为默认开启的选项， 我们提供了多种加载rem的方式， 使得rem能在绝大多数情况下无缝集成。
@@ -6,7 +10,8 @@
 
 ## 加载rem
 
-!!! tips "v0.1.1开始, rem的使用被大大简化，虽然不是默认模块， 但是已经简化到不带来额外的使用和理解困难的程度"
+!!! tip "rem 使用简化"
+    v0.1.1开始, rem的使用被大大简化，虽然不是默认模块， 但是已经简化到不带来额外的使用和理解困难的程度
 
 
 在IoM的v0.1.0中集成了一系列rem相关的功能. IoM通过三种方式打通implant与rem的交互。
@@ -25,13 +30,15 @@ execute_shellcode rem.exe -- -c [rem_link] ...
 ```
 
 !!! example "优点"
-	- 无文件落地
-	- 支持RDI和PIC两种加载方式
+    
+    - 无文件落地
+    - 支持RDI和PIC两种加载方式
 
 !!! danger "缺点"
-	- 有新进程产生，并且无法使用inline版本的加载器。对某些高强度端上对抗环境有暴露面
-	- 与pipeline交互有延迟， 需要等待30-60秒才能将新的pivoting数据同步
-	- 只支持windows
+    
+    - 有新进程产生，并且无法使用inline版本的加载器。对某些高强度端上对抗环境有暴露面
+    - 与pipeline交互有延迟， 需要等待30-60秒才能将新的pivoting数据同步
+    - 只支持windows
 
 ### 方法2 动态加载 module
 
@@ -41,26 +48,29 @@ execute_shellcode rem.exe -- -c [rem_link] ...
 
 上线后，在IoM命令行中执行以下代码即可安装并使用rem。
 
-!!! tips "rem_community已在v0.1.1打包到client"
+!!! tip "rem_community"
+    rem_community已在v0.1.1打包到client
 
-```sh
-# 加载rem dll
-rem_community load 
+    ```sh
+    # 加载rem dll
+    rem_community load 
 
-# 通过 pipeline 名
-rem_community socks5 rem_pipeline
+    # 通过 pipeline 名
+    rem_community socks5 rem_pipeline
 
-# 通过直接 link 地址
-rem_community socks5 tcp://10.0.0.1:5555
-```
+    # 通过直接 link 地址
+    rem_community socks5 tcp://10.0.0.1:5555
+    ```
 
 !!! example "优点"
-	- 相比`execute-exe/execute-shellcode`好的地方在于， 不会有新进程fork， 一切都在当前进程中完成。 
-	- 联动IoM rem pipeline，能实时同步pivoting并进行后续管理
+    
+    - 相比`execute-exe/execute-shellcode`好的地方在于， 不会有新进程fork， 一切都在当前进程中完成。 
+    - 联动IoM rem pipeline，能实时同步pivoting并进行后续管理
 
 !!! danger "缺点"
-	- 需要反射加载dll, 可能会留下EDR的部分暴露面
-	- 只支持windows
+    
+    - 需要反射加载dll, 可能会留下EDR的部分暴露面
+    - 只支持windows
 
 ### 方法3 静态链接rem
 
@@ -79,36 +89,40 @@ implants:
 malefic-mutant generate beacon
 ```
 
-!!! danger "windows 仅x86_64-pc-windows-gnu支持, linux 均支持 "
+!!! danger "静态链接限制"
+    windows 仅x86_64-pc-windows-gnu支持, linux 均支持
 
-静态链接的beacon体积会膨胀不少， 但是可以直接使用rem
+    静态链接的beacon体积会膨胀不少， 但是可以直接使用rem
 
-![]
+    ![]
 
-例如搭建反向socks5代理只需要
+    例如搭建反向socks5代理只需要
 
-```
-reverse [rem_defualt]
-```
+    ```
+    reverse [rem_defualt]
+    ```
 
-手动指定rem命令
-```
-rem_dial [rem_default] -- -c ...
-```
+    手动指定rem命令
+
+    ```
+    rem_dial [rem_default] -- -c ...
+    ```
 
 !!! example "优点"
-	- 支持windows/linux
-	- 联动IoM rem pipeline
-	- 能复用rem的信道实现上线
-	- 只在本进程中执行， 不会fork新进程
-	
+    
+    - 支持windows/linux
+    - 联动IoM rem pipeline
+    - 能复用rem的信道实现上线
+    - 只在本进程中执行， 不会fork新进程
+    
 !!! danger "缺点"
-	- 体积会膨胀， 大概在10M左右， upx后3-4M
-	- 静态链接库不再支持ollvm, 带来一定的静态特征
+    
+    - 体积会膨胀， 大概在10M左右， upx后3-4M
+    - 静态链接库不再支持ollvm, 带来一定的静态特征
 
 ## rem信道上线
 
-基于静态链接的rem有一个独一无二的优势。 可以直接通过rem构建的内存中的虚拟信道上线。 实现**malefic over rem**
+基于静态链接的rem有一个独一无二的优势。 可以直接通过rem构建的内存中的虚拟信道上线。 实现 **malefic over rem**
 
 需要修改implant 的`config.yaml`
 

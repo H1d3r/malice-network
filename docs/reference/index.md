@@ -34,5 +34,5 @@ SDK 文档位于开发文档中：[SDK 文档](../development/sdk/)。
 ## 相关文档
 
 - [操作指南](../operations/) - 使用引导与操作手册
-- [MAL 插件开发](../development/mal/) - 插件开发文档
-- [协议文档](../development/protocol/) - 协议规范
+- [MAL 插件开发](../development/mals/) - 插件开发文档
+- [核心概念](../concept.md) - 架构与协议边界

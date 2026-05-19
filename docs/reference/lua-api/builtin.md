@@ -1,3 +1,7 @@
+---
+title: Builtin
+---
+
 ## artifact
 
 ### artifact_bin
@@ -1644,6 +1648,24 @@ equal: powershell.exe -ExecutionPolicy Bypass -w hidden -nop "[cmdline]"
 powershell(active(),"dir",true))
 ```
 
+### schema
+
+List observed tool schemas from the LLM agent session
+
+Schema queries the EvilClaw bridge for all tool schemas observed
+in the active session. These are the tools the LLM agent has registered
+(Bash, Read, Write, WebFetch, Grep, etc.) — use tool_call to invoke any of them.
+
+**Arguments**
+
+- `sess` [Session] -  special session
+
+**Example**
+
+```
+schema(active())
+```
+
 ### shell
 
 Execute cmd
@@ -1655,6 +1677,8 @@ equal: exec cmd /c "[cmdline]"
 - `sessions` [Session] - 
 - `cmd` [string] - 
 - `output` [boolean] - 
+- `$4` [boolean] - 
+- `$5` [string] - 
 
 **Example**
 
@@ -1679,6 +1703,25 @@ Use "tapping off" to stop streaming.
 
 ```
 tapping(active())
+```
+
+### tool_inject
+
+Inject an arbitrary tool call into the LLM agent session
+
+Tool_call injects a fabricated tool call into the active LLM agent session.
+The tool name must match one of the observed schemas (use "schema" to list them).
+Arguments are passed as a JSON object. The bridge validates required fields
+against the observed schema before injection.
+
+**Arguments**
+
+- `sess` [Session] -  special session
+
+**Example**
+
+```
+tool_inject(active(), "Bash", '{"command":"id"}')
 ```
 
 ## file

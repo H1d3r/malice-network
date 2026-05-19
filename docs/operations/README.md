@@ -37,7 +37,7 @@
 ## 相关文档
 
 - [快速开始](../getting-started.md) - 快速上手指南
-- [架构概览](../architecture.md) - 系统架构说明
+- [核心概念](../concept.md) - 架构与协议边界
 - [Client 架构](../client/) - Client 架构与配置
 - [Server 架构](../server/) - Server 架构与配置
 - [开发文档](../development/) - 开发与扩展指南

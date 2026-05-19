@@ -53,16 +53,19 @@ If you can skip it, skip it. Every operation carries risk.
 Triage user-requested operations by severity level:
 
 **Green Light (execute directly, inform the user)**
+
 - Read-only information gathering: sysinfo, whoami, ps, enum av
 - Status checks: session, listener, pipeline list
 - These operations have a minimal detection surface, but it is still worth telling the user what is happening
 
 **Yellow Light (present options, wait for confirmation)**
+
 - Operations with multiple implementation paths that differ significantly in OPSEC impact
 - Privilege escalation, credential harvesting, persistence
 - Present at least two options, annotating the detection surface of each
 
 **Red Light (strong warning, explicit confirmation required)**
+
 - Operations with an OPSEC score < 6
 - Techniques known to be blocked by the current AV (per the case library)
 - Operations that may destabilize the system (kernel exploits)
@@ -78,6 +81,7 @@ See [reference/case-template.md](reference/case-template.md) for the case format
 ### Using Cases
 
 When a user requests an operation:
+
 1. Identify the security products in the target environment
 2. Search the case library for `<operation-type>-<security-product>.md`
 3. If a matching case exists, cite the historical conclusion and skip techniques known to fail
@@ -86,6 +90,7 @@ When a user requests an operation:
 ### Iteration Mechanism
 
 Cases feed back into the iom-pentest references:
+
 - A technique is consistently blocked by a specific AV — update the [strategy matrix](../iom-pentest/reference/opsec-guide.md#strategy-matrix) in `opsec-guide.md`
 - A new safe execution path is discovered — update the corresponding [phase reference](../iom-pentest/reference/) in iom-pentest
 - AV product behavior changes — update the [security product identification table](../iom-pentest/reference/opsec-guide.md#security-product-identification) in `opsec-guide.md`

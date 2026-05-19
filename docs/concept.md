@@ -1,736 +1,323 @@
 ---
-title: Internet of Malice · 核心概念
+title: 核心概念
+description: IoM 的组件架构、Server 协议边界、Listener 通信路径和文档导航。
 ---
 
 # IoM 核心概念
 
-IoM采用高度解耦的分布式架构，本文档介绍各个核心组件的概念和作用。
+IoM 采用高度解耦的分布式架构，由 Client、Server、Listener、Malefic 和 MAL 插件体系协同组成。本文保留系统层面的概念、边界和阅读路径；命令用法、RPC 方法、协议字段和任务状态等实现细节放在对应的用户手册或开发文档中。
 
-!!! tip "与开发者指南的关系"
-    本文档介绍概念和架构，具体开发实践请参考[开发者贡献指南](/IoM/guideline/develop/)
+!!! tip "与开发文档的关系"
+    本文档介绍概念和架构。具体开发实践请参考 [开发文档](/IoM/development/)。
 
 ## 相关项目
 
-IoM作为完整的进攻性基础设施，由多个相互协作的项目组成。
+IoM 作为完整的进攻性基础设施，由多个相互协作的项目组成。
 
 ### 核心项目
 
-- **[malice-network](https://github.com/chainreactors/malice-network)**: Server/Client/Listener核心框架
-- **[malefic](https://github.com/chainreactors/malefic)**: Rust实现的跨平台Implant
-- **[proto](https://github.com/chainreactors/proto)**: gRPC通讯协议定义
+- **malice-network** ：Server、Client、Listener、构建服务和 IoM 文档迁移脚本。
+- **malefic** ：Rust 实现的跨平台 Implant、构建工具和模块体系。
+- **IoM-go** ：Proto 定义和 gRPC client，位于 `external/IoM-go` 子模块。
 
 ### 插件生态
 
-- **[mals](https://github.com/chainreactors/mals)**: 官方插件仓库和索引
-- **[mal-community](https://github.com/chainreactors/mal-community)**: 社区插件合集
-
+- **mals** ：Client 侧插件生态和自动化脚本。
+- **mal-community** ：社区插件合集和可复用 MAL 脚本。
 
 ## IoM 核心组件
 
-IoM采用高度解耦的分布式架构，由以下核心组件协同工作：
+IoM 的核心设计是把用户交互、状态管理、网络入口和目标侧执行分离，让每个部分可以独立扩展和部署。
 
 ```mermaid
 graph TB
     subgraph "用户层"
-        Client["Client<br/>用户交互界面"]
-        Mal["Mal插件<br/>Lua脚本扩展"]
+        Client["Client / SDK / MCP<br/>用户交互与自动化入口"]
+        Mals["MAL 插件<br/>Lua 脚本扩展"]
     end
-    
+
     subgraph "控制层"
-        Server["Server<br/>核心数据处理"]
-        EventBus["事件总线<br/>状态同步"]
+        Server["Server<br/>状态管理与调度"]
+        EventBus["事件系统<br/>状态同步与通知"]
     end
-    
+
     subgraph "网络层"
         Listener["Listener<br/>分布式监听"]
-        Pipeline["Pipeline<br/>数据管道"]
+        Pipeline["Pipeline<br/>传输管道"]
         Parser["Parser<br/>协议解析"]
-        Cryptor["Cryptor<br/>流式加密"]
+        Encryption["Encryption<br/>传输加密"]
     end
-    
+
     subgraph "执行层"
-        Implant["Implant<br/>目标执行"]
+        Implant["Malefic<br/>目标侧运行时"]
         Module["Module<br/>功能模块"]
         Addon["Addon<br/>二进制缓存"]
     end
-    
+
     subgraph "生态层"
-        BOF["BOF<br/>CobaltStrike兼容"]
-        Armory["Armory<br/>Sliver生态"]
-        Kit["Kit<br/>OPSEC工具包"]
+        BOF["BOF<br/>Cobalt Strike 兼容"]
+        Armory["Armory<br/>Sliver 兼容"]
+        Kit["Kit<br/>加载与执行能力"]
     end
-    
-    %% 核心通信流
-    Client -.->|gRPC| Server
-    Server -.->|gRPC Stream| Listener
-    Listener -.->|TCP/HTTP| Implant
-    
-    %% 内部关联
+
+    Client -.->|"gRPC / mTLS"| Server
+    Server -.->|"gRPC Stream"| Listener
+    Listener -.->|"TCP / HTTP / REM / Bind"| Implant
+
     Server --> EventBus
     Listener --> Pipeline
     Pipeline --> Parser
-    Pipeline --> Cryptor
+    Pipeline --> Encryption
     Implant --> Module
     Implant --> Addon
-    
-    %% 插件扩展
-    Client --> Mal
+
+    Client --> Mals
     Implant --> BOF
     Client --> Armory
     Implant --> Kit
-    
-    %% 状态同步
-    Server -.->|事件广播| Client
-    Server -.->|状态同步| Listener
-    
-    classDef clientStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef serverStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef networkStyle fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef implantStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef ecosystemStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
-    
-    class Client,Mal clientStyle
-    class Server,EventBus serverStyle
-    class Listener,Pipeline,Parser,Cryptor networkStyle
-    class Implant,Module,Addon implantStyle
-    class BOF,Armory,Kit ecosystemStyle
+
+    Server -.->|"事件广播"| Client
+    Server -.->|"状态同步"| Listener
 ```
 
+| 层级 | 组件 | 职责 |
+| --- | --- | --- |
+| 用户层 | Client / SDK / MCP | 操作者入口、脚本化控制和 AI Agent 集成 |
+| 控制层 | Server | 全局状态、认证、事件分发、操作调度 |
+| 网络层 | Listener / Pipeline | 独立网络入口、协议解析、传输加密 |
+| 执行层 | Malefic | 目标侧运行时、模块执行、加载器能力 |
+| 生态层 | MAL / Module / BOF / Armory | 自动化脚本、模块扩展和生态兼容 |
 
-## 通讯流程
+## 通信流程
 
-IoM的数据流转遵循严格的路径，确保安全和可控性。
+IoM 的数据流转遵循固定路径：Client 不直接连接 Implant，Listener 不承担全局状态管理，Server 负责统一调度和事件分发。
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
+    participant C as Client / SDK / MCP
     participant S as Server
     participant L as Listener
-    participant I as Implant
-    
-    Note over C,I: 1. 初始化连接
-    C->>S: gRPC连接建立
-    L->>S: gRPC Stream连接
-    I->>L: TCP/HTTP Beacon连接
-    
-    Note over C,I: 2. 命令下发
-    C->>S: 发送命令请求
-    S->>S: 生成Spite消息
-    S->>L: 转发Spite (gRPC Stream)
-    L->>L: Parser解析 + Cryptor加密
-    L->>I: 发送加密数据包
-    
-    Note over C,I: 3. 结果返回
-    I->>L: 返回执行结果
-    L->>L: Cryptor解密 + Parser解析
-    L->>S: 回传Spite (gRPC Stream)
-    S->>S: 更新Session状态
-    S->>C: 返回结果 (事件系统)
-    
-    Note over C,I: 4. 状态同步
-    S->>C: 广播状态更新事件
-    S->>L: 同步Session状态
+    participant I as Malefic
+
+    Note over C,I: 初始化连接
+    C->>S: gRPC / mTLS 连接
+    L->>S: ListenerRPC 双向流
+    I->>L: Beacon / Bind 连接
+
+    Note over C,I: 操作下发
+    C->>S: 控制请求
+    S->>L: 转发到对应 Pipeline
+    L->>I: Parser + Encryption + Transport
+
+    Note over C,I: 结果返回
+    I->>L: 执行结果
+    L->>S: 回传 Spite 消息
+    S->>C: 事件与响应
 ```
+
+这种拆分让 Listener 可以独立部署、替换和横向扩展，也让 Client、SDK、MCP 共享同一套 Server 能力。
 
 ## Server
 
-数据处理和状态管理的核心组件。
+Server 是数据处理、状态管理和协议边界的核心组件。代码入口集中在 `server/rpc/`、`server/internal/core/`、`server/internal/db/` 和 `server/internal/parser/`。
 
-**核心职责**:
+**核心职责** ：
 
-- 所有数据的中央管理和持久化
-- 提供gRPC服务供Client和Listener调用
-- 状态集合管理和事件分发
-- 任务调度和结果处理
+- 管理 Operator、Listener、Pipeline、Session 和事件。
+- 提供 gRPC 服务供 Client、SDK、MCP 和 Listener 调用。
+- 维护当前存活状态，并将 Session、Task、Context、Artifact 等历史数据持久化到数据库。
+- 将 Client 操作转化为 Spite 消息，分发到对应 Listener，并把结果转化为 Task 内容和事件。
 
-**架构特点**:
+**架构特点** ：
 
-- Client/Listener中只保留只读副本
-- 内存中保留当前存活的数据
-- 历史数据保存在数据库中
+- `server/rpc/grpc.go` 在同一个 gRPC server 上注册 `MaliceRPC`、`RootRPC` 和 `ListenerRPC`。
+- `server/rpc/generic.go` 创建 Task、构造 Spite、查找 Pipeline 的 `SpiteStream`，并把响应写回 Task。
+- `server/rpc/rpc-listener.go` 维护 Listener 注册、`JobStream` 控制流和 `SpiteStream` 数据回传。
+- `server/internal/core/` 维护运行时的 Session、Task、Listener、Job、Connection 和 EventBroker。
+- Server 与 Listener 可以使用同一二进制，以不同配置启动不同模式。
 
-**状态管理**:
+!!! tip "开发入口"
+    Server 开发详见 [Server 开发](/IoM/development/server/) 和 [Server Internals](/IoM/development/server/internals/)。
 
-| 状态集合 | 用途 | 说明 |
-|----------|------|------|
-| **clients** | 用户连接管理 | 正在连接的所有用户 |
-| **listeners** | 监听器管理 | 所有Listener实例 |
-| **jobs** | 任务管道管理 | Pipeline实例(TCP、Website等) |
-| **events** | 事件系统 | 轮询用户并广播事件 |
-| **sessions** | 会话管理 | 存活的Implant会话 |
+### Server 协议边界
 
-**RPC服务**:
-通过gRPC实现对状态的CRUD操作、事件通知、Listener交互等功能。
+IoM 的协议边界主要落在 Server 侧：Client、SDK、MCP 通过 `MaliceRPC` 进入控制面；Listener 通过 `ListenerRPC` 与 Server 保持控制流和数据流；Implant 数据最终以 Spite protobuf 消息进入 Server 的任务和事件系统。
 
-!!! info "二进制文件"
-    v0.0.2后Server与Listener使用同一个二进制文件，通过不同配置启动不同模式。
+```text
+Client / SDK / MCP
+└─ MaliceRPC / gRPC / mTLS
+   └─ Server: Session / Task / Event / Build / Listener state
+      └─ ListenerRPC
+         ├─ JobStream: Server -> Listener 控制 Pipeline / Website / REM
+         └─ SpiteStream: Listener <-> Server 转发 Spite
+            └─ Listener Pipeline / Parser / Encryption / Transport
+               └─ Malefic / Pulse
+```
 
-!!! tip "开发指南"
-    Server开发详见[Server开发指南](/IoM/guideline/develop/server/)
+Server 对外暴露三类 gRPC 服务：
 
-### Session
+| 服务 | 调用方 | 代码与 proto | 作用 |
+| --- | --- | --- | --- |
+| `MaliceRPC` | Client / SDK / MCP | `server/rpc/*`，`services/clientrpc/service.proto` | Session、Task、Build、Module、Listener、事件和后渗透操作 |
+| `RootRPC` | 本地管理入口 | `server/rpc/rpc-root.go`，`client/rootpb/root.proto` | Operator 和 Listener 管理 |
+| `ListenerRPC` | Listener | `server/rpc/rpc-listener.go`，`services/listenerrpc/service.proto` | Listener 注册、Pipeline 控制、JobStream、SpiteStream、Build/Website/REM 代理 |
 
-Implant会话的状态管理结构，保存单个Implant的完整信息。
+Proto 定义位于 `external/IoM-go/generate/proto/`：
 
-**核心功能**:
-Session是Server中最复杂的数据结构，负责管理单个Implant的完整生命周期。
+| Proto 文件 | 用途 |
+| --- | --- |
+| `client/clientpb/client.proto` | Client、Session、Task、Pipeline、Event 等消息 |
+| `client/rootpb/root.proto` | Root 管理消息 |
+| `implant/implantpb/implant.proto` | Implant 通信消息 |
+| `services/clientrpc/service.proto` | Client RPC 服务 |
+| `services/listenerrpc/service.proto` | Listener RPC 服务 |
 
-**子状态集合**:
-
-| 子状态      | 内容            | 用途         |
-| -------- | ------------- | ---------- |
-| **基本信息** | 操作系统、进程信息、权限等 | 环境识别和决策    |
-| **任务管理** | 正在执行的Task列表   | 任务状态跟踪     |
-| **连接状态** | 网络连接的逻辑状态     | 连接管理和故障恢复  |
-| **数据缓存** | 历史数据缓存        | 性能优化和数据持久化 |
-| **模块信息** | 可用Module列表    | 功能能力管理     |
-| **组件管理** | 已加载的Addon     | 内存管理和资源控制  |
-| ...      |               |            |
-
-并且还有复杂的同步机制，将在client与listener上维护session的备份。 
-## Implant
-
-植入物，在目标系统中执行的核心组件。
-
-https://github.com/chainreactors/malefic/
-
-**主要类型**:
-
-- **Malefic**: 功能完整的主Implant，支持Beacon/Bind模式
-- **Pulse**: 轻量级上线马，仅4KB大小，类似CS的artifact  
-- **Prelude**: 多段上线的中间阶段，支持权限维持等
-
-**核心特性**:
-
-- 基于Rust实现，跨平台支持
-- 模块化设计，动态加载功能
-- 多种通讯模式(Beacon/Bind)
-- OPSEC友好的设计
-
-**模块系统**:
-Implant通过Module系统实现功能扩展，支持编译时静态链接和运行时动态加载。
-
-IoM支持多种格式的无文件执行：
-
-| 类型 | 描述 | 特性 |
-|------|------|------|
-| **execute-assembly** | CLR程序执行 | 支持bypass AMSI/ETW |
-| **execute-exe** | PE程序反射执行 | 参数欺骗、进程注入 |
-| **inline-exe** | 当前进程内执行 | 无新进程创建 |
-| **execute-dll** | DLL反射执行 | 支持sideload |
-| **execute-shellcode** | Shellcode执行 | 灵活的注入方式 |
-| **powershell** | Unmanaged PowerShell | 绕过PowerShell限制 |
-| **bof** | Beacon Object File | 轻量级功能扩展 |
-上诉拓展能力能满足绝大部分场景。
-
-!!! tip "详细文档"
-    - Implant开发详见[Implant开发指南](/IoM/guideline/develop/implant/)
-    - 编译配置参考[Implant构建指南](/IoM/manual/implant/build/)
-    - 模块开发参考[Module开发文档](/IoM/manual/implant/modules/)
+!!! warning "Proto 修改规范"
+    Proto 变更在 `external/IoM-go` 子模块内进行，不要手动编辑生成的 Go 代码。变更后需更新子模块引用并执行 `go mod tidy`。
 
 ## Client
 
-用户交互界面，负责命令输入和结果展示。
+Client 是操作者的交互界面，也是 SDK、MCP 和 MAL 插件体系共享的控制入口。
 
-**架构特性**:
+**架构特性** ：
 
-- 通过gRPC与Server通讯
-- 支持CLI和GUI两种模式
-- 高度可扩展的插件系统
+- 通过 gRPC/mTLS 与 Server 通信。
+- 支持 CLI、TUI、脚本和 GUI 等多种交互形态。
+- 通过 MAL 插件系统扩展命令、资源和工作流。
+- 可以把命令树暴露给 MCP，供外部 AI Agent 调用。
 
+!!! tip "使用与开发"
+    Client 使用见 [Client](/IoM/user-guide/)；开发见 [Client 开发](/IoM/development/client/)；MAL 插件见 [MAL 开发](/IoM/development/mals/)。
 
-!!! tip "详细文档"
-    - Client开发详见[Client开发指南](/IoM/guideline/develop/client/)
-    - 使用手册参考[Client使用指南](/IoM/manual/manual/client/)
-    - Mal插件开发参考[Mal插件文档](/IoM/manual/mal/)
+## Listener
 
-
-## 通讯
-
-C2的本质就是安全的通讯与命令下发。我们需要将Client/Server/Listener/Implant 四端打通， 因此通讯设计是其中核心。 
-### Spite
-
-Spite是整个IoM通讯的最小单元，是server/listener <--> implant之间进行数据交换的载体。
-
-**核心特性**:
-
-- 基于Protobuf实现，高效序列化
-- 统一的数据交换格式
-- 支持任务状态管理
-- 模块化的body设计
-
-**结构定义**:
-```protobuf
-message Spite {
-  string name = 1;      // 目标module名称  
-  uint32 task_id = 2;   // 任务ID
-  uint32 error = 5;     // 错误码
-  Status status = 6;    // 任务状态
-  
-  oneof body {          // 具体数据载体
-    Request request = 24;     // 通用请求
-    Response response = 25;   // 通用响应  
-    LoadModule load_module = 31;
-    ExecuteBinary execute_binary = 42;
-    // ... 更多模块特定的消息类型
-  }
-}
-```
-
-**使用场景**:
-
-- Client通过RPC调用生成Spite
-- Server将Spite转发给对应Listener  
-- Listener通过Parser和Cryptor处理Spite
-- Implant接收Spite并路由到对应Module执行
-
-!!! info "协议定义"
-    完整定义请参考[proto仓库](https://github.com/chainreactors/proto)的[implant.proto](https://github.com/chainreactors/proto/blob/master/implant/implantpb/implant.proto) 
-
-### Listener
-
-分布式监听服务，负责与Implant的实际通讯。
-
-**设计理念**:
-IoM的Listener与传统C2框架最大的不同是完全独立于Server，可以部署在任意服务器上，通过gRPC Stream与Server进行全双工通讯。
+Listener 是分布式网络入口，负责运行 Pipeline 并与 Implant 实际通信。它和传统 C2 中固定绑定在 Server 上的 listener 不同，可以独立部署在任意网络位置，并通过 `ListenerRPC` 与 Server 进行全双工通信。
 
 ```mermaid
 graph LR
-	MSF["MSF\n监听在本机"] --> Cobaltstrike["Cobaltstrike\n监听在Server"] --> IoM["IoM\n分布式监听"]
+    MSF["传统模式<br/>监听在本机"] --> CS["集中模式<br/>监听在 Server"]
+    CS --> IoM["IoM<br/>分布式 Listener"]
 ```
 
-**Listener内部架构**:
+**核心特性** ：
 
-```mermaid
-graph TB
-    subgraph "Listener实例"
-        subgraph "核心组件"
-            Core[Listener核心<br/>管理与调度]
-            RPC[gRPC Client<br/>与Server通讯]
-        end
-        
-        subgraph "Pipeline管理"
-            TCP[TCP Pipeline<br/>TCP/TLS监听]
-            HTTP[HTTP Pipeline<br/>HTTP/HTTPS服务]
-            Bind[Bind Pipeline<br/>主动连接]
-            Website[Website Pipeline<br/>文件托管]
-            Pulse[Pulse Pipeline<br/>轻量级上线]
-        end
-        
-        subgraph "数据处理层"
-            Parser[Parser<br/>协议解析器]
-            Cryptor[Cryptor<br/>加密解密器]
-            Forwarder[Forwarder<br/>数据转发]
-        end
-        
-        subgraph "连接层"
-            Conn1[连接1]
-            Conn2[连接2]
-            ConnN[连接N...]
-        end
-        
-        Core --> RPC
-        Core --> TCP
-        Core --> HTTP
-        Core --> Bind
-        Core --> Website
-        Core --> Pulse
-        
-        TCP --> Parser
-        HTTP --> Parser
-        Bind --> Parser
-        Website --> Parser
-        Pulse --> Parser
-        
-        Parser --> Cryptor
-        Cryptor --> Forwarder
-        
-        Forwarder --> Conn1
-        Forwarder --> Conn2
-        Forwarder --> ConnN
-    end
-    
-    subgraph "外部连接"
-        Server[Server<br/>gRPC Stream]
-        Implant1[Implant A]
-        Implant2[Implant B]
-        ImplantN[Implant N]
-    end
-    
-    RPC -.->|双向流| Server
-    Conn1 -.->|加密通讯| Implant1
-    Conn2 -.->|加密通讯| Implant2
-    ConnN -.->|加密通讯| ImplantN
-    
-    classDef coreStyle fill:#e3f2fd
-    classDef pipelineStyle fill:#e8f5e8
-    classDef dataStyle fill:#fff3e0
-    classDef connStyle fill:#f1f8e9
-    
-    class Core,RPC coreStyle
-    class TCP,HTTP,Bind,Website,Pulse pipelineStyle
-    class Parser,Cryptor,Forwarder dataStyle
-    class Conn1,Conn2,ConnN connStyle
-```
+- **分布式部署** ：Listener 可以部署在独立服务器、边界节点或代理链路中。
+- **故障隔离** ：Listener 故障不会直接破坏 Server 状态。
+- **多形态支持** ：不同 Pipeline 可以承载 TCP、HTTP、Bind、REM 等传输形态。
+- **实时同步** ：Listener 通过 `JobStream` 接收 Server 控制，通过 `SpiteStream` 回传 Implant 结果。
 
-**核心特性**:
+**内部组件** ：
 
-- **分布式部署**: 可在任意服务器上部署
-- **完全解耦**: 与Server独立，故障隔离
-- **多形态支持**: 支持各种伪装和隐蔽形式
-- **实时通讯**: 通过gRPC Stream与Server双向通讯
+| 组件 | 职责 |
+| --- | --- |
+| Listener Core | 管理本地 Pipeline，并向 Server 注册 Listener 状态 |
+| Pipeline | 具体传输通道，当前代码中包含 TCP、HTTP、Bind、Website、REM 和 Custom |
+| Parser | 识别 Malefic / Pulse，并将网络字节流与 Spite 消息互转 |
+| Encryption | 在 Implant 传输上叠加 AES、XOR 等加密策略 |
+| Forwarder | 在连接和 Server 流之间转发数据 |
 
-**内部架构**:
+!!! tip "配置入口"
+    Listener 使用和 Pipeline 配置见 [Listener](/IoM/user-guide/listener/)。
 
-- **Listener核心**: 管理Pipeline和与Server交互
-- **Pipeline**: 具体的数据管道实现
-- **Forwarder**: 数据转发组件
-- **Parser**: 协议解析器
-- **Cryptor**: 加密解密器
+## Malefic
 
-!!! tip "开发指南"
-    Listener开发详见[Server开发指南](/IoM/guideline/develop/server/#listener开发)
+Malefic 是目标侧 Implant 框架，负责运行模块、接收指令和返回执行结果。它已经作为独立顶级文档呈现，IoM 这里只保留系统关系。
 
-### Pipeline
+**主要形态** ：
 
-数据管道，Listener与Implant/WebShell交互的具体实现。
+| 形态 | 说明 |
+| --- | --- |
+| Malefic | 功能完整的主 Implant，支持 Beacon / Bind 等模式 |
+| Pulse | 轻量级上线组件，用于更小的投递场景 |
+| Prelude | 多阶段加载和中间阶段组件 |
+| Proxydll / SRDI / Loader | 不同加载、注入和投递形态 |
 
-**概念说明**:
+**与 IoM 的关系** ：
 
-Pipeline相当于传统C2框架中的Listener概念，但IoM进一步细分了其实现。每个Listener可以运行多个Pipeline，Pipeline负责与Implant的具体交互。
+- Server 只调度目标操作，不直接处理目标网络连接。
+- Listener 将网络字节流转换为 Spite 消息。
+- Malefic 模块根据消息执行对应能力，并把结果按同一路径返回。
 
-**主要类型**:
+!!! tip "Malefic 文档"
+    Malefic 架构、构建、模块和 Mutant 见 [Malefic](/malefic/)。
 
-| 类型             | 用途                | 状态      |
-| -------------- | ----------------- | ------- |
-| **TCP/TLS**    | 监听TCP端口，默认配置      | ✅ 稳定    |
-| **HTTP/HTTPS** | HTTP协议通讯          | 🛠️ 开发中 |
-| **Bind**       | 主动连接bind模式Implant | ✅ 稳定    |
-| **Pulse**      | 轻量级Pulse专用管道      | ✅ 稳定    |
-| **Website**    | 静态文件托管(类似CS的host) | ✅ 稳定    |
-| **REM**        | 流量代理和转发服务         | 🛠️ 计划中 |
+## REM 网络工具包
 
-**交互模式**:
+REM 是 IoM 相关的网络工具包，提供流量代理、隧道和转发能力。它可以作为独立服务使用，也可以与 Listener 和 Pipeline 组合部署。
 
-- **Beacon模式**: 解析心跳包并返回任务数据
-- **Bind模式**: 主动向目标发起连接  
-- **Website模式**: 提供HTTP服务分发文件
-- **代理模式**: 提供端口转发和流量中转
+**核心功能** ：
 
-**可扩展性**:
-通过实现Pipeline的基本RPC控制接口，可以接入各种形式的Pipeline，如云函数、代理、[LOLC2](https://lolc2.github.io/)等。
-
-!!! important "设计特点"
-    Pipeline比传统Listener设计更加灵活，支持更丰富的功能，并且与Parser、Cryptor完全解耦。
-
-### Parser
-
-协议解析器，控制最终数据包格式的组件。
-
-**设计目的**:
-Parser提供了协议实现的抽象层。虽然内部组件间通过Spite通讯，但最终发送到目标的数据包可以是任意格式。
-
-**接口定义**:
-```go
-type PacketParser interface {  
-    PeekHeader(conn *peek.Conn) (uint32, uint32, error)  
-    ReadHeader(conn *peek.Conn) (uint32, uint32, error)  
-    Parse([]byte) (*implantpb.Spites, error)  
-    Marshal(*implantpb.Spites, uint32) ([]byte, error)  
-}
-```
-
-**核心功能**:
-
-- **Parse**: 二进制数据 → Spites映射
-- **Marshal**: Spites → 二进制数据映射  
-- **ReadHeader/PeekHeader**: 协议识别和header解析
-
-**默认协议栈**:
-```mermaid
-graph TD
-    subgraph 通讯协议
-        TLS[TLS层]
-        subgraph 自定义加密
-            Encryption[对称加密层]
-            subgraph 内部结构
-                Header[协议头]
-                Secure[密码学安全加密] --> Proto[Protobuf数据]
-            end
-        end
-    end
-```
-
-**扩展能力**:
-
-- 自定义传输协议格式
-- 接入第三方C2框架
-- 作为其他C2的external listener
-- 适配不同的implant协议
-
-### Cryptor
-
-流式加密解密器，负责数据流的加密处理。
-
-**接口设计**:
-```go
-type Cryptor interface {  
-    Encrypt(reader io.Reader, writer io.Writer) error  
-    Decrypt(reader io.Reader, writer io.Writer) error  
-    Reset() error  
-}
-```
-
-**特性**:
-
-- 直接作用于连接流(与REM相同设计)
-- 支持流式加密算法
-- 对全包进行加密解密
-
-**当前实现**:
-
-- **XOR**: 简单异或加密
-- **AES-CFB**: AES CFB模式
-
-
-!!! important "组件解耦"
-    Parser、Pipeline、Cryptor三者完全解耦，可以任意组合使用，提供极大的灵活性。
-
-## Task
-
-IoM中的任务管理基于Task和Job两个核心概念，实现了灵活的异步任务调度和管理。
-
-### Task
-
-Task是IoM中最小的执行单元，每个用户操作都会生成一个Task。
-
-**核心特性**:
-
-- **唯一标识**: 每个Task有唯一的task_id
-- **状态管理**: 支持pending、running、completed、failed等状态
-- **异步执行**: 支持长时间运行的任务
-- **结果缓存**: 任务结果可以被缓存和查询
-
-**生命周期**:
-
-1. **创建**: Client发送命令时创建Task
-2. **分发**: Server将Task转发给对应的Listener
-3. **执行**: Implant接收并执行Task
-4. **返回**: 执行结果通过相同路径返回
-5. **完成**: Task状态更新为完成或失败
-
-
-## REM网络工具包
-
-REM(Request Enhancement Module)是IoM的网络工具包，提供强大的流量代理和隧道能力。
-
-**核心功能**:
-
-- **正反向代理**: 支持HTTP/HTTPS/SOCKS代理
-- **端口转发**: TCP/UDP端口转发和映射
-- **流量隧道**: 基于多种协议的隧道通讯
-- **LOLC2支持**: Living off the Land C2技术支持
-- **流量混淆**: 多种流量伪装和加密方案
-
-**与IoM集成**:
-
-- 可作为独立服务部署
-- 与Listener深度集成
-- 支持级联部署
-- 提供统一的配置管理
+- 正反向代理：HTTP、HTTPS、SOCKS 等代理形态。
+- 端口转发：TCP / UDP 端口转发和映射。
+- 流量隧道：基于多种协议的隧道通信。
+- 级联部署：配合 Listener 形成更复杂的网络拓扑。
 
 !!! tip "详细文档"
-    REM的完整功能参考[REM文档](/rem/)和[代理配置指南](/IoM/guideline/proxy/)
-
-
+    REM 的完整功能参考 [REM 文档](/rem/) 和 [代理配置](/IoM/user-guide/advanced/proxy/)。
 
 ## 插件生态与兼容性
 
-IoM构建了完整的插件生态系统，既支持原生插件开发，又兼容主流C2框架的插件生态。
+IoM 的扩展能力分布在 Client、Server、Listener 和 Malefic 多个层面。
 
-### 拓展能力
+| 扩展维度 | 扩展类型 | 描述 | 文档入口 |
+| --- | --- | --- | --- |
+| Client | Command 开发 | 添加自定义客户端命令 | [Client 开发](/IoM/development/client/) |
+| Client | MAL 插件 | Lua 脚本扩展和工作流编排 | [MAL 开发](/IoM/development/mals/) |
+| Client | 多语言 SDK | Go、Python、TypeScript 客户端开发 | [SDK](/IoM/development/sdk/) |
+| Client | MCP / LocalRPC | 将命令树暴露给 AI Agent 或本地自动化调用 | [AI 集成](/IoM/development/ai/) |
+| Server | RPC / Proto 扩展 | 添加或调整 Server 侧能力和协议定义 | [Server 开发](/IoM/development/server/) |
+| Listener | Parser / Pipeline 扩展 | 自定义协议解析和传输通道 | [Listener](/IoM/user-guide/listener/) |
+| Malefic | Module 系统 | Rust FFI、动态模块和第三方模块 | [Malefic Modules](/malefic/develop/modules/) |
+| Malefic | Loader / Kit | 不同加载、注入和投递形态 | [Malefic](/malefic/) |
+| 生态兼容 | BOF / Assembly / PowerShell / Sliver | 兼容主流 C2 生态能力 | [MAL 开发](/IoM/development/mals/) |
 
-IoM的拓展能力是其核心中的核心，支持在多个维度进行功能扩展，构建了完整的可拓展生态系统。
+## MAL 插件系统
 
-| 拓展维度           | 扩展类型         | 描述                 | 文档链接                                                    |
-| -------------- | ------------ | ------------------ | ------------------------------------------------------- |
-| **🔧 Client**  | Command开发    | 添加自定义命令            | [Client开发指南](/IoM/guideline/develop/client/)            |
-|                | Mal插件系统      | Lua脚本扩展            | [Mal插件文档](/IoM/manual/mal/)                             |
-|                | Armory兼容     | Sliver生态支持         | [内置插件文档](/IoM/guideline/embed_mal/)                     |
-|                | 多语言SDK       | 第三方客户端开发           | [proto仓库](https://github.com/chainreactors/proto)       |
-| **⚙️ Server**  | Proto协议扩展    | 自定义消息类型            | [proto定义](https://github.com/chainreactors/proto)       |
-|                | RPC服务扩展      | 添加新的RPC接口          | [Server开发指南](/IoM/guideline/develop/server/)            |
-|                | Parser扩展     | 自定义协议解析            | [Server开发指南](/IoM/guideline/develop/server/#listener开发) |
-|                | Pipeline扩展   | 自定义传输通道            | [Server开发指南](/IoM/guideline/develop/server/#listener开发) |
-| **🚀 Implant** | Module系统     | 动态功能模块             | [Module开发文档](/IoM/manual/implant/modules/)              |
-|                | Features编译   | 编译时功能选择            | [Implant构建指南](/IoM/manual/implant/build/)               |
-|                | Addon管理      | 二进制内存缓存            | [Implant开发指南](/IoM/guideline/develop/implant/)          |
-|                | 执行引擎         | 多种加载方式             | [Implant使用手册](/IoM/manual/implant/)                     |
-|                | Kit工具包       | OPSEC对抗工具          | [高级用法文档](/IoM/guideline/advance/Guardrail/)             |
-|                | Loader扩展     | 自定义加载器             | [Implant开发指南](/IoM/guideline/develop/implant/)          |
-| **🔄 生态兼容**    | BOF兼容        | CobaltStrike BOF支持 | [内置插件文档](/IoM/guideline/embed_mal/)                     |
-|                | Assembly兼容   | CLR程序执行            | [Implant使用手册](/IoM/manual/implant/)                     |
-|                | PowerShell兼容 | Unmanaged执行        | [Implant使用手册](/IoM/manual/implant/)                     |
-|                | Sliver兼容     | Alias/Extension支持  | [内置插件文档](/IoM/guideline/embed_mal/)                     |
-|                | PE兼容         | 反射加载/SRDI          | [Implant使用手册](/IoM/manual/implant/)                     |
-|                | DLL兼容        | UDRL/sideload      | [Implant使用手册](/IoM/manual/implant/)                     |
-| **📦 插件包**     | lib包         | 基础加载器              | [community-lib](https://github.com/chainreactors/mal-community/tree/master/community-lib)         |
-|                | common包      | 通用扫描工具             | [community-common](https://github.com/chainreactors/mal-community/tree/master/community-common)         |
-|                | steal包       | 凭证提取工具             | [community-steal](https://github.com/chainreactors/mal-community/tree/master/community-steal)         |
-|                | elevate包     | 提权工具               | [community-elevate](https://github.com/chainreactors/mal-community/tree/master/community-elevate)         |
-|                | persistence包 | 权限维持               | [community-persistence](https://github.com/chainreactors/mal-community/tree/master/community-persistence)         |
-|                | move包        | 横向移动               | [community-move](https://github.com/chainreactors/mal-community/tree/master/community-move)         |
-|                | proxy包       | 代理隧道               | [community-proxy](https://github.com/chainreactors/mal-community/tree/master/community-proxy)                         |
-|                | domain包      | 域渗透                | [community-domain](https://github.com/chainreactors/mal-community/tree/master/community-domain)         |
-
-
-### Mal插件系统
-
-Mal是IoM的核心插件系统，提供了强大而灵活的扩展能力。
-
-#### 概念定义
-
-Mal（Malice Lua）是基于Lua 5.1和gopher-lua实现的插件框架，为IoM提供了：
-
-- **脚本化扩展**: 使用Lua编写自定义功能
-- **命令注册**: 动态添加Client命令
-- **API集成**: 完整的gRPC和内置API访问
-- **生态兼容**: 支持CobaltStrike AggressorScript风格API
-
-#### 架构设计
+MAL 是 IoM 的 Client 侧插件系统，基于 Lua 5.1 和 gopher-lua，为 IoM 提供脚本化扩展、命令注册和 API 集成。
 
 ```mermaid
 graph TB
-    subgraph "Mal插件架构"
-        subgraph "插件层"
-            Plugin["Mal插件<br/>(.lua + mal.yaml)"]
-            Library["Mal库<br/>可复用模块"]
-            Community["社区插件<br/>mal-community"]
-        end
+    subgraph "MAL 插件架构"
+        Plugin["MAL 插件<br/>.lua + mal.yaml"]
+        Library["MAL 库<br/>可复用模块"]
+        Community["社区插件<br/>mal-community"]
 
-        subgraph "运行时"
-            VMPool["VM实例池<br/>并发管理"]
-            subgraph "VM实例"
-                LuaVM1["Lua VM 1"]
-                LuaVM2["Lua VM 2"]
-                LuaVMN["Lua VM N"]
-            end
-            Registry["命令注册<br/>Cobra集成"]
-            Protobuf["Protobuf<br/>消息处理"]
-        end
-
-        subgraph "API层"
-            Builtin["Builtin API<br/>核心功能"]
-            RPC["RPC API<br/>gRPC调用"]
-            Beacon["Beacon API<br/>CS兼容层"]
-        end
-
-        subgraph "扩展库"
-            StdLib["Lua标准库<br/>package/table/io等"]
-            ExtLib["扩展库<br/>json/yaml/http等"]
-            Storage["持久存储<br/>跨插件共享"]
-        end
+        VMPool["VM 实例池<br/>并发管理"]
+        Registry["命令注册<br/>Cobra 集成"]
+        Builtin["Builtin API"]
+        RPC["RPC API"]
+        Beacon["Beacon API<br/>CS 兼容层"]
+        Storage["持久存储<br/>跨插件共享"]
     end
 
-    %% 插件加载流程
     Community --> Plugin
+    Library --> Plugin
     Plugin --> VMPool
-    Library --> VMPool
-
-    %% VM池管理
-    VMPool ==> LuaVM1
-    VMPool ==> LuaVM2
-    VMPool ==> LuaVMN
-
-    %% VM与API连接
-    LuaVM1 -.-> Builtin
-    LuaVM1 -.-> RPC
-    LuaVM1 -.-> Beacon
-
-    %% API内部关系
+    VMPool --> Registry
+    VMPool --> Builtin
+    VMPool --> RPC
+    VMPool --> Beacon
+    VMPool --> Storage
     Beacon --> RPC
-    RPC --> Protobuf
-    Builtin --> Registry
-
-    %% VM与扩展库连接
-    LuaVM1 -.-> StdLib
-    LuaVM1 -.-> ExtLib
-    ExtLib --> Storage
-
-    classDef pluginStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef apiStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef runtimeStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef vmStyle fill:#e1f5fe,stroke:#0288d1,stroke-width:1px
-    classDef extStyle fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-
-    class Plugin,Library,Community pluginStyle
-    class Builtin,RPC,Beacon apiStyle
-    class VMPool,Registry,Protobuf runtimeStyle
-    class LuaVM1,LuaVM2,LuaVMN vmStyle
-    class StdLib,ExtLib,Storage extStyle
 ```
 
+!!! tip "插件开发"
+    插件开发参考 [MAL 快速开始](/IoM/development/mals/quickstart/) 和 [Lua API 参考](/IoM/reference/lua-api/builtin/)。
 
+## 文档导航
 
-### Implant Loader支持
-
-| 插件类型          | 用途         | 兼容性      | 特性 |
-| ------------- | ---------- | -------- | ---- |
-| **Mal插件**     | Lua脚本扩展    | IoM原生    | 动态脚本、丰富API |
-| **Module**    | 动态模块加载     | IoM原生    | Rust FFI、热插拔 |
-| **Addon**     | 二进制程序缓存    | IoM原生    | 内存缓存、避免重传 |
-| **BOF** | Beacon Object File | CobaltStrike兼容 | 轻量级功能扩展 |
-| **Assembly** | CLR程序执行 | CobaltStrike兼容 | bypass AMSI/ETW |
-| **PowerShell** | Unmanaged执行 | CobaltStrike兼容 | 绕过限制策略 |
-| **Alias**     | CLR/UDRL管理 | Sliver兼容 | 命令别名和预设 |
-| **Extension** | BOF管理      | Sliver兼容 | 插件管理 |
-| **Armory**    | 插件包管理      | Sliver兼容 | 一键安装管理 |
-
-!!! tip "详细文档"
-    - 插件开发参考[Mal插件文档](/IoM/manual/mal/)
-    - 兼容性配置参考[内置插件文档](/IoM/guideline/embed_mal/)
-
-
-## OPSEC模型
-
-IoM设计了基于四个维度的OPSEC评估模型，参考CVSS评分标准。
-
-### 评分体系
-
-**评分范围**: 0-10分，分越高越安全
-
-| 等级 | 分数 | 描述 |
-|------|------|------|
-| **低** | 0-3.9 | 极易被检测，明显痕迹，可能造成严重后果 |
-| **中** | 4.0-6.9 | 可能被检测，痕迹可控，后果可控 |
-| **高** | 7.0-8.9 | 基本不被检测，痕迹较小，后果轻微 |
-| **OPSEC** | 9.0-10 | 几乎不可能被检测，无痕迹，无后果 |
-
-### 评估维度
-
-**1. 暴露度** - EDR/NDR检测风险
-
-- 进程创建活动
-- 线程创建活动  
-- 文件系统操作
-- 网络连接建立
-- 系统API调用
-
-**2. 痕迹** - 操作可追溯性
-
-- 日志删除能力
-- 文件清理能力
-- 注册表痕迹
-- 内存痕迹
-
-**3. 检测可能性** - 被发现的概率
-
-- 现有检测机制覆盖
-- 系统级追踪可能性
-- 检测实现复杂度
-
-**4. 后果** - 被发现后的影响
-
-- 立足点丢失风险
-- 长期潜伏影响
-- 整体行动暴露
+| 目标 | 入口 |
+| --- | --- |
+| 安装、登录和首次使用 | [快速开始](/IoM/getting-started/) |
+| 系统背景与设计目标 | [设计目标](/IoM/getting-started/design/) |
+| 架构与 Server 协议边界 | [核心概念](/IoM/getting-started/concepts/) |
+| 部署 Server、Listener 和 GUI | [部署](/IoM/user-guide/deployment/) |
+| Client 命令和控制台 | [Client](/IoM/user-guide/) |
+| Listener 和 Pipeline | [Listener](/IoM/user-guide/listener/) |
+| Payload 构建流程 | [Build](/IoM/user-guide/build/) |
+| 后渗透操作 | [Session](/IoM/user-guide/session-management/) |
+| MAL 插件开发 | [MAL 开发](/IoM/development/mals/) |
+| SDK 集成 | [SDK](/IoM/development/sdk/) |
+| AI / MCP 集成 | [AI](/IoM/development/ai/) |
+| Server / Client 开发 | [开发文档](/IoM/development/) |
+| Malefic Implant | [Malefic](/malefic/) |

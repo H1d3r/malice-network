@@ -1,4 +1,8 @@
-# IoM 用法: DumpLSASS
+---
+title: Dump LSASS
+---
+
+# Dump LSASS
 
 通常在提权或绕过UAC后，我们会使用诸如 Mimikatz 或 一些DumpLSASS 工具来获取 lsass.dmp，进而提取凭据。本文将主要举例如何在 IOM 环境中的用法。
 
@@ -7,6 +11,7 @@
 按照执行方式举例
 
 ### PE
+
 - mimikatz
 - procdump 
 - dumpert
@@ -123,6 +128,7 @@ UAC Bypass截图:
 ![UAC Bypass](../../assets/usage/lsass/uac-bypass.png)
 
 ## 参考
+
 - https://github.com/fortra/nanodump
 - https://github.com/rookuu/BOFs
 - https://github.com/wavestone-cdt/EDRSandblast

@@ -17,6 +17,7 @@ search_commands("my-command")
 ```
 
 If your command appears in the search results, registration was successful. If not:
+
 - Check whether `command()` is actually reached in the entry file
 - Check whether `entry` in `mal.yaml` points to the correct file
 - Check whether `lib: true` is set by mistake (library plugins do not register commands)
@@ -28,6 +29,7 @@ my-command --help
 ```
 
 Confirm:
+
 - Short description is correct
 - Flags are registered
 - Help/Example text is correct
@@ -165,6 +167,7 @@ helper/intl/community/modules/
 ```
 
 Each module demonstrates a different development pattern. Refer to them as needed:
+
 - **Minimal BOF** -> `clipboard.lua`, `enum.lua`
 - **Complex flag handling** -> `common.lua` (curl, nanodump)
 - **Multi-mode execution** -> `elevate.lua` (EfsPotato)
@@ -189,6 +192,7 @@ Test files are located in `helper/intl/`:
 The test harness provides a mock Lua VM with stub versions of all APIs registered (`active()` returns a mock session, `bof()` records call arguments but does not execute).
 
 Verification items:
+
 - All `command()` calls register successfully
 - Every command has a short description
 - Non-utility commands have TTP annotations

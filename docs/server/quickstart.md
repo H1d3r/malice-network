@@ -23,6 +23,8 @@
 
 ## 首次启动
 
+下面示例使用安装脚本归一后的 Linux 文件名。手动下载 release 时，将命令中的 `./malice-network_linux_amd64` 替换成实际文件名即可。
+
 ```bash
 ./malice-network_linux_amd64 -i <公网IP>
 ```
@@ -32,8 +34,8 @@
 
 如果当前还没有配置文件，默认启动会按下面的规则处理：
 
-- **交互终端**：先提示你是否进入 quickstart 向导
-- **非交互环境**（比如 systemd、无 PTY 的脚本环境）：直接生成默认 `config.yaml`，然后继续正常启动
+- **交互终端** ：先提示你是否进入 quickstart 向导
+- **非交互环境** （比如 systemd、无 PTY 的脚本环境）：直接生成默认 `config.yaml`，然后继续正常启动
 - **显式传入 `--quickstart`**：直接进入向导模式
 
 首次启动后，Server 会自动完成：
@@ -75,8 +77,8 @@ curl -L "https://raw.githubusercontent.com/chainreactors/malice-network/master/i
 
 安装脚本会交互式询问：
 
-- **安装路径**：默认 `/opt/iom`
-- **IP 地址**：自动检测，可手动修改
+- **安装路径** ：默认 `/opt/iom`
+- **IP 地址** ：自动检测，可手动修改
 
 安装完成后，脚本会询问是否安装并启动 systemd 服务；如果跳过，会直接输出手动启动命令。使用 systemd 时，服务端会走默认启动路径，不会自动进入 quickstart 向导。
 
@@ -116,7 +118,7 @@ pipeline        # 查看 Pipeline 列表
 | 标准启动 | `./malice-network_linux_amd64 -i <ip>` | Server + Listener 一起运行 |
 | 仅 Server | `./malice-network_linux_amd64 --server-only` | Listener 独立部署时 |
 | 仅 Listener | `./malice-network_linux_amd64 --listener-only` | 独立 Listener 节点 |
-| 守护进程 | `./malice-network_linux_amd64 --daemon` | 后台运行 |
+| 服务进程 | `./malice-network_linux_amd64 --daemon` | 不进入交互向导，等待退出信号 |
 | 交互向导 | `./malice-network_linux_amd64 --quickstart` | 首次配置 |
 
 ## 下一步

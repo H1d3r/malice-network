@@ -1,4 +1,4 @@
-# IoM Go SDK 使用指南
+# Go
 
 IoM Go SDK 是 Malice Network 的官方 Golang SDK，提供完整的 gRPC 客户端功能。
 

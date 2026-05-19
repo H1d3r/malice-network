@@ -4,7 +4,7 @@
 
 ### 什么是 CustomPipeline
 
-malice-network 原生支持 TCP/UDP/HTTP/HTTPS 等内置 Pipeline 类型。CustomPipeline（`Pipeline_Custom`）是一种扩展机制，允许**外部进程**通过 `ListenerRPC` gRPC 接口向 C2 服务端注册自定义的 Pipeline，并自行管理会话（session）的生命周期与任务分发。
+malice-network 原生支持 TCP、HTTP、Bind、REM、Website 等内置 Pipeline 类型。CustomPipeline（`Pipeline_Custom`）是一种扩展机制，允许 **外部进程** 通过 `ListenerRPC` gRPC 接口向 C2 服务端注册自定义的 Pipeline，并自行管理会话（session）的生命周期与任务分发。
 
 这使得任何能说 gRPC 的程序——无论是 LLM 代理、MCP 服务器还是其他自定义桥接——都可以将自身管理的会话暴露为 C2 客户端可见的 implant session，无需修改 server 或 implant 代码。
 
@@ -55,16 +55,23 @@ message CustomPipeline {
   string name        = 1;
   string listener_id = 2;
   string host        = 3;
+  uint32 port        = 4;
+  string params      = 5;
 }
 
 message Pipeline {
   // ...
+  string type = 3;
+  string listener_id = 4;
   oneof body {
-    TCPPipeline  tcp    = 11;
+    TCPPipeline  tcp    = 20;
+    BindPipeline bind   = 21;
+    REM rem             = 22;
+    Website web         = 23;
+    HTTPPipeline http   = 24;
     // ...
-    CustomPipeline custom = 20;  // CustomPipeline 类型
+    CustomPipeline custom = 25;  // CustomPipeline 类型
   }
-  string type = 50;
 }
 ```
 
@@ -139,19 +146,23 @@ _, err := rpc.RegisterListener(listenerContext(), &clientpb.RegisterListener{
 
 ### 3.3 注册 Pipeline
 
-关键点：使用 `Pipeline_Custom` body 类型，`Type` 字段设置为你的自定义标识（如 `"llm"`）：
+关键点：使用 `Pipeline_Custom` body 类型，`Type` 字段使用非内置字符串标识业务类型（如 `"llm"` / `"mcp"`）。如果不需要区分业务类型，也可以使用 `consts.CustomPipeline`（即 `"custom"`）。结构化配置放进 `Custom.Params` JSON 中。
 
 ```go
+params := `{"bridge_type":"llm"}`
+
 _, err = rpc.RegisterPipeline(listenerContext(), &clientpb.Pipeline{
     Name:       cfg.PipelineName,
     ListenerId: cfg.ListenerName,
     Enable:     true,
-    Type:       "llm",                         // ← 你的自定义类型名
+    Type:       "llm",
     Body: &clientpb.Pipeline_Custom{           // ← 必须是 Pipeline_Custom
         Custom: &clientpb.CustomPipeline{
             Name:       cfg.PipelineName,
             ListenerId: cfg.ListenerName,
             Host:       cfg.ListenerIP,
+            Port:       uint32(cfg.Port),
+            Params:     params,
         },
     },
 })
@@ -161,14 +172,14 @@ _, err = rpc.RegisterPipeline(listenerContext(), &clientpb.Pipeline{
 
 有两个 gRPC 双向流需要建立：
 
-**JobStream** — Pipeline 生命周期控制流（必须在 `StartPipeline` **之前**打开）：
+**JobStream** — Pipeline 生命周期控制流（必须在 `StartPipeline` **之前** 打开）：
 
 ```go
 jobStream, err = rpc.JobStream(listenerContext())
 go handleJobStream()
 ```
 
-**SpiteStream** — 任务分发与结果回传流（在 `StartPipeline` **之后**打开，需要 `pipeline_id` metadata）：
+**SpiteStream** — 任务分发与结果回传流（在 `StartPipeline` **之后** 打开，需要 `pipeline_id` metadata）：
 
 ```go
 func pipelineContext() context.Context {
@@ -189,11 +200,11 @@ _, err = rpc.StartPipeline(listenerContext(), &clientpb.CtrlPipeline{
 })
 ```
 
-> **顺序至关重要**：`StartPipeline` 会通过 JobStream 推送 `CtrlPipelineStart`，如果 JobStream 尚未打开，调用会超时或死锁。
+> **顺序至关重要** ：`StartPipeline` 会通过 JobStream 推送 `CtrlPipelineStart`，如果 JobStream 尚未打开，调用会超时或死锁。
 
 ### 3.6 处理 JobStream
 
-收到控制消息后**必须**回复 `JobStatus`，并且**必须回传 `Job` 字段**：
+收到控制消息后 **必须** 回复 `JobStatus`，并且**必须回传 `Job` 字段**：
 
 ```go
 func handleJobStream() {
@@ -395,11 +406,11 @@ func forwardObserveEvent(event *ObserveEvent) {
 
 ### 4.1 JobStatus 必须回传 `Job` 字段
 
-**现象**：Pipeline 启动成功，但客户端收到的事件通知中 pipeline 信息为空白。
+**现象** ：Pipeline 启动成功，但客户端收到的事件通知中 pipeline 信息为空白。
 
-**原因**：`JobStream.Send` 回复 `JobStatus` 时没有设置 `Job` 字段。Server 端的事件系统依赖这个字段来填充事件详情。
+**原因** ：`JobStream.Send` 回复 `JobStatus` 时没有设置 `Job` 字段。Server 端的事件系统依赖这个字段来填充事件详情。
 
-**解决**：
+**解决** ：
 
 ```go
 // ✗ 错误
@@ -421,34 +432,38 @@ jobStream.Send(&clientpb.JobStatus{
 
 ### 4.2 Module 列表决定客户端可用命令
 
-**现象**：注册 session 后，客户端 `use <session>` 后发现大部分命令不可用。
+**现象** ：注册 session 后，客户端 `use <session>` 后发现大部分命令不可用。
 
-**原因**：`Register` 时 `Module` 列表为空或不完整。
+**原因** ：`Register` 时 `Module` 列表为空或不完整。
 
-**解决**：在 `implantpb.Register.Module` 中声明所有你能处理的模块名。最少应包含 `"exec"` 以支持基础命令执行。
+**解决** ：在 `implantpb.Register.Module` 中声明所有你能处理的模块名。最少应包含 `"exec"` 以支持基础命令执行。
 
-### 4.3 `Pipeline.Type` 应使用自定义字符串
+### 4.3 `Pipeline.Type` 不要使用内置类型
 
-**现象**：Pipeline 类型显示为 `"custom"` 而非预期的 `"llm"` 等自定义名称。
+**现象** ：自定义 pipeline 注册后，在列表或恢复流程中显示/行为异常。
 
-**原因**：注册时 `Pipeline.Type` 被设置为 `"custom"` 或空字符串。
+**原因** ：Server 在数据库 round-trip 时会按 `Pipeline.Type` 区分 TCP/HTTP/Bind/REM/Website 等内置类型。CustomPipeline 应使用 `Pipeline_Custom` body，并避免把 `Type` 写成内置类型名。
 
-**解决**：`Pipeline.Type` 应使用你的自定义标识字符串（如 `"llm"`、`"mcp"` 等），而非 `"custom"`。`Pipeline_Custom` 是 protobuf oneof body 类型，`Type` 是独立的字符串字段。
+**解决** ：`Pipeline.Type` 使用非内置业务标识（如 `"llm"` / `"mcp"`）或 `consts.CustomPipeline`。额外配置放入 `Custom.Params`。
 
 ```go
 &clientpb.Pipeline{
-    Type: "llm",                          // ← 你的自定义类型名
-    Body: &clientpb.Pipeline_Custom{...}, // ← protobuf body 类型
+    Type: "llm",
+    Body: &clientpb.Pipeline_Custom{
+        Custom: &clientpb.CustomPipeline{
+            Params: `{"source":"bridge"}`,
+        },
+    },
 }
 ```
 
 ### 4.4 LLM 代理的 Tool Output 解析
 
-**现象**：命令执行结果中混入了 LLM 代理的元数据（如 "Exit code: 0", "Wall time: 1 seconds"），导致 C2 客户端显示冗余信息。
+**现象** ：命令执行结果中混入了 LLM 代理的元数据（如 "Exit code: 0", "Wall time: 1 seconds"），导致 C2 客户端显示冗余信息。
 
-**原因**：LLM 代理（如 Claude Code、Codex CLI）返回的 tool 执行结果通常包含元数据头部，而非纯 stdout。
+**原因** ：LLM 代理（如 Claude Code、Codex CLI）返回的 tool 执行结果通常包含元数据头部，而非纯 stdout。
 
-**解决**：实现 output 解析函数，剥离元数据并提取实际输出：
+**解决** ：实现 output 解析函数，剥离元数据并提取实际输出：
 
 ```go
 func parseToolOutput(raw string) *implantpb.ExecResponse {
@@ -499,11 +514,11 @@ func parseToolOutput(raw string) *implantpb.ExecResponse {
 
 ### 4.5 并发任务路由（FIFO inflight 队列模式）
 
-**现象**：多个任务同时下发到同一 session 时，结果可能错配——task A 的结果被错误地关联到 task B。
+**现象** ：多个任务同时下发到同一 session 时，结果可能错配——task A 的结果被错误地关联到 task B。
 
-**原因**：简单的"注入命令 → 等待下一个结果"模式在并发场景下无法保证任务-结果的对应关系。
+**原因** ：简单的"注入命令 → 等待下一个结果"模式在并发场景下无法保证任务-结果的对应关系。
 
-**解决**：使用 FIFO inflight 队列模式：
+**解决** ：使用 FIFO inflight 队列模式：
 
 1. 每个命令分配唯一 `commandID` 并关联 `taskID`
 2. 命令入队时携带 taskID
@@ -541,28 +556,19 @@ func (b *Bridge) waitAndForwardResult(sessionID string, taskID uint32) {
 
 ### 4.6 JobStream 必须在 StartPipeline 之前打开
 
-**现象**：`StartPipeline` 调用挂起或超时。
+**现象** ：`StartPipeline` 调用挂起或超时。
 
-**原因**：`StartPipeline` 会通过 JobStream 推送 `CtrlPipelineStart` 消息并等待响应。如果 JobStream 尚未建立，消息无处投递。
+**原因** ：`StartPipeline` 会通过 JobStream 推送 `CtrlPipelineStart` 消息并等待响应。如果 JobStream 尚未建立，消息无处投递。
 
-**解决**：严格遵循启动顺序：
+**解决** ：严格遵循启动顺序：
 
 ```
 RegisterListener → RegisterPipeline → JobStream (open + goroutine) → StartPipeline → SpiteStream
 ```
 
-## 5. 完整示例
+## 5. 最小启动序列
 
-CLIProxyAPI 项目的 `internal/bridge/` 包实现了一个完整的 LLM-to-C2 桥接，可作为参考：
-
-| 文件 | 职责 |
-|------|------|
-| [`bridge.go`](../internal/bridge/bridge.go) | Bridge 结构体定义、gRPC 连接建立、完整启动生命周期（`Start` 方法） |
-| [`commands.go`](../internal/bridge/commands.go) | SpiteStream 接收循环、命令分发（`exec` / module request / tool call）、tool output 解析 |
-| [`register.go`](../internal/bridge/register.go) | 会话注册（`onNewSession`）、User-Agent 解析、Module 声明 |
-| [`forward.go`](../internal/bridge/forward.go) | 结果转发（`waitAndForwardResult`）、observe 事件转发 |
-| [`jobs.go`](../internal/bridge/jobs.go) | JobStream 处理循环、控制消息应答 |
-| [`watcher.go`](../internal/bridge/watcher.go) | 会话事件观察（`observeSession`）、Checkin 心跳循环 |
+本仓库内的 Server 侧实现是 `server/listener/custom.go`，它只做 pass-through，不包含完整外部 bridge 示例。外部进程按下面的协议顺序实现即可。
 
 ### 启动序列总结
 
@@ -574,10 +580,14 @@ rpc := listenerrpc.NewListenerRPCClient(conn)
 // 2. 注册 Listener
 rpc.RegisterListener(listenerCtx, &clientpb.RegisterListener{...})
 
-// 3. 注册 Pipeline (Pipeline_Custom body, 自定义 Type)
+// 3. 注册 Pipeline (Pipeline_Custom body)
 rpc.RegisterPipeline(listenerCtx, &clientpb.Pipeline{
     Type: "llm",
-    Body: &clientpb.Pipeline_Custom{Custom: &clientpb.CustomPipeline{...}},
+    Body: &clientpb.Pipeline_Custom{
+        Custom: &clientpb.CustomPipeline{
+            Params: `{"source":"bridge"}`,
+        },
+    },
 })
 
 // 4. 打开 JobStream 并启动处理协程
@@ -605,24 +615,26 @@ onNewSession = func(sess) { go registerSession(sess) }
 
 ## 6. 扩展：添加新 Pipeline 类型
 
-CustomPipeline 机制的设计目标是**零 server 代码修改**。只要你的外部进程遵循上述协议，即可注册任意类型的 pipeline。
+CustomPipeline 机制的设计目标是 **零 server 代码修改** 。只要你的外部进程遵循上述协议，即可注册外部托管的 pipeline。
 
 ### 示例：MCP Pipeline
 
 假设你想将 MCP (Model Context Protocol) 服务器桥接到 C2：
 
 ```go
-// 只需改变 Type 和业务逻辑，协议流程完全相同
+// 只需改变 Type / Params 和业务逻辑，协议流程完全相同
 _, err = rpc.RegisterPipeline(listenerContext(), &clientpb.Pipeline{
     Name:       "mcp-bridge",
     ListenerId: "mcp-listener",
     Enable:     true,
-    Type:       "mcp",  // ← 自定义类型标识
+    Type:       "mcp",
     Body: &clientpb.Pipeline_Custom{
         Custom: &clientpb.CustomPipeline{
             Name:       "mcp-bridge",
             ListenerId: "mcp-listener",
             Host:       "127.0.0.1",
+            Port:       5005,
+            Params:     `{"bridge_type":"mcp"}`,
         },
     },
 })

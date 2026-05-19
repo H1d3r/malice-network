@@ -5,6 +5,7 @@ MAL (Malice Scripting Language) is IoM's Lua plugin system. By installing MAL pl
 ## What Are MAL Plugins
 
 MAL plugins are Lua script packages. Each plugin can:
+
 - Register new client commands (e.g., `screenshot`, `curl`, `nanodump`)
 - Integrate BOF (Beacon Object File) tools
 - Add event listeners (session online notifications, etc.)
@@ -129,6 +130,7 @@ Use `search_commands("keyword")` to find more commands, and `<command> --help` t
 MAL plugins run on the **client side**, but many commands require the implant to support the corresponding **module**.
 
 If a command reports that the module is unavailable:
+
 1. Run `modules list` to view the modules supported by the current session
 2. Run `modules load <module>` to attempt dynamic loading
 3. If loading is not possible, rebuild the implant with the required module included

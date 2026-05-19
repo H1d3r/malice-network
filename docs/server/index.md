@@ -15,12 +15,12 @@
 
 Server 是 malice-network 的控制核心，职责包括：
 
-- **状态管理**：Session / Task / Pipeline 生命周期与并发状态
-- **任务编排**：Task 调度、回调路由、结果解析
-- **RPC 服务**：MaliceRPC（Client 接口）、RootRPC（管理接口）、ListenerRPC（Listener 接口）
-- **构建控制**：Profile 管理、Artifact 构建编排（Docker / GitHub Action / SaaS）
-- **审计与通知**：操作审计记录、第三方消息推送
-- **LLM 代理**：为 Client 侧 AI Agent 提供 LLM Provider 桥接
+- **状态管理** ：Session / Task / Pipeline 生命周期与并发状态
+- **任务编排** ：Task 调度、回调路由、结果解析
+- **RPC 服务** ：MaliceRPC（Client 接口）、RootRPC（管理接口）、ListenerRPC（Listener 接口）
+- **构建控制** ：Profile 管理、Artifact 构建编排（Docker / GitHub Action / SaaS）
+- **审计与通知** ：操作审计记录、第三方消息推送
+- **LLM 代理** ：为 Client 侧 AI Agent 提供 LLM Provider 桥接
 
 详细架构说明请参考 [系统架构](../concept.md)。
 
@@ -31,7 +31,7 @@ Server 是 malice-network 的控制核心，职责包括：
 | `./malice-network -i <ip>` | Server + Listener 一起启动（最常用） |
 | `./malice-network --server-only` | 仅启动 Server，不启动 Listener |
 | `./malice-network --listener-only` | 仅启动 Listener，独立部署时使用 |
-| `./malice-network --daemon` | 以守护进程模式运行 |
+| `./malice-network --daemon` | 不进入交互向导，按常规服务进程运行并等待退出信号 |
 | `./malice-network --quickstart` | 显式进入交互式配置向导，引导完成初始配置 |
 
 | 参数 | 说明 |
@@ -52,7 +52,7 @@ Server 是 malice-network 的控制核心，职责包括：
 
 ## config.yaml 配置参考
 
-config.yaml 分为两个顶层 section：`server`（Server 本体配置）和 `listeners`（Listener 与 Pipeline 配置）。
+config.yaml 主要分为 `server`（Server 本体配置）和 `listeners`（Listener 与 Pipeline 配置）。完整模板以仓库中的 `server/config.example.yaml` 为准，本节只列常用字段。
 
 ### server section
 
@@ -73,7 +73,7 @@ server:
 ```yaml
 server:
   config:
-    packet_length: 1048576          # Server 与 Listener 通信数据包大小（默认 1MB）
+    packet_length: 1048576          # 模板默认 1MB，可按传输场景调整
     certificate: null               # 自定义证书路径
     certificate_key: null           # 自定义证书私钥路径
 ```
@@ -176,7 +176,7 @@ listeners:
 
 每种 Pipeline 类型的配置结构见 [Listener 架构](listeners.md)，操作指南见 [Listener 操作](../operations/listener.md)。
 
-**TCP Pipeline**:
+**TCP Pipeline** :
 
 ```yaml
 listeners:
@@ -194,7 +194,7 @@ listeners:
           key: maliceofinternal
 ```
 
-**HTTP Pipeline**:
+**HTTP Pipeline** :
 
 ```yaml
 listeners:
@@ -213,7 +213,7 @@ listeners:
       error_page: ""               # 自定义错误页面路径
 ```
 
-**REM Pipeline**:
+**REM Pipeline** :
 
 ```yaml
 listeners:
@@ -223,7 +223,7 @@ listeners:
       console: null                # REM 控制台监听地址
 ```
 
-**Bind Pipeline**:
+**Bind Pipeline** :
 
 ```yaml
 listeners:
@@ -232,7 +232,7 @@ listeners:
       enable: false
 ```
 
-**Website Pipeline**:
+**Website Pipeline** :
 
 ```yaml
 listeners:

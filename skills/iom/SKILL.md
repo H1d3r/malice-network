@@ -178,6 +178,7 @@ The IoM client provides an MCP server that exposes the following tools:
 | `get_history` | Retrieve output from historical tasks |
 
 **Recommended workflow (progressive discovery)**:
+
 1. `search_commands("keyword")` — search for related commands
 2. `execute_command("<cmd> --help")` — view specific usage
 3. `execute_command("<cmd> <args>")` — execute the command
@@ -199,6 +200,7 @@ See [reference/lua-scripting.md](reference/lua-scripting.md) for details.
 ## Troubleshooting
 
 See [reference/troubleshooting.md](reference/troubleshooting.md) for common issues, covering:
+
 - Connection failures (auth files, certificates, network)
 - Session anomalies (offline, heartbeat timeout, unavailable modules)
 - Task issues (stuck, timed out, no output)

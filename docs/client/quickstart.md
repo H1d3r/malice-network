@@ -1,4 +1,4 @@
-# Client 快速开始
+# 快速开始
 
 本文档帮助你在最短时间内完成 Client 的下载、登录和首次操作。
 
@@ -114,16 +114,15 @@ Client 支持多种启动模式，满足不同使用场景：
 ```bash
 ./iom                           # 标准交互式模式
 ./iom --tui                     # TUI 多窗口模式
-./iom --daemon                  # 后台守护模式
-./iom --mcp 127.0.0.1:5005      # 启用 MCP 服务
-./iom --rpc 127.0.0.1:15004     # 启用 LocalRPC 服务
+./iom --auth admin.auth --daemon                  # 服务进程模式
+./iom --auth admin.auth --daemon --mcp 127.0.0.1:5005      # 启用 MCP 服务
+./iom --auth admin.auth --daemon --rpc 127.0.0.1:15004     # 启用 LocalRPC 服务
 ```
 
 详细说明请参考 [命令行系统](console.md)。
 
 ## 下一步
 
-- [操作指南](../operations/) — 完整操作手册，包含各命令的详细用法
 - [插件体系](plugin.md) — MAL / Armory 扩展能力
 - [AI Agent 集成](agent.md) — MCP 与 AI Agent 联动
 - [操作指南](../operations/) — 完整操作手册

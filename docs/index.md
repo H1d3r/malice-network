@@ -19,7 +19,7 @@
 
 ## 开发文档
 
-- [MAL 插件开发](development/mal/) - 完整的 MAL 插件开发文档
+- [MAL 插件开发](development/mals/) - 完整的 MAL 插件开发文档
   - 快速开始、Builtin API、Beacon API、RPC API、Embed API
 - [自定义 Pipeline](custom-pipeline-guide.md) - 自定义 Pipeline 开发指南
 

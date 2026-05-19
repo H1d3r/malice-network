@@ -1,3 +1,7 @@
+---
+title: MAL RPC API
+---
+
 ## basic
 
 ### AddContext
