@@ -77,7 +77,7 @@ func Shell(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, outp
 		} else {
 			binpath = `C:\Windows\System32\cmd.exe`
 		}
-		args = []string{"/S", "/c", cmd}
+		args = []string{"/c", cmd}
 	} else {
 		if shellPath != "" {
 			binpath = shellPath

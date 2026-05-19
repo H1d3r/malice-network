@@ -101,6 +101,7 @@ func TestMakeRunnersPostWaitsForLastTask(t *testing.T) {
 		},
 	}
 	con := newImplantTestConsole(t, rpc)
+	con.Server.EventStatus = true
 	sess := addImplantTestSession(t, con, "implant-post")
 	sess.LastTask = &clientpb.Task{
 		TaskId:    9,

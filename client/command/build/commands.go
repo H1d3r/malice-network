@@ -43,7 +43,7 @@ profile list
 		Use:   consts.CommandProfileLoad,
 		Short: "Load an existing implant profile",
 		Long: `
-The **profile load** command requires a valid configuration file path (e.g., **config.yaml**) to load settings. This file specifies attributes necessary for generating the compile profile.
+The **profile load** command requires a valid configuration file path (e.g., **config.yaml** ) to load settings. This file specifies attributes necessary for generating the compile profile.
 `,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

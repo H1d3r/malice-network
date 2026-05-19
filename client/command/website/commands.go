@@ -18,7 +18,7 @@ func Commands(con *core.Console) []*cobra.Command {
 		Use:   consts.CommandWebsite,
 		Short: "Register a new website",
 		Args:  cobra.MaximumNArgs(1),
-		Long:  `Register a new website with the specified listener. If **name** is not provided, it will be generated in the format **listenerID_web_port**.`,
+		Long:  `Register a new website with the specified listener. If **name** is not provided, it will be generated in the format **listenerID_web_port** .`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return NewWebsiteCmd(cmd, con)
 		},
