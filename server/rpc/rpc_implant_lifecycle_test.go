@@ -259,7 +259,10 @@ func TestSysInfo_PreservesExistingValuesWhenFieldsAreMissing(t *testing.T) {
 	_, err := (&Server{}).SysInfo(incomingSessionContext(sess.ID), &implantpb.SysInfo{
 		IsPrivilege: true,
 		Os:          &implantpb.Os{},
-		Process:     &implantpb.Process{},
+		Process: &implantpb.Process{
+			Name: "agent.exe",
+			Pid:  4040,
+		},
 	})
 	if err != nil {
 		t.Fatalf("SysInfo preserve error: %v", err)
@@ -272,6 +275,37 @@ func TestSysInfo_PreservesExistingValuesWhenFieldsAreMissing(t *testing.T) {
 	}
 	if sess.Process.GetName() != "agent.exe" || !sess.Process.GetSigned() || sess.Process.GetSigner() != "Acme" {
 		t.Fatalf("process after preserve = %#v, want existing process retained", sess.Process)
+	}
+}
+
+func TestSysInfo_ExplicitUnsignedProcessClearsStaleSignatureFields(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sess := env.seedSession(t, "sysinfo-unsigned", "sysinfo-unsigned-pipe", true)
+	sess.Process = &implantpb.Process{
+		Name:            "agent.exe",
+		Pid:             4040,
+		Signed:          true,
+		SignatureStatus: "trusted",
+		Signer:          "Acme",
+		Issuer:          "Acme Root",
+	}
+
+	_, err := (&Server{}).SysInfo(incomingSessionContext(sess.ID), &implantpb.SysInfo{
+		Process: &implantpb.Process{
+			Name:            "agent.exe",
+			Pid:             4040,
+			Signed:          false,
+			SignatureStatus: "unsigned",
+		},
+	})
+	if err != nil {
+		t.Fatalf("SysInfo unsigned error: %v", err)
+	}
+	if sess.Process.GetSigned() {
+		t.Fatalf("process signed = true, want false after explicit unsigned update")
+	}
+	if sess.Process.GetSignatureStatus() != "unsigned" || sess.Process.GetSigner() != "" || sess.Process.GetIssuer() != "" {
+		t.Fatalf("process signature fields = %#v, want unsigned with cleared signer/issuer", sess.Process)
 	}
 }
 

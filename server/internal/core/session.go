@@ -791,14 +791,10 @@ func mergeSysInfoProcess(current *implantpb.Process, incoming *implantpb.Process
 	if incoming.Uid != "" {
 		merged.Uid = incoming.Uid
 	}
-	merged.Signed = incoming.Signed
-	if incoming.SignatureStatus != "" {
+	if hasSignatureMetadata(incoming) {
+		merged.Signed = incoming.Signed
 		merged.SignatureStatus = incoming.SignatureStatus
-	}
-	if incoming.Signer != "" {
 		merged.Signer = incoming.Signer
-	}
-	if incoming.Issuer != "" {
 		merged.Issuer = incoming.Issuer
 	}
 	return merged
@@ -856,6 +852,16 @@ func isZeroSysInfoProcess(value *implantpb.Process) bool {
 		value.SignatureStatus == "" &&
 		value.Signer == "" &&
 		value.Issuer == ""
+}
+
+func hasSignatureMetadata(value *implantpb.Process) bool {
+	if value == nil {
+		return false
+	}
+	return value.Signed ||
+		value.SignatureStatus != "" ||
+		value.Signer != "" ||
+		value.Issuer != ""
 }
 
 func (s *Session) FillSysInfo() {
