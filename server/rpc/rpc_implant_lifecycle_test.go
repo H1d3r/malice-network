@@ -177,13 +177,21 @@ func TestSysInfo_UpdatesSession(t *testing.T) {
 	sess := env.seedSession(t, "sysinfo-update", "sysinfo-pipe", true)
 
 	_, err := (&Server{}).SysInfo(incomingSessionContext(sess.ID), &implantpb.SysInfo{
+		Filepath:    "/opt/agent-new",
+		Workdir:     "/opt",
+		IsPrivilege: true,
 		Os: &implantpb.Os{
 			Name: "LINUX",
 			Arch: "arm64",
 		},
 		Process: &implantpb.Process{
-			Name: "updated-implant",
-			Pid:  1234,
+			Name:            "updated-implant",
+			Pid:             1234,
+			Arch:            "x86_64",
+			Signed:          true,
+			SignatureStatus: "trusted",
+			Signer:          "Acme Code Signing",
+			Issuer:          "Acme Root CA",
 		},
 	})
 	if err != nil {
@@ -193,23 +201,77 @@ func TestSysInfo_UpdatesSession(t *testing.T) {
 	if sess.Os == nil {
 		t.Fatal("session Os is nil after SysInfo update")
 	}
+	if sess.Os.Name != "linux" || sess.Os.Arch != "arm64" {
+		t.Fatalf("session os = %#v, want normalized linux/arm64", sess.Os)
+	}
+	if sess.Process == nil {
+		t.Fatal("session Process is nil after SysInfo update")
+	}
+	if !sess.Process.Signed || sess.Process.SignatureStatus != "trusted" {
+		t.Fatalf("session process signature = %#v, want signed trusted process", sess.Process)
+	}
+	if sess.Filepath != "/opt/agent-new" || sess.WorkDir != "/opt" {
+		t.Fatalf("session filepath/workdir = %q/%q, want /opt/agent-new and /opt", sess.Filepath, sess.WorkDir)
+	}
 }
 
-// BUG TEST: SysInfo with nil request -- getSessionID works, then
-// sess.UpdateSysInfo(nil) is called. May or may not panic depending on
-// UpdateSysInfo implementation.
 func TestSysInfo_NilRequest(t *testing.T) {
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "sysinfo-nil", "sysinfo-nil-pipe", true)
 
-	defer func() {
-		if r := recover(); r != nil {
-			t.Logf("BUG CONFIRMED: SysInfo(nil request) panics: %v", r)
-		}
-	}()
 	_, err := (&Server{}).SysInfo(incomingSessionContext(sess.ID), nil)
+	if !errors.Is(err, types.ErrMissingRequestField) {
+		t.Fatalf("SysInfo(nil request) error = %v, want %v", err, types.ErrMissingRequestField)
+	}
+	if sess.Os == nil || sess.Process == nil {
+		t.Fatal("session should remain intact after nil sysinfo request")
+	}
+}
+
+func TestSysInfo_PreservesExistingValuesWhenFieldsAreMissing(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sess := env.seedSession(t, "sysinfo-preserve", "sysinfo-preserve-pipe", true)
+	sess.Filepath = "/opt/original/agent"
+	sess.WorkDir = "/opt/original"
+	sess.Os = &implantpb.Os{
+		Name:       "windows",
+		Arch:       "x64",
+		Hostname:   "ops-host",
+		Username:   "operator",
+		Locale:     "Asia/Shanghai",
+		ClrVersion: []string{"v4.0.30319"},
+	}
+	sess.Process = &implantpb.Process{
+		Name:            "agent.exe",
+		Pid:             4040,
+		Ppid:            4000,
+		Owner:           `ACME\\operator`,
+		Arch:            "x64",
+		Path:            `C:\Tools\agent.exe`,
+		Args:            "--stage 1",
+		Uid:             "S-1-5-21-demo",
+		Signed:          true,
+		SignatureStatus: "trusted",
+		Signer:          "Acme",
+		Issuer:          "Acme Root",
+	}
+
+	_, err := (&Server{}).SysInfo(incomingSessionContext(sess.ID), &implantpb.SysInfo{
+		IsPrivilege: true,
+		Os:          &implantpb.Os{},
+		Process:     &implantpb.Process{},
+	})
 	if err != nil {
-		t.Logf("SysInfo(nil request) returned error (no panic): %v", err)
+		t.Fatalf("SysInfo preserve error: %v", err)
+	}
+	if sess.Filepath != "/opt/original/agent" || sess.WorkDir != "/opt/original" {
+		t.Fatalf("filepath/workdir = %q/%q, want preserved original values", sess.Filepath, sess.WorkDir)
+	}
+	if sess.Os.GetHostname() != "ops-host" || sess.Os.GetArch() != "x64" {
+		t.Fatalf("os after preserve = %#v, want existing os retained", sess.Os)
+	}
+	if sess.Process.GetName() != "agent.exe" || !sess.Process.GetSigned() || sess.Process.GetSigner() != "Acme" {
+		t.Fatalf("process after preserve = %#v, want existing process retained", sess.Process)
 	}
 }
 

@@ -702,14 +702,160 @@ func (s *Session) Update(req *clientpb.RegisterSession) {
 }
 
 func (s *Session) UpdateSysInfo(info *implantpb.SysInfo) {
+	if info == nil {
+		return
+	}
 	s.Initialized = true
-	info.Os.Name = strings.ToLower(info.Os.Name)
-	info.Os.Arch = consts.FormatArch(info.Os.Arch)
+	osInfo := mergeSysInfoOS(s.Os, info.GetOs())
+	processInfo := mergeSysInfoProcess(s.Process, info.GetProcess())
+
+	osInfo.Name = strings.ToLower(osInfo.Name)
+	osInfo.Arch = consts.FormatArch(osInfo.Arch)
+	processInfo.Arch = consts.FormatArch(processInfo.Arch)
+
 	s.IsPrivilege = info.IsPrivilege
-	s.Filepath = info.Filepath
-	s.WorkDir = info.Workdir
-	s.Os = info.Os
-	s.Process = info.Process
+	if info.Filepath != "" {
+		s.Filepath = info.Filepath
+	}
+	if info.Workdir != "" {
+		s.WorkDir = info.Workdir
+	}
+	s.Os = osInfo
+	s.Process = processInfo
+}
+
+func mergeSysInfoOS(current *implantpb.Os, incoming *implantpb.Os) *implantpb.Os {
+	merged := cloneSysInfoOS(current)
+	if isZeroSysInfoOS(merged) {
+		merged = &implantpb.Os{}
+	}
+	if incoming == nil {
+		return merged
+	}
+	if incoming.Name != "" {
+		merged.Name = incoming.Name
+	}
+	if incoming.Version != "" {
+		merged.Version = incoming.Version
+	}
+	if incoming.Release != "" {
+		merged.Release = incoming.Release
+	}
+	if incoming.Arch != "" {
+		merged.Arch = incoming.Arch
+	}
+	if incoming.Username != "" {
+		merged.Username = incoming.Username
+	}
+	if incoming.Hostname != "" {
+		merged.Hostname = incoming.Hostname
+	}
+	if incoming.Locale != "" {
+		merged.Locale = incoming.Locale
+	}
+	if len(incoming.ClrVersion) > 0 {
+		merged.ClrVersion = append([]string(nil), incoming.ClrVersion...)
+	}
+	return merged
+}
+
+func mergeSysInfoProcess(current *implantpb.Process, incoming *implantpb.Process) *implantpb.Process {
+	merged := cloneSysInfoProcess(current)
+	if isZeroSysInfoProcess(merged) {
+		merged = &implantpb.Process{}
+	}
+	if incoming == nil || isZeroSysInfoProcess(incoming) {
+		return merged
+	}
+	if incoming.Name != "" {
+		merged.Name = incoming.Name
+	}
+	if incoming.Pid != 0 {
+		merged.Pid = incoming.Pid
+	}
+	if incoming.Ppid != 0 {
+		merged.Ppid = incoming.Ppid
+	}
+	if incoming.Owner != "" {
+		merged.Owner = incoming.Owner
+	}
+	if incoming.Arch != "" {
+		merged.Arch = incoming.Arch
+	}
+	if incoming.Path != "" {
+		merged.Path = incoming.Path
+	}
+	if incoming.Args != "" {
+		merged.Args = incoming.Args
+	}
+	if incoming.Uid != "" {
+		merged.Uid = incoming.Uid
+	}
+	merged.Signed = incoming.Signed
+	if incoming.SignatureStatus != "" {
+		merged.SignatureStatus = incoming.SignatureStatus
+	}
+	if incoming.Signer != "" {
+		merged.Signer = incoming.Signer
+	}
+	if incoming.Issuer != "" {
+		merged.Issuer = incoming.Issuer
+	}
+	return merged
+}
+
+func cloneSysInfoOS(value *implantpb.Os) *implantpb.Os {
+	if value == nil {
+		return &implantpb.Os{}
+	}
+	clone := proto.Clone(value)
+	if clone == nil {
+		return &implantpb.Os{}
+	}
+	return clone.(*implantpb.Os)
+}
+
+func cloneSysInfoProcess(value *implantpb.Process) *implantpb.Process {
+	if value == nil {
+		return &implantpb.Process{}
+	}
+	clone := proto.Clone(value)
+	if clone == nil {
+		return &implantpb.Process{}
+	}
+	return clone.(*implantpb.Process)
+}
+
+func isZeroSysInfoOS(value *implantpb.Os) bool {
+	if value == nil {
+		return true
+	}
+	return value.Name == "" &&
+		value.Version == "" &&
+		value.Release == "" &&
+		value.Arch == "" &&
+		value.Username == "" &&
+		value.Hostname == "" &&
+		value.Locale == "" &&
+		len(value.ClrVersion) == 0
+}
+
+func isZeroSysInfoProcess(value *implantpb.Process) bool {
+	if value == nil {
+		return true
+	}
+	return value.Name == "" &&
+		value.Pid == 0 &&
+		value.Ppid == 0 &&
+		value.Owner == "" &&
+		value.Arch == "" &&
+		value.Path == "" &&
+		value.Args == "" &&
+		value.Uid == "" &&
+		!value.Signed &&
+		value.SignatureStatus == "" &&
+		value.Signer == "" &&
+		value.Issuer == ""
 }
 
 func (s *Session) FillSysInfo() {
