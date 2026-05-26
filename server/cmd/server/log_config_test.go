@@ -21,13 +21,13 @@ func TestConfigureDebugLoggerFormat(t *testing.T) {
 
 	logger.Debugf("crypto.wrap - encryption_configs_count=%d", 2)
 	logger.Infof("event.job - Job %d %d website_start:", 7, 1)
-	logger.Errorf("connection - close session=%s raw=%d reason=%q", "2165f494174b03af7d10a0e54d70e9b8", 801492628, "EOF")
+	logger.Errorf("connection - close session=%s raw=%d reason=%q", "0123456789abcdef0123456789abcdef", 801492628, "EOF")
 
 	got := out.String()
 	wantLines := []string{
 		"[05.13 21:36:28] DBG crypto.wrap - encryption_configs_count=2",
 		"[05.13 21:36:28] INF event.job - Job 7 1 website_start:",
-		"[05.13 21:36:28] ERR connection - close session=2165f494174b03af7d10a0e54d70e9b8 raw=801492628 reason=\"EOF\"",
+		"[05.13 21:36:28] ERR connection - close session=0123456789abcdef0123456789abcdef raw=801492628 reason=\"EOF\"",
 	}
 	for _, want := range wantLines {
 		if !strings.Contains(got, want) {
