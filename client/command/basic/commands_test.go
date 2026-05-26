@@ -112,7 +112,7 @@ func TestBasicCommandConformance(t *testing.T) {
 			},
 		},
 		{
-			Name: "polling uses seconds as interval",
+			Name: "polling start uses seconds as interval",
 			Argv: []string{consts.CommandPolling, "--interval", "2"},
 			Assert: func(t testing.TB, h *testsupport.Harness, err error) {
 				req, md := testsupport.MustSingleCall[*clientpb.Polling](t, h, "Polling")
@@ -124,6 +124,30 @@ func TestBasicCommandConformance(t *testing.T) {
 				}
 				if !req.Force {
 					t.Fatal("polling force = false, want true")
+				}
+				testsupport.RequireSessionID(t, md, h.Session.SessionId)
+				testsupport.RequireNoSessionEvents(t, h)
+			},
+		},
+		{
+			Name: "polling stop forwards session id",
+			Argv: []string{consts.CommandPolling, "stop"},
+			Assert: func(t testing.TB, h *testsupport.Harness, err error) {
+				req, md := testsupport.MustSingleCall[*clientpb.Polling](t, h, "StopPolling")
+				if req.SessionId != h.Session.SessionId {
+					t.Fatalf("polling stop session id = %q, want %q", req.SessionId, h.Session.SessionId)
+				}
+				testsupport.RequireSessionID(t, md, h.Session.SessionId)
+				testsupport.RequireNoSessionEvents(t, h)
+			},
+		},
+		{
+			Name: "polling status forwards session id",
+			Argv: []string{consts.CommandPolling, "status"},
+			Assert: func(t testing.TB, h *testsupport.Harness, err error) {
+				req, md := testsupport.MustSingleCall[*clientpb.Polling](t, h, "PollingStatus")
+				if req.SessionId != h.Session.SessionId {
+					t.Fatalf("polling status session id = %q, want %q", req.SessionId, h.Session.SessionId)
 				}
 				testsupport.RequireSessionID(t, md, h.Session.SessionId)
 				testsupport.RequireNoSessionEvents(t, h)

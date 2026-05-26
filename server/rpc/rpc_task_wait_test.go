@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/IoM-go/types"
@@ -194,6 +195,164 @@ func TestWaitTaskFinishReturnsWhenCallerContextCancels(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		task.Close()
 		t.Fatal("WaitTaskFinish did not return when caller context canceled")
+	}
+}
+
+func TestWaitTaskFinishPingsBindSessionUntilResult(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sess := env.seedSession(t, "rpc-bind-wait", "rpc-bind-wait-pipe", true)
+	sess.Type = consts.BindPipeline
+	task := sess.NewTask("bind-wait", 1)
+	t.Cleanup(task.Close)
+
+	oldInterval := bindWaitPingInterval
+	bindWaitPingInterval = 10 * time.Millisecond
+	t.Cleanup(func() { bindWaitPingInterval = oldInterval })
+
+	sent := make(chan *clientpb.SpiteRequest, 4)
+	pipelinesCh.Store(sess.PipelineID, &testRPCServerStream{
+		sendMsg: func(m interface{}) error {
+			req, ok := m.(*clientpb.SpiteRequest)
+			if !ok {
+				return errors.New("unexpected message type")
+			}
+			sent <- req
+			return nil
+		},
+	})
+	t.Cleanup(func() { pipelinesCh.Delete(sess.PipelineID) })
+
+	resultCh := make(chan struct {
+		ctx *clientpb.TaskContext
+		err error
+	}, 1)
+	go func() {
+		ctx, err := (&Server{}).WaitTaskFinish(context.Background(), &clientpb.Task{
+			SessionId: sess.ID,
+			TaskId:    task.Id,
+		})
+		resultCh <- struct {
+			ctx *clientpb.TaskContext
+			err error
+		}{ctx: ctx, err: err}
+	}()
+
+	select {
+	case req := <-sent:
+		if req.Task != nil {
+			t.Fatalf("bind wait ping task = %#v, want nil", req.Task)
+		}
+		if req.Spite == nil || req.Spite.Name != consts.ModulePing {
+			t.Fatalf("bind wait request = %#v, want ping spite", req.Spite)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("WaitTaskFinish did not ping bind session")
+	}
+
+	spite := &implantpb.Spite{
+		TaskId: task.Id,
+		Name:   task.Type,
+		Body:   &implantpb.Spite_Empty{Empty: &implantpb.Empty{}},
+	}
+	sess.AddMessage(spite, 0)
+	task.Finish(spite, "done")
+	task.Close()
+
+	select {
+	case result := <-resultCh:
+		if result.err != nil {
+			t.Fatalf("WaitTaskFinish returned error: %v", result.err)
+		}
+		if result.ctx == nil || result.ctx.Spite == nil || result.ctx.Spite.TaskId != task.Id {
+			t.Fatalf("WaitTaskFinish result = %#v, want task %d content", result.ctx, task.Id)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("WaitTaskFinish did not return after bind task finished")
+	}
+}
+
+func TestWaitTaskFinishSkipsBindPingWhenPollingRunning(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sess := env.seedSession(t, "rpc-bind-wait-polling", "rpc-bind-wait-polling-pipe", true)
+	sess.Type = consts.BindPipeline
+	task := sess.NewTask("bind-wait-polling", 1)
+	t.Cleanup(task.Close)
+
+	oldInterval := bindWaitPingInterval
+	bindWaitPingInterval = 10 * time.Millisecond
+	t.Cleanup(func() { bindWaitPingInterval = oldInterval })
+
+	pollingRuntimes.Store(pollingRuntimeKey(sess.ID), &pollingRuntime{
+		sessionID: sess.ID,
+		running:   true,
+	})
+	t.Cleanup(func() { pollingRuntimes.Delete(pollingRuntimeKey(sess.ID)) })
+
+	sent := make(chan *clientpb.SpiteRequest, 4)
+	pipelinesCh.Store(sess.PipelineID, &testRPCServerStream{
+		sendMsg: func(m interface{}) error {
+			req, ok := m.(*clientpb.SpiteRequest)
+			if !ok {
+				return errors.New("unexpected message type")
+			}
+			sent <- req
+			return nil
+		},
+	})
+	t.Cleanup(func() { pipelinesCh.Delete(sess.PipelineID) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := (&Server{}).WaitTaskFinish(ctx, &clientpb.Task{
+		SessionId: sess.ID,
+		TaskId:    task.Id,
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitTaskFinish error = %v, want %v", err, context.DeadlineExceeded)
+	}
+	select {
+	case req := <-sent:
+		t.Fatalf("WaitTaskFinish sent bind ping while polling was running: %#v", req)
+	default:
+	}
+}
+
+func TestWaitTaskFinishDoesNotPingNonBindSession(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sess := env.seedSession(t, "rpc-beacon-wait", "rpc-beacon-wait-pipe", true)
+	task := sess.NewTask("beacon-wait", 1)
+	t.Cleanup(task.Close)
+
+	oldInterval := bindWaitPingInterval
+	bindWaitPingInterval = 10 * time.Millisecond
+	t.Cleanup(func() { bindWaitPingInterval = oldInterval })
+
+	sent := make(chan *clientpb.SpiteRequest, 4)
+	pipelinesCh.Store(sess.PipelineID, &testRPCServerStream{
+		sendMsg: func(m interface{}) error {
+			req, ok := m.(*clientpb.SpiteRequest)
+			if !ok {
+				return errors.New("unexpected message type")
+			}
+			sent <- req
+			return nil
+		},
+	})
+	t.Cleanup(func() { pipelinesCh.Delete(sess.PipelineID) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := (&Server{}).WaitTaskFinish(ctx, &clientpb.Task{
+		SessionId: sess.ID,
+		TaskId:    task.Id,
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitTaskFinish error = %v, want %v", err, context.DeadlineExceeded)
+	}
+	select {
+	case req := <-sent:
+		t.Fatalf("WaitTaskFinish sent ping for non-bind session: %#v", req)
+	default:
 	}
 }
 

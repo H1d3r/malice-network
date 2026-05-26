@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"time"
 )
 
 var taskFileNamePattern = regexp.MustCompile(`^(\d+)_(\d+)$`)
@@ -27,6 +28,8 @@ type taskSpiteEntry struct {
 	Index int
 	Spite *implantpb.Spite
 }
+
+var bindWaitPingInterval = time.Second
 
 func readTaskSpitesFromDisk(sessionID string, taskID uint32) ([]taskSpiteEntry, error) {
 	taskDir, err := fileutils.SafeJoin(configs.ContextPath, filepath.Join(sessionID, consts.TaskPath))
@@ -343,6 +346,9 @@ func (rpc *Server) WaitTaskFinish(ctx context.Context, req *clientpb.Task) (*cli
 		return nil, types.ErrNotFoundTask
 	}
 
+	stopBindWaitPing := startBindWaitPing(ctx, sess, task)
+	defer stopBindWaitPing()
+
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -365,6 +371,34 @@ func (rpc *Server) WaitTaskFinish(ctx context.Context, req *clientpb.Task) (*cli
 		}
 	}
 	return nil, types.ErrNotFoundTaskContent
+}
+
+func startBindWaitPing(ctx context.Context, sess *core.Session, task *core.Task) context.CancelFunc {
+	if sess == nil || task == nil || sess.Type != consts.BindPipeline {
+		return func() {}
+	}
+	pingCtx, cancel := context.WithCancel(ctx)
+	label := fmt.Sprintf("bind-wait-ping:%s:%d", sess.ID, task.Id)
+	core.GoGuarded(label, func() error {
+		ticker := time.NewTicker(bindWaitPingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pingCtx.Done():
+				return nil
+			case <-task.Ctx.Done():
+				return nil
+			case <-ticker.C:
+				if bindPollingRunning(sess.ID) {
+					continue
+				}
+				if err := sendBindPing(sess); err != nil {
+					logs.Log.Debugf("bind wait ping failed for session %s task %d: %v", sess.ID, task.Id, err)
+				}
+			}
+		}
+	}, core.LogGuardedError(label))
+	return cancel
 }
 
 func (rpc *Server) GetAllTaskContent(ctx context.Context, req *clientpb.Task) (*clientpb.TaskContexts, error) {

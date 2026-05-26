@@ -280,6 +280,21 @@ func (r *RecorderRPC) Polling(ctx context.Context, in *clientpb.Polling, opts ..
 	return r.emptyResponse(ctx, "Polling", in)
 }
 
+func (r *RecorderRPC) StopPolling(ctx context.Context, in *clientpb.Polling, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "StopPolling", in)
+}
+
+func (r *RecorderRPC) PollingStatus(ctx context.Context, in *clientpb.Polling, opts ...grpc.CallOption) (*clientpb.PollingState, error) {
+	r.recordPrimary(ctx, "PollingStatus", in)
+	if in == nil {
+		return nil, fmt.Errorf("polling status request is nil")
+	}
+	return &clientpb.PollingState{
+		Id:        in.Id,
+		SessionId: in.SessionId,
+	}, nil
+}
+
 func (r *RecorderRPC) Switch(ctx context.Context, in *implantpb.Switch, opts ...grpc.CallOption) (*clientpb.Task, error) {
 	return r.taskResponse(ctx, "Switch", in)
 }

@@ -5,6 +5,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
@@ -14,7 +17,8 @@ import (
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"google.golang.org/grpc"
-	"time"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (rpc *Server) Register(ctx context.Context, req *clientpb.RegisterSession) (*clientpb.Empty, error) {
@@ -221,24 +225,196 @@ func hasIntersection(slice1, slice2 []uint32) bool {
 	return false
 }
 
+var pollingRuntimes sync.Map
+
+type pollingRuntime struct {
+	mu         sync.RWMutex
+	id         string
+	sessionID  string
+	interval   uint64
+	tasks      []uint32
+	force      bool
+	running    bool
+	startedAt  int64
+	lastTickAt int64
+	lastError  string
+	cancel     context.CancelFunc
+	done       chan struct{}
+}
+
+func pollingRuntimeKey(sessionID string) string {
+	return "polling:" + sessionID
+}
+
+func pollingRuntimeID(sessionID string) string {
+	return "bind-polling:" + sessionID
+}
+
+func pollingInterval(interval uint64) uint64 {
+	if interval == 0 {
+		return uint64(time.Second)
+	}
+	return interval
+}
+
+func validatePollingRequest(req *clientpb.Polling) error {
+	if req == nil {
+		return types.ErrMissingSessionRequestField
+	}
+	if req.SessionId == "" {
+		return types.ErrInvalidSessionID
+	}
+	return nil
+}
+
+func getOrCreatePollingRuntime(req *clientpb.Polling) (*pollingRuntime, bool) {
+	key := pollingRuntimeKey(req.SessionId)
+	rt := &pollingRuntime{sessionID: req.SessionId}
+	actual, loaded := pollingRuntimes.LoadOrStore(key, rt)
+	return actual.(*pollingRuntime), loaded
+}
+
+func pollingState(rt *pollingRuntime) *clientpb.PollingState {
+	if rt == nil {
+		return &clientpb.PollingState{}
+	}
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	return &clientpb.PollingState{
+		Id:         rt.id,
+		SessionId:  rt.sessionID,
+		Running:    rt.running,
+		Interval:   rt.interval,
+		Tasks:      append([]uint32(nil), rt.tasks...),
+		Force:      rt.force,
+		StartedAt:  rt.startedAt,
+		LastTickAt: rt.lastTickAt,
+		LastError:  rt.lastError,
+	}
+}
+
+func bindPollingRunning(sessionID string) bool {
+	val, ok := pollingRuntimes.Load(pollingRuntimeKey(sessionID))
+	if !ok || val == nil {
+		return false
+	}
+	rt, ok := val.(*pollingRuntime)
+	if !ok {
+		return false
+	}
+	return pollingState(rt).Running
+}
+
+func sendBindPing(sess *core.Session) error {
+	streamVal, ok := pipelinesCh.Load(sess.PipelineID)
+	if !ok || streamVal == nil {
+		return fmt.Errorf("bind pipeline %s unavailable for session %s", sess.PipelineID, sess.ID)
+	}
+	return sess.Request(
+		&clientpb.SpiteRequest{Session: sess.ToProtobufLite(), Task: nil, Spite: types.BuildPingSpite()},
+		streamVal.(grpc.ServerStream))
+}
+
+func (rt *pollingRuntime) start(req *clientpb.Polling) (context.Context, error) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.running {
+		return nil, status.Errorf(codes.AlreadyExists, "polling already running for session %s", req.SessionId)
+	}
+	id := req.Id
+	if id == "" {
+		id = pollingRuntimeID(req.SessionId)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	rt.id = id
+	rt.sessionID = req.SessionId
+	rt.interval = pollingInterval(req.Interval)
+	rt.tasks = append([]uint32(nil), req.Tasks...)
+	rt.force = req.Force
+	rt.running = true
+	rt.startedAt = time.Now().Unix()
+	rt.lastTickAt = 0
+	rt.lastError = ""
+	rt.cancel = cancel
+	rt.done = make(chan struct{})
+	return ctx, nil
+}
+
+func (rt *pollingRuntime) stopAndWait(timeout time.Duration) {
+	rt.mu.RLock()
+	cancel := rt.cancel
+	done := rt.done
+	rt.mu.RUnlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done == nil {
+		return
+	}
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
+}
+
+func (rt *pollingRuntime) markTick() {
+	rt.mu.Lock()
+	rt.lastTickAt = time.Now().Unix()
+	rt.mu.Unlock()
+}
+
+func (rt *pollingRuntime) markError(err error) {
+	if err == nil {
+		return
+	}
+	rt.mu.Lock()
+	rt.lastError = err.Error()
+	rt.mu.Unlock()
+}
+
+func (rt *pollingRuntime) finish() {
+	rt.mu.Lock()
+	if rt.running {
+		rt.running = false
+	}
+	done := rt.done
+	rt.cancel = nil
+	rt.done = nil
+	rt.mu.Unlock()
+	if done != nil {
+		close(done)
+	}
+}
+
 func (rpc *Server) Polling(ctx context.Context, req *clientpb.Polling) (*clientpb.Empty, error) {
+	if err := validatePollingRequest(req); err != nil {
+		return nil, err
+	}
 	sess, err := core.Sessions.Get(req.SessionId)
 	if err != nil {
 		return nil, types.ErrNotFoundSession
 	}
-	label := fmt.Sprintf("polling:%s:%s", sess.ID, req.Id)
+	rt, _ := getOrCreatePollingRuntime(req)
+	pollCtx, err := rt.start(req)
+	if err != nil {
+		return nil, err
+	}
+
+	state := pollingState(rt)
+	label := fmt.Sprintf("polling:%s:%s", sess.ID, state.Id)
 	core.GoGuarded(label, func() error {
-		logs.Log.Debugf("polling:%s %s, interval %d", req.Id, sess.ID, req.Interval)
-		sess.SetAny(req.Id, true)
 		defer func() {
-			sess.DeleteAny(req.Id)
-			logs.Log.Debugf("polling:%s %s done", req.Id, sess.ID)
+			rt.finish()
+			logs.Log.Debugf("polling:%s %s done", state.Id, sess.ID)
 		}()
+		logs.Log.Debugf("polling:%s %s, interval %d", state.Id, sess.ID, state.Interval)
 		for {
-			if _, ok := sess.GetAny(req.Id); !ok {
-				break
+			select {
+			case <-pollCtx.Done():
+				return nil
+			default:
 			}
-			if !req.Force {
+			if !state.Force {
 				// 如果不为force, 且所有需要等待的任务都已经完成, 则退出轮询
 				tasks := sess.Tasks.All()
 				var notfinishedId []uint32
@@ -249,37 +425,66 @@ func (rpc *Server) Polling(ctx context.Context, req *clientpb.Polling) (*clientp
 					notfinishedId = append(notfinishedId, task.Id)
 				}
 
-				if !hasIntersection(req.Tasks, notfinishedId) {
+				if !hasIntersection(state.Tasks, notfinishedId) {
 					break
 				}
 			}
-			streamVal, ok := pipelinesCh.Load(sess.PipelineID)
-			if !ok || streamVal == nil {
-				return fmt.Errorf("polling pipeline %s unavailable for session %s", sess.PipelineID, sess.ID)
+			if err := sendBindPing(sess); err != nil {
+				err = fmt.Errorf("polling request failed for session %s: %w", sess.ID, err)
+				rt.markError(err)
+				return err
 			}
-			err = sess.Request(
-				&clientpb.SpiteRequest{Session: sess.ToProtobufLite(), Task: nil, Spite: types.BuildPingSpite()},
-				streamVal.(grpc.ServerStream))
-			if err != nil {
-				return fmt.Errorf("polling request failed for session %s: %w", sess.ID, err)
+			rt.markTick()
+			select {
+			case <-pollCtx.Done():
+				return nil
+			case <-time.After(time.Duration(state.Interval)):
 			}
-			time.Sleep(time.Duration(req.Interval))
 		}
 		return nil
 	}, core.CombineErrorHandlers(
 		core.LogGuardedError(label),
 		func(err error) {
+			if core.EventBroker == nil {
+				return
+			}
 			core.EventBroker.Publish(core.Event{
 				EventType: consts.EventSession,
 				Op:        consts.CtrlSessionError,
 				Session:   sess.ToProtobufLite(),
-				Message:   fmt.Sprintf("polling %s failed", req.Id),
+				Message:   fmt.Sprintf("polling %s failed", state.Id),
 				Err:       core.ErrorText(err),
 				Important: true,
 			})
 		},
 	))
 	return &clientpb.Empty{}, nil
+}
+
+func (rpc *Server) StopPolling(ctx context.Context, req *clientpb.Polling) (*clientpb.Empty, error) {
+	if err := validatePollingRequest(req); err != nil {
+		return nil, err
+	}
+	val, ok := pollingRuntimes.Load(pollingRuntimeKey(req.SessionId))
+	if !ok {
+		return &clientpb.Empty{}, nil
+	}
+	val.(*pollingRuntime).stopAndWait(2 * time.Second)
+	return &clientpb.Empty{}, nil
+}
+
+func (rpc *Server) PollingStatus(ctx context.Context, req *clientpb.Polling) (*clientpb.PollingState, error) {
+	if err := validatePollingRequest(req); err != nil {
+		return nil, err
+	}
+	val, ok := pollingRuntimes.Load(pollingRuntimeKey(req.SessionId))
+	if !ok {
+		return &clientpb.PollingState{
+			Id:        pollingRuntimeID(req.SessionId),
+			SessionId: req.SessionId,
+		}, nil
+	}
+	return pollingState(val.(*pollingRuntime)), nil
 }
 
 // triggerKeyExchange 自动触发密钥交换流程

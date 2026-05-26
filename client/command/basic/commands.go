@@ -42,7 +42,7 @@ func Commands(con *core.Console) []*cobra.Command {
 
 	getCmd := &cobra.Command{
 		Use:   consts.ModulePing,
-		Short: "get bind implant response",
+		Short: "send one bind ping",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return GetCmd(cmd, con)
 		},
@@ -73,8 +73,8 @@ wait 59
 	common.BindArgCompletions(waitCmd, &taskComp)
 
 	pollingCmd := &cobra.Command{
-		Use:   consts.CommandPolling,
-		Short: "polling task status",
+		Use:   consts.CommandPolling + " [start|stop|status]",
+		Short: "manage bind polling",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return PollingCmd(cmd, con)
 		},
@@ -82,9 +82,29 @@ wait 59
 			"implant": consts.ImplantMaleficBind,
 		},
 	}
-	common.BindFlag(pollingCmd, func(f *pflag.FlagSet) {
-		f.Int("interval", 1, "interval")
-	})
+	pollingCmd.PersistentFlags().Int("interval", 1, "interval in seconds")
+	pollingStartCmd := &cobra.Command{
+		Use:   "start",
+		Short: "start bind polling",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return PollingStartCmd(cmd, con)
+		},
+	}
+	pollingStopCmd := &cobra.Command{
+		Use:   "stop",
+		Short: "stop bind polling",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return PollingStopCmd(cmd, con)
+		},
+	}
+	pollingStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "show bind polling status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return PollingStatusCmd(cmd, con)
+		},
+	}
+	pollingCmd.AddCommand(pollingStartCmd, pollingStopCmd, pollingStatusCmd)
 
 	recoverCmd := &cobra.Command{
 		Use:   consts.CommandRecover,
