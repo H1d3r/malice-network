@@ -40,15 +40,22 @@ func SetupGithubFile() error {
 		logs.Log.Errorf("malefic-mutant.exe asset not found: %v", err)
 	}
 
+	if err = os.MkdirAll(configs.BinPath, 0700); err != nil {
+		logs.Log.Errorf("Failed to create bin path %s: %v", configs.BinPath, err)
+		return err
+	}
+
 	err = os.WriteFile(filepath.Join(configs.BinPath, "sgn.exe"), sgn, 0700)
 	if err != nil {
 		logs.Log.Errorf("Failed to write sgn.exe data to %s: %v", configs.BinPath, err)
+		return err
 	}
 
 	if mutant != nil {
 		err = os.WriteFile(filepath.Join(configs.BinPath, "malefic-mutant.exe"), mutant, 0700)
 		if err != nil {
 			logs.Log.Errorf("Failed to write malefic-mutant.exe data to %s: %v", configs.BinPath, err)
+			return err
 		}
 	}
 
