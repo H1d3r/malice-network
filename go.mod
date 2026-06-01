@@ -38,7 +38,6 @@ require (
 	github.com/reeflective/console v0.0.0-00010101000000-000000000000
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
-	github.com/samber/lo v1.49.1
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.9

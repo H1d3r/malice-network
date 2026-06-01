@@ -15,7 +15,6 @@ import (
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
-	"github.com/samber/lo"
 	"gorm.io/gorm"
 )
 
@@ -37,6 +36,51 @@ func findRuntimePipeline(pipelineID, agentID string) (*clientpb.Pipeline, bool) 
 		return nil, false
 	}
 	return core.Listeners.FindByRemAgent(agentID)
+}
+
+func runtimePipelineNameCount(name string) int {
+	if name == "" {
+		return 0
+	}
+	count := 0
+	core.Listeners.Range(func(_, value interface{}) bool {
+		listener, ok := value.(*core.Listener)
+		if !ok || listener.GetPipeline(name) == nil {
+			return true
+		}
+		count++
+		return true
+	})
+	return count
+}
+
+func findRuntimePipelineForPivot(pipelineID, listenerID string) (*clientpb.Pipeline, bool) {
+	if listenerID != "" {
+		return core.Listeners.FindByListener(listenerID, pipelineID)
+	}
+	if runtimePipelineNameCount(pipelineID) != 1 {
+		return nil, false
+	}
+	return core.Listeners.Find(pipelineID)
+}
+
+func pivotBelongsToPipeline(pivot *output.PivotingContext, pipeline *clientpb.Pipeline) bool {
+	if pivot == nil || pipeline == nil {
+		return false
+	}
+	if pivot.Pipeline != "" && pivot.Pipeline != pipeline.Name {
+		return false
+	}
+	if pipeline.ListenerId == "" {
+		return true
+	}
+	if pivot.Listener == pipeline.ListenerId {
+		return true
+	}
+	if pivot.Listener == "" && runtimePipelineNameCount(pipeline.Name) == 1 {
+		return true
+	}
+	return false
 }
 
 func (rpc *Server) RegisterRem(ctx context.Context, req *clientpb.Pipeline) (*clientpb.Empty, error) {
@@ -77,16 +121,45 @@ func (rpc *Server) RegisterRem(ctx context.Context, req *clientpb.Pipeline) (*cl
 
 func (rpc *Server) ListRems(ctx context.Context, req *clientpb.Listener) (*clientpb.Pipelines, error) {
 	var result []*clientpb.Pipeline
+	listenerFilter := ""
+	if req != nil {
+		listenerFilter = req.Id
+	}
 	ctxs, err := db.NewContextQuery().WhereType(consts.ContextPivoting).Find()
 	if err != nil {
 		return nil, err
 	}
-	ctxMap := lo.GroupBy(ctxs, func(item *models.Context) string {
-		return item.PipelineID
-	})
-	for pid, pivots := range ctxMap {
-		pipe, ok := core.Listeners.Find(pid)
+	ctxMap := make(map[string][]*models.Context)
+	for _, item := range ctxs {
+		piv, _ := item.Context.(*output.PivotingContext)
+		if piv == nil {
+			continue
+		}
+		if listenerFilter != "" && piv.Listener != "" && piv.Listener != listenerFilter {
+			continue
+		}
+		pipe, ok := findRuntimePipelineForPivot(item.PipelineID, piv.Listener)
 		if !ok {
+			continue
+		}
+		if listenerFilter != "" && pipe.ListenerId != listenerFilter {
+			continue
+		}
+		ctxMap[pipe.ListenerId+":"+pipe.Name] = append(ctxMap[pipe.ListenerId+":"+pipe.Name], item)
+	}
+	for _, pivots := range ctxMap {
+		if len(pivots) == 0 {
+			continue
+		}
+		piv, _ := pivots[0].Context.(*output.PivotingContext)
+		if piv == nil {
+			continue
+		}
+		pipe, ok := findRuntimePipelineForPivot(pivots[0].PipelineID, piv.Listener)
+		if !ok {
+			continue
+		}
+		if listenerFilter != "" && pipe.ListenerId != listenerFilter {
 			continue
 		}
 		pipe.GetRem().Agents = make(map[string]*clientpb.REMAgent)
@@ -253,14 +326,10 @@ func (rpc *Server) RemDial(ctx context.Context, req *implantpb.Request) (*client
 			return
 		}
 
-		// resolve pipeline: by name first, fallback to agent ID search
-		pipe, ok := core.Listeners.Find(pid)
+		pipe, ok := findRuntimePipeline(pid, agentID)
 		if !ok {
-			pipe, ok = core.Listeners.FindByRemAgent(agentID)
-			if !ok {
-				logs.Log.Warnf("pipeline not found for %s (agent %s)", pid, agentID)
-				return
-			}
+			logs.Log.Warnf("pipeline not found for %s (agent %s)", pid, agentID)
+			return
 		}
 		lns, err := core.Listeners.Get(pipe.ListenerId)
 		if err != nil {
@@ -457,7 +526,7 @@ func (rpc *Server) HealthCheckRem(ctx context.Context, req *clientpb.Pipeline) (
 	knownAgents := make(map[string]struct{}, len(ctxs))
 	for _, c := range ctxs {
 		piv := c.Context.(*output.PivotingContext)
-		if req.ListenerId != "" && piv.Listener != "" && piv.Listener != req.ListenerId {
+		if !pivotBelongsToPipeline(piv, req) {
 			continue
 		}
 		knownAgents[piv.RemAgentID] = struct{}{}

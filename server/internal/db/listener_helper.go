@@ -261,7 +261,17 @@ func deleteWebsiteModel(website *models.Pipeline) error {
 		return err
 	}
 	if website.ListenerId != "" {
-		if err := NewWebContentQuery().WherePipelineID(website.Name).WhereListenerIDOrLegacy(website.ListenerId).Delete(); err != nil {
+		query := NewWebContentQuery().WherePipelineID(website.Name)
+		includeLegacy, err := shouldIncludeLegacyWebsiteContent(website.Name, website.ListenerId)
+		if err != nil {
+			return err
+		}
+		if includeLegacy {
+			query = query.WhereListenerIDOrLegacy(website.ListenerId)
+		} else {
+			query = query.WhereListenerID(website.ListenerId)
+		}
+		if err := query.Delete(); err != nil {
 			return err
 		}
 	} else if err := NewWebContentQuery().WherePipelineID(website.Name).Delete(); err != nil {
@@ -294,7 +304,15 @@ func FindWebContentsByWebsiteAndListener(website, listenerID string) ([]*models.
 		query = query.WherePipelineID(website)
 	}
 	if listenerID != "" {
-		query = query.WhereListenerIDOrLegacy(listenerID)
+		includeLegacy, err := shouldIncludeLegacyWebsiteContent(website, listenerID)
+		if err != nil {
+			return nil, err
+		}
+		if includeLegacy {
+			query = query.WhereListenerIDOrLegacy(listenerID)
+		} else {
+			query = query.WhereListenerID(listenerID)
+		}
 	}
 	contents, err := query.Find()
 	if err != nil {
@@ -310,6 +328,20 @@ func FindWebContentsByWebsiteAndListener(website, listenerID string) ([]*models.
 		}
 	}
 	return contents, nil
+}
+
+func shouldIncludeLegacyWebsiteContent(websiteName, listenerID string) (bool, error) {
+	if websiteName == "" || listenerID == "" {
+		return false, nil
+	}
+	var count int64
+	err := Session().Model(&models.Pipeline{}).
+		Where("name = ? AND type = ?", websiteName, consts.WebsitePipeline).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count == 1, nil
 }
 
 // AddContent - Add content to website

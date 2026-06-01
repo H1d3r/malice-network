@@ -8,8 +8,10 @@ import (
 
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
+	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/malice-network/helper/utils/configutil"
+	"github.com/chainreactors/malice-network/helper/utils/output"
 	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
@@ -116,6 +118,162 @@ func TestRemAgentCtrlUsesScopedPipelineID(t *testing.T) {
 	}
 }
 
+func TestRemDialUsesScopedPipelineBeforeAgentExists(t *testing.T) {
+	env := newRPCTestEnv(t)
+	sess := env.seedSession(t, "rem-dial-session", "rem-dial-transport", true)
+	pipelineName := "rem-dial-shared"
+	listenerA, _ := seedRemRuntimeWithListener(t, "listener-rem-dial-a", pipelineName)
+	listenerB, _ := seedRemRuntimeWithListener(t, "listener-rem-dial-b", pipelineName)
+	agentID := "agent-created-by-dial"
+
+	pipelinesCh.Store(sess.PipelineID, &testRPCServerStream{
+		sendMsg: func(interface{}) error { return nil },
+	})
+	t.Cleanup(func() { pipelinesCh.Delete(sess.PipelineID) })
+
+	gotSync := make(chan *clientpb.JobCtrl, 1)
+	go func() {
+		ctrl := <-listenerB.Ctrl
+		ctrl.GetJob().GetPipeline().GetRem().Agents[agentID] = &clientpb.REMAgent{
+			Id:          agentID,
+			PipelineId:  pipelineName,
+			InboundSide: "local",
+			Local:       "127.0.0.1:9001",
+			Remote:      "127.0.0.1:9002",
+			Enable:      true,
+		}
+		listenerB.CtrlJob.Store(ctrl.Id, &clientpb.JobStatus{
+			CtrlId: ctrl.Id,
+			Status: consts.CtrlStatusSuccess,
+			Job:    ctrl.Job,
+		})
+		gotSync <- ctrl
+	}()
+
+	task, err := (&Server{}).RemDial(incomingSessionContext(sess.ID), &implantpb.Request{
+		Name: consts.ModuleRemDial,
+		Params: map[string]string{
+			"pipeline_id": listenerB.Name + ":" + pipelineName,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RemDial failed: %v", err)
+	}
+	deliverTaskResponse(t, sess, task.TaskId, &implantpb.Spite{
+		Body: &implantpb.Spite_Response{
+			Response: &implantpb.Response{Output: agentID},
+		},
+	})
+
+	select {
+	case ctrl := <-gotSync:
+		if ctrl.GetJob().GetPipeline().GetListenerId() != listenerB.Name {
+			t.Fatalf("sync listener = %q, want %q", ctrl.GetJob().GetPipeline().GetListenerId(), listenerB.Name)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for scoped REM sync")
+	}
+	select {
+	case ctrl := <-listenerA.Ctrl:
+		t.Fatalf("unexpected ctrl on listener A: %#v", ctrl)
+	default:
+	}
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		ctxs, err := db.NewContextQuery().WhereType(consts.ContextPivoting).WherePipeline(pipelineName).Find()
+		if err != nil {
+			return false
+		}
+		for _, ctxModel := range ctxs {
+			pivot, ok := ctxModel.Context.(*output.PivotingContext)
+			if ok && pivot.RemAgentID == agentID && pivot.Listener == listenerB.Name {
+				return true
+			}
+		}
+		return false
+	}, "scoped REM dial pivot context")
+}
+
+func TestListRemsScopesPivotContextsByListener(t *testing.T) {
+	newRPCTestEnv(t)
+	pipelineName := "rem-list-shared"
+	listenerA, _ := seedRemRuntimeWithListener(t, "listener-rem-list-a", pipelineName)
+	listenerB, _ := seedRemRuntimeWithListener(t, "listener-rem-list-b", pipelineName)
+
+	for _, tc := range []struct {
+		listenerID string
+		agentID    string
+	}{
+		{listenerID: listenerA.Name, agentID: "agent-a"},
+		{listenerID: listenerB.Name, agentID: "agent-b"},
+	} {
+		if err := db.Session().Create(&models.Context{
+			PipelineID: pipelineName,
+			Type:       consts.ContextPivoting,
+			Value: output.MarshalContext(&output.PivotingContext{
+				Enable:      true,
+				Listener:    tc.listenerID,
+				Pipeline:    pipelineName,
+				RemAgentID:  tc.agentID,
+				InboundSide: "local",
+				LocalURL:    "127.0.0.1:8080",
+			}),
+		}).Error; err != nil {
+			t.Fatalf("Create context(%s) failed: %v", tc.agentID, err)
+		}
+	}
+
+	resp, err := (&Server{}).ListRems(context.Background(), &clientpb.Listener{Id: listenerB.Name})
+	if err != nil {
+		t.Fatalf("ListRems failed: %v", err)
+	}
+	if len(resp.Pipelines) != 1 {
+		t.Fatalf("pipeline count = %d, want 1", len(resp.Pipelines))
+	}
+	got := resp.Pipelines[0]
+	if got.ListenerId != listenerB.Name {
+		t.Fatalf("pipeline listener = %q, want %q", got.ListenerId, listenerB.Name)
+	}
+	if _, ok := got.GetRem().GetAgents()["agent-b"]; !ok {
+		t.Fatalf("listener-b agent missing: %#v", got.GetRem().GetAgents())
+	}
+	if _, ok := got.GetRem().GetAgents()["agent-a"]; ok {
+		t.Fatalf("listener-a agent leaked into listener-b result: %#v", got.GetRem().GetAgents())
+	}
+}
+
+func TestHealthCheckRemDoesNotDisableOtherListenerOrAmbiguousLegacyContexts(t *testing.T) {
+	newRPCTestEnv(t)
+	pipelineName := "rem-health-shared"
+	listenerA, pipelineA := seedRemRuntimeWithListener(t, "listener-rem-health-a", pipelineName)
+	listenerB, _ := seedRemRuntimeWithListener(t, "listener-rem-health-b", pipelineName)
+
+	legacyID := createPivotContext(t, pipelineName, "", "agent-legacy", true)
+	otherID := createPivotContext(t, pipelineName, listenerB.Name, "agent-b", true)
+
+	pipelineA.GetRem().Agents = map[string]*clientpb.REMAgent{}
+	if _, err := (&Server{}).HealthCheckRem(context.Background(), pipelineA); err != nil {
+		t.Fatalf("HealthCheckRem failed: %v", err)
+	}
+
+	for _, tc := range []struct {
+		id          string
+		description string
+	}{
+		{id: legacyID, description: "legacy ambiguous context"},
+		{id: otherID, description: "other listener context"},
+	} {
+		ctxModel, err := db.FindContext(tc.id)
+		if err != nil {
+			t.Fatalf("FindContext(%s) failed: %v", tc.description, err)
+		}
+		pivot := ctxModel.Context.(*output.PivotingContext)
+		if !pivot.Enable {
+			t.Fatalf("%s was disabled by %s health check", tc.description, listenerA.Name)
+		}
+	}
+}
+
 func TestRegisterRemPreservesExistingDBAndBackfillsConfig(t *testing.T) {
 	newRPCTestEnv(t)
 	listener := core.NewListener("listener-rem-preserve", "127.0.0.1")
@@ -209,7 +367,13 @@ func TestSyncPipelineWritesRuntimeRemLinkToConfig(t *testing.T) {
 func seedRemRuntime(t testing.TB, name string) (*core.Listener, *clientpb.Pipeline) {
 	t.Helper()
 
-	listener := core.NewListener("listener-"+name, "127.0.0.1")
+	return seedRemRuntimeWithListener(t, "listener-"+name, name)
+}
+
+func seedRemRuntimeWithListener(t testing.TB, listenerID, name string) (*core.Listener, *clientpb.Pipeline) {
+	t.Helper()
+
+	listener := core.NewListener(listenerID, "127.0.0.1")
 	core.Listeners.Add(listener)
 	pipeline := &clientpb.Pipeline{
 		Name:       name,
@@ -223,4 +387,25 @@ func seedRemRuntime(t testing.TB, name string) (*core.Listener, *clientpb.Pipeli
 	}
 	listener.AddPipeline(pipeline)
 	return listener, pipeline
+}
+
+func createPivotContext(t testing.TB, pipelineName, listenerID, agentID string, enabled bool) string {
+	t.Helper()
+
+	ctxModel := &models.Context{
+		PipelineID: pipelineName,
+		Type:       consts.ContextPivoting,
+		Value: output.MarshalContext(&output.PivotingContext{
+			Enable:      enabled,
+			Listener:    listenerID,
+			Pipeline:    pipelineName,
+			RemAgentID:  agentID,
+			InboundSide: "local",
+			LocalURL:    "127.0.0.1:8080",
+		}),
+	}
+	if err := db.Session().Create(ctxModel).Error; err != nil {
+		t.Fatalf("Create context(%s) failed: %v", agentID, err)
+	}
+	return ctxModel.ID.String()
 }

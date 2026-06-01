@@ -125,8 +125,8 @@ Pipeline 的唯一身份是 `listener_id + name`：
 - 客户端缓存中，如果名称唯一，仍可用 `name` 访问；一旦跨 Listener 同名，会使用 `listener_id:name` 作为缓存 key。
 - Profile 也会保存 Pipeline 的 Listener 维度；创建 Profile 时可使用 `listener_id:pipeline_name` 指向跨 Listener 同名 Pipeline。
 - 自动默认 Profile 在无重名时沿用 `pipeline_default`，出现跨 Listener 同名时使用 `listener_id_pipeline_default` 避免撞名。
-- Website 托管内容同样按 `listener_id + website name + path` 识别；跨 Listener 同名 Website 不会共享内容、文件目录或删除操作。
-- REM agent 控制命令可接收 `listener_id:pipeline_name`，用于跨 Listener 同名 REM 的精确路由。
+- Website 托管内容同样按 `listener_id + website name + path` 识别；跨 Listener 同名 Website 不会共享内容、文件目录或删除操作；历史无 `listener_id` 的内容只会在同名 Website 唯一时兼容读取。
+- REM agent 控制命令和 REM dial 可接收 `listener_id:pipeline_name`，用于跨 Listener 同名 REM 的精确路由；历史无 listener 的 REM agent context 在同名 REM 有歧义时不会被自动归属。
 
 ### REM 配置同步
 
