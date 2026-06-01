@@ -26,7 +26,7 @@ type WebsiteContent struct {
 	ContentType string `gorm:""`
 	Auth        string `gorm:""` // "user:pass" or empty; "none" = skip website default
 
-	Pipeline   *Pipeline `gorm:"foreignKey:PipelineID;references:Name;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+	Pipeline   *Pipeline `gorm:"foreignKey:PipelineID;references:Name;-:migration;"`
 	PipelineID string    `gorm:"type:string;index;"`
 }
 

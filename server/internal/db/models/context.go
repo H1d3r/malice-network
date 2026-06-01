@@ -23,7 +23,7 @@ type Context struct {
 	Context    output.Context `gorm:"-"`
 
 	Session  *Session  `gorm:"foreignKey:SessionID;references:SessionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
-	Pipeline *Pipeline `gorm:"foreignKey:PipelineID;references:Name;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+	Pipeline *Pipeline `gorm:"foreignKey:PipelineID;references:Name;-:migration;"`
 	Task     *Task     `gorm:"foreignKey:TaskID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
 

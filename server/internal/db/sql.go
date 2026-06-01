@@ -70,6 +70,7 @@ func NewDBClient(dbConfig *configs.DatabaseConfig) (*gorm.DB, error) {
 		} else {
 			logs.Log.Infof("database schema check completed (%s)", dbConfig.Dialect)
 		}
+		cleanupPipelineNameIdentityArtifacts(dbClient, dbConfig.Dialect)
 		addPostgresForeignKeys(dbClient)
 	} else {
 		if err := dbClient.AutoMigrate(allModels...); err != nil {
@@ -77,6 +78,7 @@ func NewDBClient(dbConfig *configs.DatabaseConfig) (*gorm.DB, error) {
 		} else {
 			logs.Log.Infof("database schema check completed (%s)", dbConfig.Dialect)
 		}
+		cleanupPipelineNameIdentityArtifacts(dbClient, dbConfig.Dialect)
 	}
 
 	sqlDB, err := dbClient.DB()
@@ -88,6 +90,32 @@ func NewDBClient(dbConfig *configs.DatabaseConfig) (*gorm.DB, error) {
 		sqlDB.SetConnMaxLifetime(time.Hour)
 	}
 	return dbClient, nil
+}
+
+func cleanupPipelineNameIdentityArtifacts(db *gorm.DB, dialect string) {
+	var statements []string
+	switch dialect {
+	case configs.Postgres:
+		statements = []string{
+			`ALTER TABLE "contexts" DROP CONSTRAINT IF EXISTS "fk_contexts_pipeline"`,
+			`ALTER TABLE "website_contents" DROP CONSTRAINT IF EXISTS "fk_website_contents_pipeline"`,
+			`ALTER TABLE "pipelines" DROP CONSTRAINT IF EXISTS "uni_pipelines_name"`,
+			`ALTER TABLE "pipelines" DROP CONSTRAINT IF EXISTS "pipelines_name_key"`,
+			`DROP INDEX IF EXISTS "idx_pipelines_name"`,
+			`DROP INDEX IF EXISTS "uni_pipelines_name"`,
+		}
+	default:
+		statements = []string{
+			`DROP INDEX IF EXISTS idx_pipelines_name`,
+			`DROP INDEX IF EXISTS uni_pipelines_name`,
+		}
+	}
+
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			logs.Log.Warnf("Failed to clean stale pipeline identity artifact: %v", err)
+		}
+	}
 }
 
 func sqliteClient(dbConfig *configs.DatabaseConfig) (*gorm.DB, error) {
@@ -125,18 +153,16 @@ func postgresClient(dbConfig *configs.DatabaseConfig) (*gorm.DB, error) {
 // incorrect FK direction when both sides share the same field name (e.g. SessionID).
 func addPostgresForeignKeys(db *gorm.DB) {
 	fks := []struct {
-		name    string
-		table   string
-		column  string
-		refTab  string
-		refCol  string
+		name   string
+		table  string
+		column string
+		refTab string
+		refCol string
 	}{
 		{"fk_sessions_profile", "sessions", "profile_name", "profiles", "name"},
 		{"fk_tasks_session", "tasks", "session_id", "sessions", "session_id"},
 		{"fk_contexts_session", "contexts", "session_id", "sessions", "session_id"},
-		{"fk_contexts_pipeline", "contexts", "pipeline_id", "pipelines", "name"},
 		{"fk_contexts_task", "contexts", "task_id", "tasks", "id"},
-		{"fk_website_contents_pipeline", "website_contents", "pipeline_id", "pipelines", "name"},
 	}
 
 	for _, fk := range fks {

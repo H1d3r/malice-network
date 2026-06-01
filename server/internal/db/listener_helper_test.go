@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/chainreactors/IoM-go/consts"
@@ -58,6 +59,33 @@ func TestSavePipeline_Update(t *testing.T) {
 	}
 }
 
+func TestSavePipeline_AllowsSameNameAcrossListeners(t *testing.T) {
+	initTestDB(t)
+
+	if _, err := SavePipeline(newTestPipeline("sp-shared-1", "ls-a")); err != nil {
+		t.Fatalf("SavePipeline listener A failed: %v", err)
+	}
+	if _, err := SavePipeline(newTestPipeline("sp-shared-1", "ls-b")); err != nil {
+		t.Fatalf("SavePipeline listener B failed: %v", err)
+	}
+
+	foundA, err := FindPipelineByListener("sp-shared-1", "ls-a")
+	if err != nil {
+		t.Fatalf("FindPipelineByListener listener A failed: %v", err)
+	}
+	if foundA.ListenerId != "ls-a" {
+		t.Fatalf("listener A lookup returned %q", foundA.ListenerId)
+	}
+
+	foundB, err := FindPipelineByListener("sp-shared-1", "ls-b")
+	if err != nil {
+		t.Fatalf("FindPipelineByListener listener B failed: %v", err)
+	}
+	if foundB.ListenerId != "ls-b" {
+		t.Fatalf("listener B lookup returned %q", foundB.ListenerId)
+	}
+}
+
 func TestSavePipeline_Nil(t *testing.T) {
 	initTestDB(t)
 
@@ -88,6 +116,25 @@ func TestFindPipeline_NotFound(t *testing.T) {
 	_, err := FindPipeline("nonexistent")
 	if err == nil {
 		t.Error("FindPipeline should return error for nonexistent pipeline")
+	}
+}
+
+func TestFindPipeline_AmbiguousNameRequiresListener(t *testing.T) {
+	initTestDB(t)
+
+	if _, err := SavePipeline(newTestPipeline("fp-shared-1", "ls-a")); err != nil {
+		t.Fatalf("SavePipeline listener A failed: %v", err)
+	}
+	if _, err := SavePipeline(newTestPipeline("fp-shared-1", "ls-b")); err != nil {
+		t.Fatalf("SavePipeline listener B failed: %v", err)
+	}
+
+	_, err := FindPipeline("fp-shared-1")
+	if err == nil {
+		t.Fatal("FindPipeline should reject ambiguous names")
+	}
+	if !strings.Contains(err.Error(), "multiple pipelines named") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

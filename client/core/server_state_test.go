@@ -116,6 +116,59 @@ func TestReconcileEventTracksWebsiteLifecycle(t *testing.T) {
 	}
 }
 
+func TestReconcileEventScopesDuplicatePipelineNames(t *testing.T) {
+	state := &iomclient.ServerState{
+		Pipelines: make(map[string]*clientpb.Pipeline),
+	}
+
+	pipelineA := &clientpb.Pipeline{
+		Name:       "shared-pipe",
+		ListenerId: "listener-a",
+		Type:       consts.TCPPipeline,
+	}
+	pipelineB := &clientpb.Pipeline{
+		Name:       "shared-pipe",
+		ListenerId: "listener-b",
+		Type:       consts.TCPPipeline,
+	}
+
+	state.ReconcileEvent(&clientpb.Event{
+		Type: consts.EventJob,
+		Op:   consts.CtrlPipelineStart,
+		Job:  &clientpb.Job{Pipeline: pipelineA},
+	})
+	if got := state.Pipelines["shared-pipe"]; got == nil || got.ListenerId != "listener-a" {
+		t.Fatalf("unique pipeline should use bare name key, got %#v", got)
+	}
+
+	state.ReconcileEvent(&clientpb.Event{
+		Type: consts.EventJob,
+		Op:   consts.CtrlPipelineStart,
+		Job:  &clientpb.Job{Pipeline: pipelineB},
+	})
+	if _, ok := state.Pipelines["shared-pipe"]; ok {
+		t.Fatal("ambiguous bare pipeline key should be removed")
+	}
+	if got := state.Pipelines[iomclient.PipelineCacheKey(pipelineA)]; got == nil || got.ListenerId != "listener-a" {
+		t.Fatalf("listener A scoped key missing, got %#v", got)
+	}
+	if got := state.Pipelines[iomclient.PipelineCacheKey(pipelineB)]; got == nil || got.ListenerId != "listener-b" {
+		t.Fatalf("listener B scoped key missing, got %#v", got)
+	}
+
+	state.ReconcileEvent(&clientpb.Event{
+		Type: consts.EventJob,
+		Op:   consts.CtrlPipelineStop,
+		Job:  &clientpb.Job{Pipeline: pipelineB},
+	})
+	if _, ok := state.Pipelines[iomclient.PipelineCacheKey(pipelineB)]; ok {
+		t.Fatal("stopped scoped pipeline should be removed")
+	}
+	if got := state.Pipelines["shared-pipe"]; got == nil || got.ListenerId != "listener-a" {
+		t.Fatalf("remaining unique pipeline should be promoted to bare key, got %#v", got)
+	}
+}
+
 func TestReconcileEventTracksWebsiteContentMutations(t *testing.T) {
 	state := &iomclient.ServerState{
 		Pipelines: make(map[string]*clientpb.Pipeline),

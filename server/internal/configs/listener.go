@@ -8,6 +8,7 @@ import (
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/helper/implanttypes"
+	"github.com/chainreactors/malice-network/helper/utils/configutil"
 
 	cryptostream "github.com/chainreactors/malice-network/server/internal/stream"
 	"golang.org/x/exp/slices"
@@ -54,11 +55,11 @@ func (tcp *TcpPipelineConfig) ToProtobuf(lisId string) (*clientpb.Pipeline, erro
 		return nil, err
 	}
 	return &clientpb.Pipeline{
-		Name:       tcp.Name,
-		ListenerId: lisId,
-		Enable:     tcp.Enable,
-		Parser:     tcp.Parser,
-		Type:       consts.TCPPipeline,
+		Name:         tcp.Name,
+		ListenerId:   lisId,
+		Enable:       tcp.Enable,
+		Parser:       tcp.Parser,
+		Type:         consts.TCPPipeline,
 		PacketLength: uint32(tcp.PacketLength),
 		Body: &clientpb.Pipeline_Tcp{
 			Tcp: &clientpb.TCPPipeline{
@@ -86,10 +87,10 @@ func (pipeline *BindPipelineConfig) ToProtobuf(lisId string) (*clientpb.Pipeline
 		return nil, err
 	}
 	return &clientpb.Pipeline{
-		Name:       pipeline.Name,
-		Enable:     pipeline.Enable,
-		ListenerId: lisId,
-		Parser:     consts.ImplantMalefic,
+		Name:         pipeline.Name,
+		Enable:       pipeline.Enable,
+		ListenerId:   lisId,
+		Parser:       consts.ImplantMalefic,
 		PacketLength: uint32(pipeline.PacketLength),
 		Body: &clientpb.Pipeline_Bind{
 			Bind: &clientpb.BindPipeline{},
@@ -139,11 +140,11 @@ func (http *HttpPipelineConfig) ToProtobuf(lisId string) (*clientpb.Pipeline, er
 	}
 
 	return &clientpb.Pipeline{
-		Name:       http.Name,
-		ListenerId: lisId,
-		Enable:     http.Enable,
-		Parser:     http.Parser,
-		Type:       consts.HTTPPipeline,
+		Name:         http.Name,
+		ListenerId:   lisId,
+		Enable:       http.Enable,
+		Parser:       http.Parser,
+		Type:         consts.HTTPPipeline,
 		PacketLength: uint32(http.PacketLength),
 		Body: &clientpb.Pipeline_Http{
 			Http: &clientpb.HTTPPipeline{
@@ -162,6 +163,7 @@ type REMConfig struct {
 	Enable  bool   `config:"enable" default:"false" yaml:"enable"`
 	Name    string `config:"name" default:"default-rem" yaml:"name"`
 	Console string `config:"console" default:"" yaml:"console"`
+	Link    string `config:"link" default:"" yaml:"link"`
 }
 
 func (r *REMConfig) ToProtobuf(lisId string) (*clientpb.Pipeline, error) {
@@ -172,10 +174,70 @@ func (r *REMConfig) ToProtobuf(lisId string) (*clientpb.Pipeline, error) {
 		ListenerId: lisId,
 		Body: &clientpb.Pipeline_Rem{
 			Rem: &clientpb.REM{
-				Console: r.Console,
+				Name:       r.Name,
+				ListenerId: lisId,
+				Console:    r.Console,
+				Link:       r.Link,
 			},
 		},
 	}, nil
+}
+
+func (l *ListenerConfig) ValidateREMNames() error {
+	if l == nil {
+		return nil
+	}
+	seen := make(map[string]string)
+	for _, rem := range l.REMs {
+		if rem == nil || !rem.Enable {
+			continue
+		}
+		if rem.Name == "" {
+			continue
+		}
+		if existingConsole, ok := seen[rem.Name]; ok {
+			return fmt.Errorf("duplicate REM pipeline name %q in listener %q (console %q conflicts with %q)", rem.Name, l.Name, rem.Console, existingConsole)
+		}
+		seen[rem.Name] = rem.Console
+	}
+	return nil
+}
+
+func SyncREMConfigFromPipeline(pipeline *clientpb.Pipeline) error {
+	if pipeline == nil || pipeline.GetRem() == nil {
+		return nil
+	}
+	listenerConfig := GetListenerConfig()
+	if listenerConfig == nil {
+		return nil
+	}
+	if listenerConfig.Name != "" && pipeline.ListenerId != "" && listenerConfig.Name != pipeline.ListenerId {
+		return nil
+	}
+	updated := false
+	for _, rem := range listenerConfig.REMs {
+		if rem == nil || rem.Name != pipeline.Name {
+			continue
+		}
+		pbRem := pipeline.GetRem()
+		if pbRem.Console != "" && rem.Console != pbRem.Console {
+			rem.Console = pbRem.Console
+			updated = true
+		}
+		if pbRem.Link != "" && rem.Link != pbRem.Link {
+			rem.Link = pbRem.Link
+			updated = true
+		}
+		if pbRem.GetName() != "" && rem.Name != pbRem.GetName() {
+			rem.Name = pbRem.GetName()
+			updated = true
+		}
+		break
+	}
+	if !updated {
+		return nil
+	}
+	return configutil.SetStructByTag("listeners", listenerConfig, "config")
 }
 
 type WebsiteConfig struct {

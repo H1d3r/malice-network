@@ -115,6 +115,33 @@ http:
     body_suffix: "<!-- suffix -->"         # Body 后缀
 ```
 
+### Pipeline 身份与同名规则
+
+Pipeline 的唯一身份是 `listener_id + name`：
+
+- 同一个 Listener 下不能有两个同名 Pipeline。
+- 不同 Listener 之间可以使用相同 Pipeline 名称。
+- 服务端只收到 `name` 且发现跨 Listener 同名时，会要求调用方补充 `listener_id`，避免误操作。
+- 客户端缓存中，如果名称唯一，仍可用 `name` 访问；一旦跨 Listener 同名，会使用 `listener_id:name` 作为缓存 key。
+- Profile 也会保存 Pipeline 的 Listener 维度；创建 Profile 时可使用 `listener_id:pipeline_name` 指向跨 Listener 同名 Pipeline。
+- 自动默认 Profile 在无重名时沿用 `pipeline_default`，出现跨 Listener 同名时使用 `listener_id_pipeline_default` 避免撞名。
+
+### REM 配置同步
+
+REM Pipeline 的 `console` 是预注册入口，`link` 是启动后生成的当前连接地址：
+
+```yaml
+rem:
+  - enable: true
+    name: rem_default
+    console: tcp://0.0.0.0:20000
+    link: tcp://10.0.0.1:20000
+```
+
+- 首次启动时，如果 `link` 为空，Listener 会根据 `console` 启动 REM，并把生成的 `link` 同步到数据库和 `config.yaml`。
+- 如果数据库中已经存在同名 REM，系统会保留数据库中的 REM 身份和 `link`，并把缺失或旧的 `config.yaml` 字段回填为数据库中的值。
+- 同一个 Listener 下启用状态的 REM `name` 不能重复；如需不同 REM，请使用不同名称。
+
 ## 独立部署
 
 Listener 可以独立部署在与 Server 不同的服务器上：

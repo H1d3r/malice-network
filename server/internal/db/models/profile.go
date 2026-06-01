@@ -29,9 +29,10 @@ type Profile struct {
 
 	// BasicPipeline 和 PulsePipeline
 	PipelineID string `gorm:"type:string;index;"`
+	ListenerID string `gorm:"type:string;index;"`
 
 	// BasicPipeline 和 PulsePipeline
-	Pipeline *Pipeline `gorm:"foreignKey:PipelineID;references:Name;-:migration;"`
+	Pipeline *Pipeline `gorm:"foreignKey:PipelineID,ListenerID;references:Name,ListenerId;-:migration;"`
 
 	Source     string         `gorm:"type:string;index;default:'user'"`
 	SourceHash string         `gorm:"type:string;index;default:''"`
@@ -70,9 +71,13 @@ func (p *Profile) DiskPath() string {
 }
 
 func (p *Profile) ToProtobuf() *clientpb.Profile {
+	pipelineID := p.PipelineID
+	if p.ListenerID != "" && p.PipelineID != "" {
+		pipelineID = p.ListenerID + ":" + p.PipelineID
+	}
 	return &clientpb.Profile{
 		Name:       p.Name,
-		PipelineId: p.PipelineID,
+		PipelineId: pipelineID,
 		Params:     p.ParamsData,
 		CreatedAt:  p.CreatedAt.Unix(),
 	}

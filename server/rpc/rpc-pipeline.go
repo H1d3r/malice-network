@@ -9,6 +9,7 @@ import (
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/helper/implanttypes"
+	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
@@ -71,15 +72,32 @@ func (rpc *Server) RegisterPipeline(ctx context.Context, req *clientpb.Pipeline)
 	if err != nil {
 		return nil, err
 	}
-	profileReq := &clientpb.Profile{
-		Name:       req.Name + "_default",
-		PipelineId: req.Name,
-	}
-	err = db.NewProfile(profileReq)
-	if err != nil {
+	if err := registerDefaultProfileForPipeline(req); err != nil {
 		logs.Log.Errorf("new profile %s failed %v", req.Name, err)
 	}
 	return &clientpb.Empty{}, nil
+}
+
+func registerDefaultProfileForPipeline(req *clientpb.Pipeline) error {
+	if req.GetName() == "" {
+		return nil
+	}
+	profileName := req.Name + "_default"
+	pipelines, err := db.NewPipelineQuery().WhereName(req.Name).Find()
+	if err != nil {
+		return err
+	}
+	if len(pipelines) > 1 {
+		profileName = req.ListenerId + "_" + req.Name + "_default"
+	}
+	pipelineID := req.Name
+	if req.ListenerId != "" {
+		pipelineID = req.ListenerId + ":" + req.Name
+	}
+	return db.NewProfile(&clientpb.Profile{
+		Name:       profileName,
+		PipelineId: pipelineID,
+	})
 }
 
 func (rpc *Server) SyncPipeline(ctx context.Context, req *clientpb.Pipeline) (*clientpb.Empty, error) {
@@ -89,6 +107,11 @@ func (rpc *Server) SyncPipeline(ctx context.Context, req *clientpb.Pipeline) (*c
 	_, err := db.SavePipeline(models.FromPipelinePb(req))
 	if err != nil {
 		return nil, err
+	}
+	if req.GetRem() != nil {
+		if err := configs.SyncREMConfigFromPipeline(req); err != nil {
+			return nil, err
+		}
 	}
 	job := core.Jobs.AddPipeline(req)
 	core.EventBroker.Publish(core.Event{

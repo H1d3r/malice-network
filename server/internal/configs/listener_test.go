@@ -3,6 +3,7 @@ package configs
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chainreactors/IoM-go/consts"
@@ -157,6 +158,45 @@ func TestTcpPipelineConfigToProtobufIncludesTLSAndSecure(t *testing.T) {
 	}
 	if len(pb.Encryption) != 1 || pb.Encryption[0].Type != consts.CryptorXOR {
 		t.Fatalf("unexpected encryption protobuf: %#v", pb.Encryption)
+	}
+}
+
+func TestREMConfigToProtobufIncludesLink(t *testing.T) {
+	cfg := &REMConfig{
+		Enable:  true,
+		Name:    "rem-main",
+		Console: "tcp://0.0.0.0:20000",
+		Link:    "tcp://10.0.0.1:20000",
+	}
+
+	pb, err := cfg.ToProtobuf("listener-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pb.Type != consts.RemPipeline {
+		t.Fatalf("unexpected pipeline type: %q", pb.Type)
+	}
+	rem := pb.GetRem()
+	if rem == nil {
+		t.Fatal("expected REM body")
+	}
+	if rem.Name != "rem-main" || rem.ListenerId != "listener-1" || rem.Console != cfg.Console || rem.Link != cfg.Link {
+		t.Fatalf("unexpected REM protobuf: %#v", rem)
+	}
+}
+
+func TestListenerConfigValidateREMNamesRejectsEnabledDuplicate(t *testing.T) {
+	cfg := &ListenerConfig{
+		Name: "listener-1",
+		REMs: []*REMConfig{
+			{Enable: true, Name: "rem-a", Console: "tcp://0.0.0.0:20000"},
+			{Enable: true, Name: "rem-a", Console: "tcp://0.0.0.0:20001"},
+		},
+	}
+
+	err := cfg.ValidateREMNames()
+	if err == nil || !strings.Contains(err.Error(), "duplicate REM pipeline name") {
+		t.Fatalf("ValidateREMNames error = %v, want duplicate REM name", err)
 	}
 }
 

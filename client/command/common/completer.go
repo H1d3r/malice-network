@@ -337,8 +337,15 @@ func SyncCompleter(con *core.Console) carapace.Action {
 func AllPipelineCompleter(con *core.Console) carapace.Action {
 	callback := func(c carapace.Context) carapace.Action {
 		results := make([]string, 0)
-		for _, pipeline := range con.Pipelines {
-			results = append(results, pipeline.Name, fmt.Sprintf("%s: %s", pipeline.ListenerId, pipeline.Name))
+		for key, pipeline := range con.Pipelines {
+			if pipeline == nil {
+				continue
+			}
+			value := pipeline.Name
+			if key != "" && key != pipeline.Name {
+				value = key
+			}
+			results = append(results, value, fmt.Sprintf("%s: %s", pipeline.ListenerId, pipeline.Name))
 		}
 		return carapace.ActionValuesDescribed(results...).Tag("pipeline name")
 	}
@@ -426,9 +433,16 @@ func WebContentCompleter(con *core.Console) carapace.Action {
 func RemPipelineCompleter(con *core.Console) carapace.Action {
 	callback := func(c carapace.Context) carapace.Action {
 		results := make([]string, 0)
-		for _, pipeline := range con.Pipelines {
+		for key, pipeline := range con.Pipelines {
+			if pipeline == nil {
+				continue
+			}
 			if rem := pipeline.GetRem(); rem != nil {
-				results = append(results, pipeline.Name,
+				value := pipeline.Name
+				if key != "" && key != pipeline.Name {
+					value = key
+				}
+				results = append(results, value,
 					fmt.Sprintf("console: %s", rem.Console))
 			}
 		}

@@ -151,6 +151,9 @@ func writeProfileDisk(profilePath string, implantConfig []byte, preludeConfig []
 
 // NewProfile creates a new profile
 func NewProfile(profile *clientpb.Profile) error {
+	if profile == nil {
+		return types.ErrMissingRequestField
+	}
 	// Validate input
 	if err := validateProfileName(profile.Name); err != nil {
 		return err
@@ -168,16 +171,27 @@ func NewProfile(profile *clientpb.Profile) error {
 		return err
 	}
 
-	// for pipeline
-	if profile.ImplantConfig == nil && profile.PipelineId != "" {
-		pipelineModel, err := FindPipeline(profile.PipelineId)
+	var pipelineModel *models.Pipeline
+	if profile.PipelineId != "" {
+		var err error
+		pipelineModel, profile.PipelineId, _, err = resolveProfilePipeline(profile.PipelineId, "")
 		if err != nil {
 			return fmt.Errorf("pipline not found, err: %s", err)
 		}
+		if pipelineModel != nil {
+			profile.PipelineId = pipelineModel.Name
+		}
+	}
+	listenerID := ""
+	if pipelineModel != nil {
+		listenerID = pipelineModel.ListenerId
+	}
 
+	// for pipeline
+	if profile.ImplantConfig == nil && profile.PipelineId != "" {
 		params, _ := implanttypes.UnmarshalProfileParams([]byte(profile.Params))
 		if params != nil && params.REMPipeline != "" {
-			remPipelineModel, err := FindPipeline(params.REMPipeline)
+			remPipelineModel, _, _, err := resolveProfilePipeline(params.REMPipeline, listenerID)
 			if err != nil {
 				return fmt.Errorf("pipline not found, err: %s", err)
 			}
@@ -276,6 +290,7 @@ func NewProfile(profile *clientpb.Profile) error {
 		Name:       profile.Name,
 		ParamsData: profile.Params,
 		PipelineID: profile.PipelineId,
+		ListenerID: listenerID,
 		Source:     models.ProfileSourceUser,
 	}
 
@@ -287,6 +302,7 @@ func NewProfile(profile *clientpb.Profile) error {
 				"name":        model.Name,
 				"params":      model.ParamsData,
 				"pipeline_id": model.PipelineID,
+				"listener_id": model.ListenerID,
 				"source":      model.Source,
 				"source_hash": "",
 				"deleted_at":  nil,
@@ -294,6 +310,38 @@ func NewProfile(profile *clientpb.Profile) error {
 	}
 
 	return Session().Create(model).Error
+}
+
+func splitScopedPipelineID(value string) (string, string, bool) {
+	listenerID, pipelineID, ok := strings.Cut(value, ":")
+	if !ok || listenerID == "" || pipelineID == "" {
+		return "", value, false
+	}
+	return listenerID, pipelineID, true
+}
+
+func resolveProfilePipeline(pipelineID, listenerID string) (*models.Pipeline, string, string, error) {
+	pipelineID = strings.TrimSpace(pipelineID)
+	listenerID = strings.TrimSpace(listenerID)
+	if scopedListenerID, scopedPipelineID, ok := splitScopedPipelineID(pipelineID); ok {
+		listenerID = scopedListenerID
+		pipelineID = scopedPipelineID
+	}
+	if pipelineID == "" {
+		return nil, "", listenerID, gorm.ErrRecordNotFound
+	}
+	if listenerID != "" {
+		pipeline, err := FindPipelineByListener(pipelineID, listenerID)
+		if err == nil {
+			return pipeline, pipeline.Name, pipeline.ListenerId, nil
+		}
+		return nil, pipelineID, listenerID, err
+	}
+	pipeline, err := FindPipeline(pipelineID)
+	if err != nil {
+		return nil, pipelineID, listenerID, err
+	}
+	return pipeline, pipeline.Name, pipeline.ListenerId, nil
 }
 
 func RegisterProfileTemplates(profilesRoot string) (*ProfileTemplateSeedResult, error) {
@@ -406,8 +454,10 @@ func GetProfile(name string) (*implanttypes.ProfileConfig, error) {
 		}
 
 		profile.Basic.Targets = []implanttypes.Target{target}
-		profile.Basic.Encryption = profileModel.Pipeline.Encryption.Choice().Type
-		profile.Basic.Key = profileModel.Pipeline.Encryption.Choice().Key
+		if encryption := profileModel.Pipeline.Encryption.Choice(); encryption != nil {
+			profile.Basic.Encryption = encryption.Type
+			profile.Basic.Key = encryption.Key
+		}
 		// profile.Basic.Protocol = profileModel.Pipeline.Type
 		// profile.Basic.TLS.Enable = profileModel.Pipeline.Tls.Enable
 
@@ -429,7 +479,7 @@ func GetProfile(name string) (*implanttypes.ProfileConfig, error) {
 		profile.Basic.Jitter = profileModel.Params.Jitter
 		if params.REMPipeline != "" {
 			// For REM protocol, add to targets list.
-			pipeline, err := FindPipeline(params.REMPipeline)
+			pipeline, _, _, err := resolveProfilePipeline(params.REMPipeline, profileModel.ListenerID)
 			if err != nil {
 				return nil, err
 			}
@@ -470,7 +520,8 @@ func GetProfileByName(profileName string) (*models.Profile, error) {
 
 // FindBuildersByPipelineID returns artifacts whose profile belongs to the given pipeline.
 func FindBuildersByPipelineID(pipelineID string) ([]*models.Artifact, error) {
-	return NewArtifactQuery().WherePipelineID(pipelineID).WithProfile().Find()
+	listenerID, normalizedPipelineID, _ := splitScopedPipelineID(pipelineID)
+	return NewArtifactQuery().WherePipelineIdentity(normalizedPipelineID, listenerID).WithProfile().Find()
 }
 
 func DeleteProfileByName(profileName string) error {
@@ -680,6 +731,10 @@ func DeleteArtifactRow(id uint32) error {
 // resolveArtifactFormat returns file extension (with dot) based on OS/buildType/outputType.
 // outputType: "" or "executable" (default), "lib", "shellcode"
 func resolveArtifactFormat(osName, buildType string, outputType string) string {
+	if buildType == consts.CommandBuildProxyDll {
+		return ".zip"
+	}
+
 	isLib := outputType == "lib"
 	isShellcode := outputType == "shellcode"
 
@@ -740,16 +795,23 @@ func FindArtifact(target *clientpb.Artifact, bin bool) (*clientpb.Artifact, erro
 		artifact, err = NewArtifactQuery().WhereProfileName(target.Profile).WhereStatus(consts.BuildStatusCompleted).Last()
 	} else {
 		var builders Artifacts
+		listenerID, pipelineID, _ := splitScopedPipelineID(target.Pipeline)
 		builders, err = NewArtifactQuery().
 			WhereOs(target.Platform).WhereArch(target.Arch).WhereType(target.Type).WhereStatus(consts.BuildStatusCompleted).
 			WithProfilePipeline().Find()
 		if err == nil {
 			for _, v := range builders {
-				if v.Type == consts.ImplantPulse && v.Profile.PipelineID == target.Pipeline {
+				if v.Profile.PipelineID != pipelineID {
+					continue
+				}
+				if listenerID != "" && v.Profile.ListenerID != listenerID {
+					continue
+				}
+				if v.Type == consts.ImplantPulse {
 					artifact = v
 					break
 				}
-				if v.Profile.PipelineID == target.Pipeline {
+				if v.Profile.PipelineID == pipelineID {
 					artifact = v
 					break
 				}
@@ -774,9 +836,10 @@ func FindArtifact(target *clientpb.Artifact, bin bool) (*clientpb.Artifact, erro
 }
 
 func FindArtifactFromPipeline(pipelineName string) (*models.Artifact, error) {
+	listenerID, pipelineID, _ := splitScopedPipelineID(pipelineName)
 	return NewArtifactQuery().
 		WhereType(consts.CommandBuildBeacon).
-		WherePipelineID(pipelineName).
+		WherePipelineIdentity(pipelineID, listenerID).
 		WithProfile().
 		Last()
 }

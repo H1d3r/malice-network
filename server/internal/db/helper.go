@@ -629,7 +629,8 @@ func (q *OperatorQuery) Updates(fields map[string]interface{}) error {
 // ============================================
 
 type ProfileQuery struct {
-	db *gorm.DB
+	db           *gorm.DB
+	loadPipeline bool
 }
 
 // NewProfileQuery creates a new profile query builder
@@ -657,7 +658,7 @@ func (q *ProfileQuery) WherePipelineID(pipelineID string) *ProfileQuery {
 
 // WithPipeline preloads the Pipeline association
 func (q *ProfileQuery) WithPipeline() *ProfileQuery {
-	q.db = q.db.Preload("Pipeline")
+	q.loadPipeline = true
 	return q
 }
 
@@ -671,7 +672,17 @@ func (q *ProfileQuery) OrderByCreated() *ProfileQuery {
 func (q *ProfileQuery) Find() (Profiles, error) {
 	var profiles Profiles
 	err := q.db.Find(&profiles).Error
-	return profiles, err
+	if err != nil {
+		return nil, err
+	}
+	if q.loadPipeline {
+		for _, profile := range profiles {
+			if err := loadProfilePipeline(profile); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return profiles, nil
 }
 
 // First returns the first matching profile
@@ -681,12 +692,35 @@ func (q *ProfileQuery) First() (*models.Profile, error) {
 	if err != nil {
 		return nil, err
 	}
+	if q.loadPipeline {
+		if err := loadProfilePipeline(&profile); err != nil {
+			return nil, err
+		}
+	}
 	return &profile, nil
 }
 
 // Delete deletes matching profiles
 func (q *ProfileQuery) Delete() error {
 	return q.db.Delete(&models.Profile{}).Error
+}
+
+func loadProfilePipeline(profile *models.Profile) error {
+	if profile == nil || profile.PipelineID == "" {
+		return nil
+	}
+	var pipeline *models.Pipeline
+	var err error
+	if profile.ListenerID != "" {
+		pipeline, err = FindPipelineByListener(profile.PipelineID, profile.ListenerID)
+	} else {
+		pipeline, err = FindPipeline(profile.PipelineID)
+	}
+	if err != nil {
+		return err
+	}
+	profile.Pipeline = pipeline
+	return nil
 }
 
 // ============================================
@@ -754,6 +788,16 @@ func (q *ArtifactQuery) WhereArch(arch string) *ArtifactQuery {
 func (q *ArtifactQuery) WherePipelineID(pipelineID string) *ArtifactQuery {
 	q.db = q.db.Joins("JOIN profiles ON profiles.name = artifacts.profile_name").
 		Where("profiles.pipeline_id = ?", pipelineID)
+	return q
+}
+
+// WherePipelineIdentity filters artifacts by profile pipeline name and listener.
+func (q *ArtifactQuery) WherePipelineIdentity(pipelineID, listenerID string) *ArtifactQuery {
+	q.db = q.db.Joins("JOIN profiles ON profiles.name = artifacts.profile_name").
+		Where("profiles.pipeline_id = ?", pipelineID)
+	if listenerID != "" {
+		q.db = q.db.Where("profiles.listener_id = ?", listenerID)
+	}
 	return q
 }
 

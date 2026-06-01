@@ -65,3 +65,63 @@ func TestStartPipelineCmdForwardsCertNameToStartRequest(t *testing.T) {
 		t.Fatalf("start request = %#v, want pipe-b/cert-blue", req)
 	}
 }
+
+func TestStartPipelineCmdUsesScopedCacheKey(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+	h.Console.Pipelines["listener-a:pipe-c"] = &clientpb.Pipeline{
+		Name:       "pipe-c",
+		ListenerId: "listener-a",
+		Enable:     false,
+	}
+
+	cmd := &cobra.Command{Use: "start"}
+	cmd.Flags().String("cert-name", "", "")
+	if err := cmd.Flags().Parse([]string{"listener-a:pipe-c"}); err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if err := listenercmd.StartPipelineCmd(cmd, h.Console); err != nil {
+		t.Fatalf("StartPipelineCmd failed: %v", err)
+	}
+
+	calls := h.Recorder.Calls()
+	if len(calls) != 1 || calls[0].Method != "StartPipeline" {
+		t.Fatalf("calls = %#v, want only StartPipeline", calls)
+	}
+	req, ok := calls[0].Request.(*clientpb.CtrlPipeline)
+	if !ok {
+		t.Fatalf("request type = %T, want *clientpb.CtrlPipeline", calls[0].Request)
+	}
+	if req.Name != "pipe-c" || req.ListenerId != "listener-a" {
+		t.Fatalf("start request = %#v, want scoped pipe-c/listener-a", req)
+	}
+}
+
+func TestStopPipelineCmdUsesScopedCacheKey(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+	h.Console.Pipelines["listener-b:pipe-d"] = &clientpb.Pipeline{
+		Name:       "pipe-d",
+		ListenerId: "listener-b",
+	}
+
+	cmd := &cobra.Command{Use: "stop"}
+	if err := cmd.Flags().Parse([]string{"listener-b:pipe-d"}); err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if err := listenercmd.StopPipelineCmd(cmd, h.Console); err != nil {
+		t.Fatalf("StopPipelineCmd failed: %v", err)
+	}
+
+	calls := h.Recorder.Calls()
+	if len(calls) != 1 || calls[0].Method != "StopPipeline" {
+		t.Fatalf("calls = %#v, want only StopPipeline", calls)
+	}
+	req, ok := calls[0].Request.(*clientpb.CtrlPipeline)
+	if !ok {
+		t.Fatalf("request type = %T, want *clientpb.CtrlPipeline", calls[0].Request)
+	}
+	if req.Name != "pipe-d" || req.ListenerId != "listener-b" {
+		t.Fatalf("stop request = %#v, want scoped pipe-d/listener-b", req)
+	}
+}

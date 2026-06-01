@@ -160,3 +160,36 @@ func TestNewDBClient_AutoMigrateIdempotent(t *testing.T) {
 		t.Fatal("second NewDBClient should succeed")
 	}
 }
+
+func TestNewDBClient_DropsLegacyPipelineNameUniqueIndex(t *testing.T) {
+	setupTestDB(t)
+
+	cfg := &configs.DatabaseConfig{Dialect: configs.Sqlite}
+	client, err := NewDBClient(cfg)
+	if err != nil {
+		t.Fatalf("NewDBClient failed: %v", err)
+	}
+	if err := client.Exec("CREATE UNIQUE INDEX idx_pipelines_name ON pipelines(name)").Error; err != nil {
+		t.Fatalf("failed to create legacy unique index: %v", err)
+	}
+
+	client, err = NewDBClient(cfg)
+	if err != nil {
+		t.Fatalf("second NewDBClient failed: %v", err)
+	}
+	if client.Migrator().HasIndex(&models.Pipeline{}, "idx_pipelines_name") {
+		t.Fatal("legacy pipeline name index should be removed")
+	}
+
+	oldClient := Client
+	t.Cleanup(func() {
+		Client = oldClient
+	})
+	Client = client
+	if _, err := SavePipeline(newTestPipeline("legacy-shared", "ls-a")); err != nil {
+		t.Fatalf("SavePipeline listener A failed: %v", err)
+	}
+	if _, err := SavePipeline(newTestPipeline("legacy-shared", "ls-b")); err != nil {
+		t.Fatalf("SavePipeline listener B failed after legacy index cleanup: %v", err)
+	}
+}

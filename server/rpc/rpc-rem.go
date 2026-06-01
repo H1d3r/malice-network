@@ -10,28 +10,45 @@ import (
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/helper/utils/output"
+	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
 	"github.com/samber/lo"
+	"gorm.io/gorm"
 )
 
 func (rpc *Server) RegisterRem(ctx context.Context, req *clientpb.Pipeline) (*clientpb.Empty, error) {
+	if req == nil || req.GetRem() == nil {
+		return nil, types.ErrMissingRequestField
+	}
 	lns, err := core.Listeners.Get(req.ListenerId)
 	if err != nil {
 		return nil, err
 	}
 	req.Ip = lns.IP
 
-	_, err = db.FindPipelineByListener(req.Name, req.ListenerId)
-	if err != nil {
-		if req.GetRem().Console == "" {
-			req.GetRem().Console = "tcp://127.0.0.1:12345"
+	existing, err := db.FindPipelineByListener(req.Name, req.ListenerId)
+	if err == nil {
+		existingPB := existing.ToProtobuf()
+		if incomingConsole := req.GetRem().Console; incomingConsole != "" && existingPB.GetRem().GetConsole() != "" && incomingConsole != existingPB.GetRem().GetConsole() {
+			logs.Log.Warnf("REM pipeline %s/%s already exists; preserving DB console %q instead of config console %q", req.ListenerId, req.Name, existingPB.GetRem().GetConsole(), incomingConsole)
 		}
-		_, err = db.SavePipeline(models.FromPipelinePb(req))
-		if err != nil {
+		if err := configs.SyncREMConfigFromPipeline(existingPB); err != nil {
 			return nil, err
 		}
+		return &clientpb.Empty{}, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	if req.GetRem().Console == "" {
+		req.GetRem().Console = "tcp://127.0.0.1:12345"
+	}
+	_, err = db.SavePipeline(models.FromPipelinePb(req))
+	if err != nil {
+		return nil, err
 	}
 
 	return &clientpb.Empty{}, nil

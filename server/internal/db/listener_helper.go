@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/helper/utils/fileutils"
@@ -24,7 +25,18 @@ import (
 // ============================================
 
 func FindPipeline(name string) (*models.Pipeline, error) {
-	return NewPipelineQuery().WhereName(name).WithCert().First()
+	pipelines, err := NewPipelineQuery().WhereName(name).WithCert().Find()
+	if err != nil {
+		return nil, err
+	}
+	switch len(pipelines) {
+	case 0:
+		return nil, gorm.ErrRecordNotFound
+	case 1:
+		return pipelines[0], nil
+	default:
+		return nil, fmt.Errorf("multiple pipelines named %q found across listeners, specify listener_id", name)
+	}
 }
 
 func FindPipelineByListener(name, listenerID string) (*models.Pipeline, error) {

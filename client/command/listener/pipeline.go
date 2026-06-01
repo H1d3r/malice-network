@@ -120,10 +120,12 @@ func ListPipelineCmd(cmd *cobra.Command, con *core.Console) error {
 
 func StartPipelineCmd(cmd *cobra.Command, con *core.Console) error {
 	name := cmd.Flags().Arg(0)
+	pipelineName, listenerID, cached := resolvePipelineCtrlTarget(con, name)
 
-	if p, ok := con.Pipelines[name]; ok && p.Enable {
+	if p, ok := con.Pipelines[name]; cached && ok && p.Enable {
 		_, err := con.Rpc.StopPipeline(con.Context(), &clientpb.CtrlPipeline{
-			Name: name,
+			Name:       pipelineName,
+			ListenerId: listenerID,
 		})
 		if err != nil {
 			return err
@@ -131,8 +133,9 @@ func StartPipelineCmd(cmd *cobra.Command, con *core.Console) error {
 	}
 	certName, _ := cmd.Flags().GetString("cert-name")
 	_, err := con.Rpc.StartPipeline(con.Context(), &clientpb.CtrlPipeline{
-		Name:     name,
-		CertName: certName,
+		Name:       pipelineName,
+		ListenerId: listenerID,
+		CertName:   certName,
 	})
 	if err != nil {
 		return err
@@ -142,8 +145,10 @@ func StartPipelineCmd(cmd *cobra.Command, con *core.Console) error {
 
 func StopPipelineCmd(cmd *cobra.Command, con *core.Console) error {
 	name := cmd.Flags().Arg(0)
+	pipelineName, listenerID, _ := resolvePipelineCtrlTarget(con, name)
 	_, err := con.Rpc.StopPipeline(con.Context(), &clientpb.CtrlPipeline{
-		Name: name,
+		Name:       pipelineName,
+		ListenerId: listenerID,
 	})
 	if err != nil {
 		return err
@@ -153,11 +158,24 @@ func StopPipelineCmd(cmd *cobra.Command, con *core.Console) error {
 
 func DeletePipelineCmd(cmd *cobra.Command, con *core.Console) error {
 	name := cmd.Flags().Arg(0)
+	pipelineName, listenerID, _ := resolvePipelineCtrlTarget(con, name)
 	_, err := con.Rpc.DeletePipeline(con.Context(), &clientpb.CtrlPipeline{
-		Name: name,
+		Name:       pipelineName,
+		ListenerId: listenerID,
 	})
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func resolvePipelineCtrlTarget(con *core.Console, key string) (string, string, bool) {
+	if con == nil || con.Pipelines == nil {
+		return key, "", false
+	}
+	pipeline, ok := con.Pipelines[key]
+	if !ok || pipeline == nil {
+		return key, "", false
+	}
+	return pipeline.Name, pipeline.ListenerId, true
 }

@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -28,6 +29,7 @@ func ProfileShowCmd(cmd *cobra.Command, con *core.Console) error {
 	tableModel := tui.NewTable([]table.Column{
 		table.NewFlexColumn("Name", "Name", 1),
 		table.NewColumn("Pipeline", "Pipeline", 16),
+		table.NewColumn("Listener", "Listener", 16),
 		table.NewColumn("CreatedAt", "Created At", 16),
 	}, true)
 
@@ -43,6 +45,7 @@ func ProfileShowCmd(cmd *cobra.Command, con *core.Console) error {
 		row := table.NewRow(table.RowData{
 			"Name":      p.Name,
 			"Pipeline":  p.PipelineId,
+			"Listener":  profileListenerFromPipelineID(p.PipelineId),
 			"CreatedAt": createdDisplay,
 		})
 		rowEntries = append(rowEntries, row)
@@ -55,7 +58,8 @@ func ProfileShowCmd(cmd *cobra.Command, con *core.Console) error {
 }
 
 func ProfileLoadCmd(cmd *cobra.Command, con *core.Console) error {
-	profileName, basicPipeline := common.ParseProfileFlags(cmd)
+	profileName, basicPipeline, listenerID := common.ParseProfileFlags(cmd)
+	basicPipeline, listenerID = resolveProfilePipelineFlags(con, basicPipeline, listenerID)
 
 	profilePath := cmd.Flags().Arg(0)
 	content, err := os.ReadFile(profilePath)
@@ -65,7 +69,7 @@ func ProfileLoadCmd(cmd *cobra.Command, con *core.Console) error {
 
 	profile := &clientpb.Profile{
 		Name:          profileName,
-		PipelineId:    basicPipeline,
+		PipelineId:    scopedProfilePipelineID(basicPipeline, listenerID),
 		ImplantConfig: content,
 	}
 	_, err = con.Rpc.NewProfile(con.Context(), profile)
@@ -77,10 +81,11 @@ func ProfileLoadCmd(cmd *cobra.Command, con *core.Console) error {
 }
 
 func ProfileNewCmd(cmd *cobra.Command, con *core.Console) error {
-	profileName, basicPipeline := common.ParseProfileFlags(cmd)
+	profileName, basicPipeline, listenerID := common.ParseProfileFlags(cmd)
+	basicPipeline, listenerID = resolveProfilePipelineFlags(con, basicPipeline, listenerID)
 	profile := &clientpb.Profile{
 		Name:       profileName,
-		PipelineId: basicPipeline,
+		PipelineId: scopedProfilePipelineID(basicPipeline, listenerID),
 	}
 	var params implanttypes.ProfileParams
 	if cmd.Flags().Changed("rem") {
@@ -172,9 +177,38 @@ func printProfileMetadata(profile *clientpb.Profile) {
 	data := map[string]interface{}{
 		"Name":      profile.Name,
 		"Pipeline":  profile.PipelineId,
+		"Listener":  profileListenerFromPipelineID(profile.PipelineId),
 		"Params":    profile.Params,
 		"CreatedAt": createdDisplay,
 	}
-	orderedKeys := []string{"Name", "Pipeline", "Params", "CreatedAt"}
+	orderedKeys := []string{"Name", "Pipeline", "Listener", "Params", "CreatedAt"}
 	tui.RenderKVWithOptions(data, orderedKeys, tui.KVOptions{ShowHeader: true})
+}
+
+func resolveProfilePipelineFlags(con *core.Console, pipelineID, listenerID string) (string, string) {
+	if con != nil && con.Pipelines != nil {
+		if pipeline, ok := con.Pipelines[pipelineID]; ok && pipeline != nil {
+			return pipeline.Name, pipeline.ListenerId
+		}
+	}
+	scopedListenerID, scopedPipelineID, ok := strings.Cut(pipelineID, ":")
+	if ok && scopedListenerID != "" && scopedPipelineID != "" {
+		return scopedPipelineID, scopedListenerID
+	}
+	return pipelineID, listenerID
+}
+
+func scopedProfilePipelineID(pipelineID, listenerID string) string {
+	if pipelineID == "" || listenerID == "" {
+		return pipelineID
+	}
+	return listenerID + ":" + pipelineID
+}
+
+func profileListenerFromPipelineID(pipelineID string) string {
+	listenerID, _, ok := strings.Cut(pipelineID, ":")
+	if !ok {
+		return ""
+	}
+	return listenerID
 }

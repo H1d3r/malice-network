@@ -108,6 +108,9 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 		}
 	}
 
+	if err := cfg.ValidateREMNames(); err != nil {
+		return err
+	}
 	for _, rem := range cfg.REMs {
 		if !rem.Enable {
 			continue

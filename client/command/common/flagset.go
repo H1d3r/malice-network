@@ -213,6 +213,7 @@ func GenerateFlagSet(f *pflag.FlagSet) {
 	f.String("target", "", "build target, specify the target arch and platform, such as  **x86_64-pc-windows-gnu**.")
 	f.String("source", "", "build source: docker, action, saas, patch")
 	f.Bool("lib", false, "build shared library instead of executable")
+	f.Bool("debug", false, "build in debug mode (pass --debug to malefic-mutant: dev profile, debug symbols, no release optimization)")
 	f.String("comment", "", "comment for this build")
 	SetFlagSetGroup(f, "generate")
 }
@@ -221,10 +222,12 @@ func ParseGenerateFlags(cmd *cobra.Command) *clientpb.BuildConfig {
 	name, _ := cmd.Flags().GetString("profile")
 	target, _ := cmd.Flags().GetString("target")
 	comment, _ := cmd.Flags().GetString("comment")
+	debug, _ := cmd.Flags().GetBool("debug")
 	buildConfig := &clientpb.BuildConfig{
 		ProfileName: name,
 		Target:      target,
 		Comment:     comment,
+		Debug:       debug,
 	}
 	return buildConfig
 }
@@ -233,6 +236,7 @@ func ProfileSet(f *pflag.FlagSet) {
 	f.StringP("name", "n", "", "Overwrite profile name")
 	//f.String("target", "", "Overwrite build target")
 	f.StringP("pipeline", "p", "", "Overwrite profile basic pipeline_id")
+	f.StringP("listener", "l", "", "listener id for the profile pipeline")
 	f.String("rem", "", "rem pipeline id")
 	//f.String("type", "", "Set build type")
 	//f.String("obfuscate", "", "Set obfuscate")
@@ -242,10 +246,11 @@ func ProfileSet(f *pflag.FlagSet) {
 	//f.Float32("jitter", 0.2, "Overwrite jitter")
 }
 
-func ParseProfileFlags(cmd *cobra.Command) (string, string) {
+func ParseProfileFlags(cmd *cobra.Command) (string, string, string) {
 	profileName, _ := cmd.Flags().GetString("name")
 	//buildTarget, _ := cmd.Flags().GetString("target")
 	basicPipelineId, _ := cmd.Flags().GetString("pipeline")
+	listenerID, _ := cmd.Flags().GetString("listener")
 
 	//buildType, _ := cmd.Flags().GetString("type")
 	//proxy, _ := cmd.Flags().GetString("proxy")
@@ -256,7 +261,7 @@ func ParseProfileFlags(cmd *cobra.Command) (string, string) {
 	//interval, _ := cmd.Flags().GetInt("interval")
 	//jitter, _ := cmd.Flags().GetFloat64("jitter")
 
-	return profileName, basicPipelineId
+	return profileName, basicPipelineId, listenerID
 }
 
 func MalHttpFlagset(f *pflag.FlagSet) {

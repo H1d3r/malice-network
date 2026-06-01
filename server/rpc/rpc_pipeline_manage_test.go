@@ -7,6 +7,7 @@ import (
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/server/internal/core"
+	"github.com/chainreactors/malice-network/server/internal/db"
 )
 
 // ---------------------------------------------------------------------------
@@ -70,6 +71,60 @@ func TestRegisterPipeline_Valid(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("RegisterPipeline error: %v", err)
+	}
+}
+
+func TestRegisterPipeline_AllowsSameNameAcrossListeners(t *testing.T) {
+	_ = newRPCTestEnv(t)
+	core.Listeners.Add(core.NewListener("listener-a", "127.0.0.1"))
+	core.Listeners.Add(core.NewListener("listener-b", "127.0.0.1"))
+
+	newReq := func(listenerID string, port uint32) *clientpb.Pipeline {
+		return &clientpb.Pipeline{
+			Name:       "shared-register-pipe",
+			ListenerId: listenerID,
+			Ip:         "127.0.0.1",
+			Type:       consts.TCPPipeline,
+			Secure:     &clientpb.Secure{},
+			Body: &clientpb.Pipeline_Tcp{
+				Tcp: &clientpb.TCPPipeline{
+					Name:       "shared-register-pipe",
+					ListenerId: listenerID,
+					Host:       "127.0.0.1",
+					Port:       port,
+				},
+			},
+		}
+	}
+
+	if _, err := (&Server{}).RegisterPipeline(context.Background(), newReq("listener-a", 6601)); err != nil {
+		t.Fatalf("RegisterPipeline listener A error: %v", err)
+	}
+	if _, err := (&Server{}).RegisterPipeline(context.Background(), newReq("listener-b", 6602)); err != nil {
+		t.Fatalf("RegisterPipeline listener B error: %v", err)
+	}
+	if _, err := db.FindPipelineByListener("shared-register-pipe", "listener-a"); err != nil {
+		t.Fatalf("FindPipelineByListener listener A failed: %v", err)
+	}
+	if _, err := db.FindPipelineByListener("shared-register-pipe", "listener-b"); err != nil {
+		t.Fatalf("FindPipelineByListener listener B failed: %v", err)
+	}
+	if _, err := db.FindPipeline("shared-register-pipe"); err == nil {
+		t.Fatal("FindPipeline by name should reject ambiguous registered pipelines")
+	}
+	profileA, err := db.GetProfileByName("shared-register-pipe_default")
+	if err != nil {
+		t.Fatalf("listener A default profile missing: %v", err)
+	}
+	if profileA.ListenerID != "listener-a" {
+		t.Fatalf("listener A default profile listener = %q", profileA.ListenerID)
+	}
+	profileB, err := db.GetProfileByName("listener-b_shared-register-pipe_default")
+	if err != nil {
+		t.Fatalf("listener B scoped default profile missing: %v", err)
+	}
+	if profileB.PipelineID != "shared-register-pipe" || profileB.ListenerID != "listener-b" {
+		t.Fatalf("listener B default profile pipeline = %q/%q", profileB.PipelineID, profileB.ListenerID)
 	}
 }
 
@@ -187,6 +242,13 @@ func TestRegisterPipeline_CreatesDefaultProfile(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("RegisterPipeline error: %v", err)
+	}
+	profile, err := db.GetProfileByName(pipeName + "_default")
+	if err != nil {
+		t.Fatalf("GetProfileByName default profile failed: %v", err)
+	}
+	if profile.PipelineID != pipeName || profile.ListenerID != "test-listener" {
+		t.Fatalf("default profile pipeline = %q/%q, want %s/test-listener", profile.PipelineID, profile.ListenerID, pipeName)
 	}
 
 	// RegisterPipeline should have called db.NewProfile with name "<pipe>_default".
