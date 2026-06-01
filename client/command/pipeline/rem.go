@@ -140,7 +140,17 @@ func RemUpdateIntervalCmd(cmd *cobra.Command, con *core.Console) error {
 			return fmt.Errorf("session %s not found", sessionID)
 		}
 		pipelineID = session.PipelineId
-		pipe, ok := con.Pipelines[pipelineID]
+		pipelineKey := pipelineID
+		if session.ListenerId != "" {
+			pipelineKey = session.ListenerId + ":" + session.PipelineId
+		}
+		pipe, ok := con.Pipelines[pipelineKey]
+		if ok {
+			pipelineID = pipelineKey
+		}
+		if !ok {
+			pipe, ok = con.Pipelines[pipelineID]
+		}
 		if !ok {
 			return fmt.Errorf("pipeline %s not found for session %s", pipelineID, sessionID)
 		}
@@ -170,9 +180,13 @@ func RemUpdateIntervalCmd(cmd *cobra.Command, con *core.Console) error {
 		seen := make(map[string]struct{})
 		for _, p := range pivots {
 			if p.RemAgentID == agentID && p.Enable {
-				if _, dup := seen[p.Pipeline]; !dup {
-					seen[p.Pipeline] = struct{}{}
-					matched = append(matched, p.Pipeline)
+				pipelineKey := p.Pipeline
+				if p.Listener != "" {
+					pipelineKey = p.Listener + ":" + p.Pipeline
+				}
+				if _, dup := seen[pipelineKey]; !dup {
+					seen[pipelineKey] = struct{}{}
+					matched = append(matched, pipelineKey)
 				}
 			}
 		}

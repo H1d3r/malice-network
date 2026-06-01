@@ -43,6 +43,8 @@ type RecorderRPC struct {
 	basicResponders        map[string]func(context.Context, any) (*clientpb.Basic, error)
 	listenersResponders    map[string]func(context.Context, any) (*clientpb.Listeners, error)
 	pipelinesResponders    map[string]func(context.Context, any) (*clientpb.Pipelines, error)
+	webContentResponders   map[string]func(context.Context, any) (*clientpb.WebContent, error)
+	webContentsResponders  map[string]func(context.Context, any) (*clientpb.WebContents, error)
 	licenseResponders      map[string]func(context.Context, any) (*clientpb.LicenseInfo, error)
 	contextsResponders     map[string]func(context.Context, any) (*clientpb.Contexts, error)
 	certsResponders        map[string]func(context.Context, any) (*clientpb.Certs, error)
@@ -65,6 +67,8 @@ func NewRecorderRPC() *RecorderRPC {
 		basicResponders:        map[string]func(context.Context, any) (*clientpb.Basic, error){},
 		listenersResponders:    map[string]func(context.Context, any) (*clientpb.Listeners, error){},
 		pipelinesResponders:    map[string]func(context.Context, any) (*clientpb.Pipelines, error){},
+		webContentResponders:   map[string]func(context.Context, any) (*clientpb.WebContent, error){},
+		webContentsResponders:  map[string]func(context.Context, any) (*clientpb.WebContents, error){},
 		licenseResponders:      map[string]func(context.Context, any) (*clientpb.LicenseInfo, error){},
 		contextsResponders:     map[string]func(context.Context, any) (*clientpb.Contexts, error){},
 		certsResponders:        map[string]func(context.Context, any) (*clientpb.Certs, error){},
@@ -150,6 +154,14 @@ func (r *RecorderRPC) OnListeners(method string, fn func(context.Context, any) (
 
 func (r *RecorderRPC) OnPipelines(method string, fn func(context.Context, any) (*clientpb.Pipelines, error)) {
 	r.pipelinesResponders[method] = fn
+}
+
+func (r *RecorderRPC) OnWebContent(method string, fn func(context.Context, any) (*clientpb.WebContent, error)) {
+	r.webContentResponders[method] = fn
+}
+
+func (r *RecorderRPC) OnWebContents(method string, fn func(context.Context, any) (*clientpb.WebContents, error)) {
+	r.webContentsResponders[method] = fn
 }
 
 func (r *RecorderRPC) OnLicenseInfo(method string, fn func(context.Context, any) (*clientpb.LicenseInfo, error)) {
@@ -412,6 +424,63 @@ func (r *RecorderRPC) StopPipeline(ctx context.Context, in *clientpb.CtrlPipelin
 
 func (r *RecorderRPC) DeletePipeline(ctx context.Context, in *clientpb.CtrlPipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
 	return r.emptyResponse(ctx, "DeletePipeline", in)
+}
+
+func (r *RecorderRPC) RegisterWebsite(ctx context.Context, in *clientpb.Pipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "RegisterWebsite", in)
+}
+
+func (r *RecorderRPC) StartWebsite(ctx context.Context, in *clientpb.CtrlPipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "StartWebsite", in)
+}
+
+func (r *RecorderRPC) StopWebsite(ctx context.Context, in *clientpb.CtrlPipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "StopWebsite", in)
+}
+
+func (r *RecorderRPC) DeleteWebsite(ctx context.Context, in *clientpb.CtrlPipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "DeleteWebsite", in)
+}
+
+func (r *RecorderRPC) ListWebsites(ctx context.Context, in *clientpb.Listener, opts ...grpc.CallOption) (*clientpb.Pipelines, error) {
+	r.recordPrimary(ctx, "ListWebsites", in)
+	if responder, ok := r.pipelinesResponders["ListWebsites"]; ok {
+		return responder(ctx, in)
+	}
+	return &clientpb.Pipelines{}, nil
+}
+
+func (r *RecorderRPC) AddWebsiteContent(ctx context.Context, in *clientpb.Website, opts ...grpc.CallOption) (*clientpb.WebContent, error) {
+	return r.webContentResponse(ctx, "AddWebsiteContent", in)
+}
+
+func (r *RecorderRPC) UpdateWebsiteContent(ctx context.Context, in *clientpb.WebContent, opts ...grpc.CallOption) (*clientpb.WebContent, error) {
+	return r.webContentResponse(ctx, "UpdateWebsiteContent", in)
+}
+
+func (r *RecorderRPC) RemoveWebsiteContent(ctx context.Context, in *clientpb.WebContent, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "RemoveWebsiteContent", in)
+}
+
+func (r *RecorderRPC) ListWebContent(ctx context.Context, in *clientpb.Website, opts ...grpc.CallOption) (*clientpb.WebContents, error) {
+	r.recordPrimary(ctx, "ListWebContent", in)
+	if responder, ok := r.webContentsResponders["ListWebContent"]; ok {
+		return responder(ctx, in)
+	}
+	return &clientpb.WebContents{}, nil
+}
+
+func (r *RecorderRPC) RemAgentCtrl(ctx context.Context, in *clientpb.REMAgent, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "RemAgentCtrl", in)
+}
+
+func (r *RecorderRPC) RemAgentStop(ctx context.Context, in *clientpb.REMAgent, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "RemAgentStop", in)
+}
+
+func (r *RecorderRPC) RemAgentLog(ctx context.Context, in *clientpb.REMAgent, opts ...grpc.CallOption) (*clientpb.RemLog, error) {
+	r.recordPrimary(ctx, "RemAgentLog", in)
+	return &clientpb.RemLog{}, nil
 }
 
 func (r *RecorderRPC) DownloadCertificate(ctx context.Context, in *clientpb.Cert, opts ...grpc.CallOption) (*clientpb.TLS, error) {
@@ -717,6 +786,22 @@ func (r *RecorderRPC) artifactResponse(ctx context.Context, method string, reque
 		}, nil
 	}
 	return &clientpb.Artifact{Name: method, Bin: []byte("artifact-bin")}, nil
+}
+
+func (r *RecorderRPC) webContentResponse(ctx context.Context, method string, request any) (*clientpb.WebContent, error) {
+	r.recordPrimary(ctx, method, request)
+	if responder, ok := r.webContentResponders[method]; ok {
+		return responder(ctx, request)
+	}
+	switch in := request.(type) {
+	case *clientpb.Website:
+		for _, content := range in.GetContents() {
+			return cloneRequest(content).(*clientpb.WebContent), nil
+		}
+	case *clientpb.WebContent:
+		return cloneRequest(in).(*clientpb.WebContent), nil
+	}
+	return &clientpb.WebContent{}, nil
 }
 
 func (r *RecorderRPC) defaultTask(ctx context.Context, method string) *clientpb.Task {

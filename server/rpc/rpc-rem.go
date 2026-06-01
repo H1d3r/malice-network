@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -17,6 +18,26 @@ import (
 	"github.com/samber/lo"
 	"gorm.io/gorm"
 )
+
+func findRuntimePipeline(pipelineID, agentID string) (*clientpb.Pipeline, bool) {
+	if pipelineID != "" {
+		if listenerID, name, ok := strings.Cut(pipelineID, ":"); ok && listenerID != "" && name != "" {
+			lns, err := core.Listeners.Get(listenerID)
+			if err != nil {
+				return nil, false
+			}
+			pipe := lns.GetPipeline(name)
+			return pipe, pipe != nil
+		}
+		if pipe, ok := core.Listeners.Find(pipelineID); ok {
+			return pipe, true
+		}
+	}
+	if agentID == "" {
+		return nil, false
+	}
+	return core.Listeners.FindByRemAgent(agentID)
+}
 
 func (rpc *Server) RegisterRem(ctx context.Context, req *clientpb.Pipeline) (*clientpb.Empty, error) {
 	if req == nil || req.GetRem() == nil {
@@ -294,13 +315,11 @@ func (rpc *Server) RemAgentCtrl(ctx context.Context, req *clientpb.REMAgent) (*c
 	if req == nil {
 		return nil, types.ErrMissingRequestField
 	}
-	pipe, ok := core.Listeners.Find(req.PipelineId)
-	if !ok {
-		pipe, ok = core.Listeners.FindByRemAgent(req.Id)
-	}
+	pipe, ok := findRuntimePipeline(req.PipelineId, req.Id)
 	if !ok {
 		return nil, types.ErrNotFoundListener
 	}
+	req.PipelineId = pipe.Name
 	lns, err := core.Listeners.Get(pipe.ListenerId)
 	if err != nil {
 		return nil, err
@@ -365,13 +384,11 @@ func (rpc *Server) RemAgentLog(ctx context.Context, req *clientpb.REMAgent) (*cl
 	if req == nil {
 		return nil, types.ErrMissingRequestField
 	}
-	pipe, ok := core.Listeners.Find(req.PipelineId)
-	if !ok {
-		pipe, ok = core.Listeners.FindByRemAgent(req.Id)
-	}
+	pipe, ok := findRuntimePipeline(req.PipelineId, req.Id)
 	if !ok {
 		return nil, types.ErrNotFoundListener
 	}
+	req.PipelineId = pipe.Name
 	lns, err := core.Listeners.Get(pipe.ListenerId)
 	if err != nil {
 		return nil, err
@@ -401,13 +418,11 @@ func (rpc *Server) RemAgentStop(ctx context.Context, req *clientpb.REMAgent) (*c
 	if req == nil {
 		return nil, types.ErrMissingRequestField
 	}
-	pipe, ok := core.Listeners.Find(req.PipelineId)
-	if !ok {
-		pipe, ok = core.Listeners.FindByRemAgent(req.Id)
-	}
+	pipe, ok := findRuntimePipeline(req.PipelineId, req.Id)
 	if !ok {
 		return nil, types.ErrNotFoundListener
 	}
+	req.PipelineId = pipe.Name
 	lns, err := core.Listeners.Get(pipe.ListenerId)
 	if err != nil {
 		return nil, err
@@ -442,6 +457,9 @@ func (rpc *Server) HealthCheckRem(ctx context.Context, req *clientpb.Pipeline) (
 	knownAgents := make(map[string]struct{}, len(ctxs))
 	for _, c := range ctxs {
 		piv := c.Context.(*output.PivotingContext)
+		if req.ListenerId != "" && piv.Listener != "" && piv.Listener != req.ListenerId {
+			continue
+		}
 		knownAgents[piv.RemAgentID] = struct{}{}
 		if _, ok := agents[piv.RemAgentID]; !ok && piv.Enable {
 			piv.Enable = false

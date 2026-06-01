@@ -234,15 +234,37 @@ func SaveCertFromTLS(tls *clientpb.TLS, pipelineName, listenerID string) (*model
 // ============================================
 
 func DeleteWebsite(name string) error {
-	website, err := NewPipelineQuery().WhereName(name).First()
+	website, err := NewPipelineQuery().WhereName(name).WhereType(consts.WebsitePipeline).First()
 	if err != nil {
 		return err
 	}
-	websiteDir, err := fileutils.SafeJoin(configs.WebsitePath, website.Name)
+	return deleteWebsiteModel(website)
+}
+
+func DeleteWebsiteByListener(name, listenerID string) error {
+	website, err := NewPipelineQuery().WhereName(name).WhereListenerID(listenerID).WhereType(consts.WebsitePipeline).First()
+	if err != nil {
+		return err
+	}
+	return deleteWebsiteModel(website)
+}
+
+func deleteWebsiteModel(website *models.Pipeline) error {
+	if website == nil {
+		return errors.New("website is nil")
+	}
+	websiteDir, err := fileutils.SafeJoin(configs.WebsitePath, websiteContentStorageKey(website.Name, website.ListenerId))
 	if err != nil {
 		return err
 	}
 	if err := os.RemoveAll(websiteDir); err != nil {
+		return err
+	}
+	if website.ListenerId != "" {
+		if err := NewWebContentQuery().WherePipelineID(website.Name).WhereListenerIDOrLegacy(website.ListenerId).Delete(); err != nil {
+			return err
+		}
+	} else if err := NewWebContentQuery().WherePipelineID(website.Name).Delete(); err != nil {
 		return err
 	}
 	return Delete(website)
@@ -263,11 +285,31 @@ func FindWebContent(id string) (*models.WebsiteContent, error) {
 }
 
 func FindWebContentsByWebsite(website string) ([]*models.WebsiteContent, error) {
+	return FindWebContentsByWebsiteAndListener(website, "")
+}
+
+func FindWebContentsByWebsiteAndListener(website, listenerID string) ([]*models.WebsiteContent, error) {
 	query := NewWebContentQuery().WithPipeline()
 	if website != "" {
 		query = query.WherePipelineID(website)
 	}
-	return query.Find()
+	if listenerID != "" {
+		query = query.WhereListenerIDOrLegacy(listenerID)
+	}
+	contents, err := query.Find()
+	if err != nil {
+		return nil, err
+	}
+	if listenerID != "" {
+		for _, content := range contents {
+			if content.Pipeline == nil && content.PipelineID != "" {
+				if pipeline, findErr := FindPipelineByListener(content.PipelineID, listenerID); findErr == nil {
+					content.Pipeline = pipeline
+				}
+			}
+		}
+	}
+	return contents, nil
 }
 
 // AddContent - Add content to website
@@ -293,12 +335,23 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 
 	var existingContent *models.WebsiteContent
 	webModel := models.FromWebContentPb(content)
-	err := Session().Preload("Pipeline").Where("pipeline_id = ? AND path = ?", content.WebsiteId, content.Path).First(&existingContent).Error
+	if webModel.PipelineID != "" {
+		pipeline, err := resolveWebsiteContentPipeline(webModel.PipelineID, webModel.ListenerID)
+		if err != nil {
+			return nil, err
+		}
+		webModel.ListenerID = pipeline.ListenerId
+		content.ListenerId = pipeline.ListenerId
+	}
+
+	err := Session().Preload("Pipeline").
+		Where("pipeline_id = ? AND path = ? AND (listener_id = ? OR listener_id = '')", webModel.PipelineID, content.Path, webModel.ListenerID).
+		First(&existingContent).Error
 	if err == nil {
 		webModel.ID = existingContent.ID
 		query := Session()
 		if webModel.PipelineID == "" {
-			query = query.Omit("pipeline_id")
+			query = query.Omit("pipeline_id", "listener_id")
 		}
 		err = query.Save(&webModel).Error
 		if err != nil {
@@ -310,7 +363,7 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		query := Session()
 		if webModel.PipelineID == "" {
-			query = query.Omit("pipeline_id")
+			query = query.Omit("pipeline_id", "listener_id")
 		}
 		err = query.Create(&webModel).Error
 		if err != nil {
@@ -326,7 +379,7 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 		return nil, err
 	}
 	if content.Type == "raw" {
-		contentPath, err := fileutils.SafeJoin(configs.WebsitePath, filepath.Join(content.WebsiteId, webModel.ID.String()))
+		contentPath, err := fileutils.SafeJoin(configs.WebsitePath, filepath.Join(webModel.StorageKey(), webModel.ID.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -342,11 +395,38 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 	return webModel, nil
 }
 
-func AddAmountWebContent(artifactName, pipelineName string) (*clientpb.WebContent, error) {
+func resolveWebsiteContentPipeline(websiteName, listenerID string) (*models.Pipeline, error) {
+	query := NewPipelineQuery().WhereName(websiteName).WhereType(consts.WebsitePipeline)
+	if listenerID != "" {
+		query = query.WhereListenerID(listenerID)
+	}
+	websites, err := query.Find()
+	if err != nil {
+		return nil, err
+	}
+	switch len(websites) {
+	case 0:
+		return nil, gorm.ErrRecordNotFound
+	case 1:
+		return websites[0], nil
+	default:
+		return nil, fmt.Errorf("multiple websites named %q found across listeners, specify listener_id", websiteName)
+	}
+}
+
+func websiteContentStorageKey(websiteName, listenerID string) string {
+	if listenerID == "" {
+		return websiteName
+	}
+	return filepath.Join(listenerID, websiteName)
+}
+
+func AddAmountWebContent(artifactName, pipelineName, listenerID string) (*clientpb.WebContent, error) {
 	content := &clientpb.WebContent{
-		WebsiteId: pipelineName,
-		Path:      output.Encode(artifactName),
-		Type:      consts.ArtifactWebcontent,
+		WebsiteId:  pipelineName,
+		ListenerId: listenerID,
+		Path:       output.Encode(artifactName),
+		Type:       consts.ArtifactWebcontent,
 	}
 	_, err := AddContent(content)
 	if err != nil {
@@ -364,7 +444,7 @@ func RemoveContent(id string) error {
 	}
 
 	if content.PipelineID != "" {
-		contentPath, joinErr := fileutils.SafeJoin(configs.WebsitePath, filepath.Join(content.PipelineID, content.ID.String()))
+		contentPath, joinErr := fileutils.SafeJoin(configs.WebsitePath, filepath.Join(content.StorageKey(), content.ID.String()))
 		if joinErr != nil {
 			return joinErr
 		}

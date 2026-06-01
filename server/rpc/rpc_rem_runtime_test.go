@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -64,6 +65,54 @@ func TestRemAgentHandlersRejectNilRequest(t *testing.T) {
 	}
 	if _, err := (&Server{}).RemAgentLog(context.Background(), nil); err == nil || !strings.Contains(err.Error(), types.ErrMissingRequestField.Error()) {
 		t.Fatalf("RemAgentLog(nil) error = %v, want %v", err, types.ErrMissingRequestField)
+	}
+}
+
+func TestRemAgentCtrlUsesScopedPipelineID(t *testing.T) {
+	newRPCTestEnv(t)
+	pipelineName := "rem-runtime-shared"
+	listenerA := core.NewListener("listener-rem-runtime-a", "127.0.0.1")
+	listenerB := core.NewListener("listener-rem-runtime-b", "127.0.0.1")
+	core.Listeners.Add(listenerA)
+	core.Listeners.Add(listenerB)
+	for _, listener := range []*core.Listener{listenerA, listenerB} {
+		listener.AddPipeline(&clientpb.Pipeline{
+			Name:       pipelineName,
+			ListenerId: listener.Name,
+			Type:       consts.RemPipeline,
+			Body: &clientpb.Pipeline_Rem{
+				Rem: &clientpb.REM{
+					Agents: map[string]*clientpb.REMAgent{},
+				},
+			},
+		})
+	}
+
+	got := make(chan *clientpb.JobCtrl, 1)
+	go func() {
+		got <- <-listenerB.Ctrl
+	}()
+
+	_, err := (&Server{}).RemAgentCtrl(context.Background(), &clientpb.REMAgent{
+		PipelineId: listenerB.Name + ":" + pipelineName,
+		Id:         "agent-scoped",
+		Args:       []string{"reconfigure", "500"},
+	})
+	if err != nil {
+		t.Fatalf("RemAgentCtrl failed: %v", err)
+	}
+	select {
+	case ctrl := <-got:
+		if ctrl.GetJob().GetPipeline().GetListenerId() != listenerB.Name {
+			t.Fatalf("ctrl listener = %q, want %q", ctrl.GetJob().GetPipeline().GetListenerId(), listenerB.Name)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for scoped listener ctrl")
+	}
+	select {
+	case ctrl := <-listenerA.Ctrl:
+		t.Fatalf("unexpected ctrl on listener A: %#v", ctrl)
+	default:
 	}
 }
 

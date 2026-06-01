@@ -87,7 +87,7 @@ func MapContents(webpipe *clientpb.Pipeline) error {
 	if web.Contents == nil {
 		web.Contents = make(map[string]*clientpb.WebContent)
 	}
-	contents, err := db.FindWebContentsByWebsite(webpipe.Name)
+	contents, err := db.FindWebContentsByWebsiteAndListener(webpipe.Name, webpipe.ListenerId)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,11 @@ func (rpc *Server) ListWebContent(ctx context.Context, req *clientpb.Website) (*
 	if req == nil {
 		return nil, types.ErrMissingRequestField
 	}
-	contents, err := db.FindWebContentsByWebsite(req.Name)
+	website, err := resolveWebsite(req.Name, req.ListenerId)
+	if err != nil {
+		return nil, err
+	}
+	contents, err := db.FindWebContentsByWebsiteAndListener(website.Name, website.ListenerId)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +141,7 @@ func (rpc *Server) AddWebsiteContent(ctx context.Context, req *clientpb.Website)
 	if len(req.Contents) != 0 {
 		for _, content := range req.Contents {
 			content.WebsiteId = website.Name
+			content.ListenerId = website.ListenerId
 			content.Size = uint64(len(content.Content))
 			rpcLog.Infof("Add website content (%s) %s -> %s", content.File, content.Path, content.Type)
 			contentModel, err = db.AddContent(content)
@@ -180,6 +185,9 @@ func (rpc *Server) UpdateWebsiteContent(ctx context.Context, req *clientpb.WebCo
 	if req.ContentType == "" {
 		req.ContentType = existingContent.ContentType
 	}
+	if req.ListenerId == "" {
+		req.ListenerId = existingContent.ListenerID
+	}
 	if req.ListenerId == "" && existingContent.Pipeline != nil {
 		req.ListenerId = existingContent.Pipeline.ListenerId
 	}
@@ -222,6 +230,9 @@ func (rpc *Server) RemoveWebsiteContent(ctx context.Context, req *clientpb.WebCo
 	}
 	if req.Path == "" {
 		req.Path = existingContent.Path
+	}
+	if req.ListenerId == "" {
+		req.ListenerId = existingContent.ListenerID
 	}
 	if req.ListenerId == "" && existingContent.Pipeline != nil {
 		req.ListenerId = existingContent.Pipeline.ListenerId
@@ -267,7 +278,7 @@ func (rpc *Server) RegisterWebsite(ctx context.Context, req *clientpb.Pipeline) 
 	if err != nil {
 		return nil, err
 	}
-	websiteDir, err := fileutils.SafeJoin(configs.WebsitePath, req.Name)
+	websiteDir, err := fileutils.SafeJoin(configs.WebsitePath, path.Join(req.ListenerId, req.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +287,7 @@ func (rpc *Server) RegisterWebsite(ctx context.Context, req *clientpb.Pipeline) 
 	}
 	for _, content := range req.GetWeb().Contents {
 		content.WebsiteId = req.Name
+		content.ListenerId = req.ListenerId
 		_, err = db.AddContent(content)
 		if err != nil {
 			return nil, err
@@ -348,7 +360,7 @@ func (rpc *Server) StartWebsite(ctx context.Context, req *clientpb.CtrlPipeline)
 		return &clientpb.Empty{}, nil
 	}
 	for _, artifact := range artifacts {
-		content, err := db.AddAmountWebContent(artifact.Name, webpb.Name)
+		content, err := db.AddAmountWebContent(artifact.Name, webpb.Name, webpb.ListenerId)
 		if err != nil {
 			return nil, err
 		}
@@ -436,7 +448,7 @@ func (rpc *Server) DeleteWebsite(ctx context.Context, req *clientpb.CtrlPipeline
 		listener.RemovePipeline(job.Pipeline)
 	}
 
-	err = db.DeleteWebsite(website.Name)
+	err = db.DeleteWebsiteByListener(website.Name, website.ListenerId)
 	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 		return nil, err
 	}

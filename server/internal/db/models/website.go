@@ -20,14 +20,15 @@ type WebsiteContent struct {
 	CreatedAt time.Time `gorm:"->;<-:create;"`
 
 	File        string `gorm:""`
-	Path        string `gorm:""`
+	Path        string `gorm:"index:idx_website_contents_pipeline_path;"`
 	Size        uint64 `gorm:""`
 	Type        string `gorm:""`
 	ContentType string `gorm:""`
 	Auth        string `gorm:""` // "user:pass" or empty; "none" = skip website default
 
-	Pipeline   *Pipeline `gorm:"foreignKey:PipelineID;references:Name;-:migration;"`
-	PipelineID string    `gorm:"type:string;index;"`
+	Pipeline   *Pipeline `gorm:"foreignKey:PipelineID,ListenerID;references:Name,ListenerId;-:migration;"`
+	PipelineID string    `gorm:"type:string;index:idx_website_contents_pipeline_path;"`
+	ListenerID string    `gorm:"type:string;index:idx_website_contents_pipeline_path;"`
 }
 
 // BeforeCreate - GORM hook to automatically set values
@@ -44,10 +45,15 @@ func (wc *WebsiteContent) BeforeCreate(tx *gorm.DB) (err error) {
 func (wc *WebsiteContent) ToProtobuf(read bool) *clientpb.WebContent {
 	var data []byte
 	if read && wc.Type == "raw" {
-		contentPath, err := fileutils.SafeJoin(configs.WebsitePath, filepath.Join(wc.PipelineID, wc.ID.String()))
+		contentPath, err := fileutils.SafeJoin(configs.WebsitePath, filepath.Join(wc.StorageKey(), wc.ID.String()))
 		if err == nil {
 			data, _ = os.ReadFile(contentPath)
 		}
+	}
+
+	listenerID := wc.ListenerID
+	if listenerID == "" && wc.Pipeline != nil {
+		listenerID = wc.Pipeline.ListenerId
 	}
 
 	return &clientpb.WebContent{
@@ -59,19 +65,29 @@ func (wc *WebsiteContent) ToProtobuf(read bool) *clientpb.WebContent {
 		ContentType: wc.ContentType,
 		Content:     data,
 		Url:         wc.URL(),
-		ListenerId:  wc.Pipeline.ListenerId,
+		ListenerId:  listenerID,
 		Auth:        wc.Auth,
 	}
 }
 
+func (wc *WebsiteContent) StorageKey() string {
+	if wc.ListenerID == "" {
+		return wc.PipelineID
+	}
+	return filepath.Join(wc.ListenerID, wc.PipelineID)
+}
+
 func (wc *WebsiteContent) URL() string {
+	if wc.Pipeline == nil {
+		return ""
+	}
 	webPath := "/"
 	if wc.Pipeline != nil && wc.Pipeline.PipelineParams != nil && wc.Pipeline.WebPath != "" {
 		webPath = wc.Pipeline.WebPath
 	}
 	contentPath := path.Join(webPath, wc.Path)
 
-	if wc.Pipeline.Tls != nil && wc.Pipeline.Tls.Enable {
+	if wc.Pipeline.PipelineParams != nil && wc.Pipeline.Tls != nil && wc.Pipeline.Tls.Enable {
 		return fmt.Sprintf("https://%s:%d%s", wc.Pipeline.IP, wc.Pipeline.Port, contentPath)
 	}
 	return fmt.Sprintf("http://%s:%d%s", wc.Pipeline.IP, wc.Pipeline.Port, contentPath)
@@ -80,6 +96,7 @@ func (wc *WebsiteContent) URL() string {
 func FromWebContentPb(content *clientpb.WebContent) *WebsiteContent {
 	return &WebsiteContent{
 		PipelineID:  content.WebsiteId,
+		ListenerID:  content.ListenerId,
 		File:        content.File,
 		Path:        content.Path,
 		Size:        content.Size,

@@ -77,21 +77,31 @@ func NewWebsite(con *core.Console, websiteName, root, host string, port uint32, 
 func StartWebsitePipelineCmd(cmd *cobra.Command, con *core.Console) error {
 	websiteName := cmd.Flags().Arg(0)
 	certName, _ := cmd.Flags().GetString("cert-name")
-	return StartWebsite(con, websiteName, certName)
+	listenerID, _ := cmd.Flags().GetString("listener")
+	return startWebsite(con, websiteName, certName, listenerID)
 }
 
 func StartWebsite(con *core.Console, websiteName, certName string) error {
-	if _, ok := con.Pipelines[websiteName]; ok {
+	return startWebsite(con, websiteName, certName, "")
+}
+
+func startWebsite(con *core.Console, websiteName, certName, listenerID string) error {
+	pipelineName, resolvedListenerID, cached := resolveWebsiteTarget(con, websiteName)
+	if listenerID == "" {
+		listenerID = resolvedListenerID
+	}
+	if cached {
 		_, err := con.Rpc.StopWebsite(con.Context(), &clientpb.CtrlPipeline{
-			Name: websiteName,
+			Name:       pipelineName,
+			ListenerId: listenerID,
 		})
 		if err != nil {
 			return err
 		}
 	}
 	_, err := con.Rpc.StartWebsite(con.Context(), &clientpb.CtrlPipeline{
-		Name:       websiteName,
-		ListenerId: "",
+		Name:       pipelineName,
+		ListenerId: listenerID,
 		CertName:   certName,
 	})
 	if err != nil {
@@ -112,8 +122,12 @@ func StopWebsite(con *core.Console, name string) error {
 }
 
 func stopWebsite(con *core.Console, name, listenerID string) error {
+	pipelineName, resolvedListenerID, _ := resolveWebsiteTarget(con, name)
+	if listenerID == "" {
+		listenerID = resolvedListenerID
+	}
 	_, err := con.Rpc.StopWebsite(con.Context(), &clientpb.CtrlPipeline{
-		Name:       name,
+		Name:       pipelineName,
 		ListenerId: listenerID,
 	})
 	if err != nil {

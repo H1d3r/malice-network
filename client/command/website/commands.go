@@ -82,6 +82,7 @@ website start web_test
 
 	common.BindArgCompletions(websiteStartCmd, nil, common.WebsiteCompleter(con))
 	common.BindFlag(websiteStartCmd, func(f *pflag.FlagSet) {
+		f.String("listener", "", "listener ID")
 		f.String("cert-name", "", "certificate name")
 	})
 

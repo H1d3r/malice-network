@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // AddWebContentCmd - 添加网站内容
@@ -35,12 +36,15 @@ func AddWebContent(con *core.Console, localFile, webPath, webPipe, typ, auth str
 	if err != nil {
 		return nil, err
 	}
+	websiteName, listenerID, _ := resolveWebsiteTarget(con, webPipe)
 
 	website := &clientpb.Website{
-		Name: webPipe,
+		Name:       websiteName,
+		ListenerId: listenerID,
 		Contents: map[string]*clientpb.WebContent{
 			webPath: {
-				WebsiteId:   webPipe,
+				WebsiteId:   websiteName,
+				ListenerId:  listenerID,
 				File:        localFile,
 				Path:        webPath,
 				Content:     content,
@@ -59,11 +63,14 @@ func AddWebContent(con *core.Console, localFile, webPath, webPipe, typ, auth str
 
 // AddWebContentDirect adds raw content bytes to a website without reading from disk.
 func AddWebContentDirect(con *core.Console, websiteName string, data []byte, webPath, contentType string) error {
+	resolvedWebsite, listenerID, _ := resolveWebsiteTarget(con, websiteName)
 	website := &clientpb.Website{
-		Name: websiteName,
+		Name:       resolvedWebsite,
+		ListenerId: listenerID,
 		Contents: map[string]*clientpb.WebContent{
 			webPath: {
-				WebsiteId:   websiteName,
+				WebsiteId:   resolvedWebsite,
+				ListenerId:  listenerID,
 				Path:        webPath,
 				Content:     data,
 				ContentType: contentType,
@@ -94,10 +101,12 @@ func UpdateWebContent(con *core.Console, contentId, localFile, webPipe, typ stri
 	if err != nil {
 		return nil, err
 	}
+	websiteName, listenerID, _ := resolveWebsiteTarget(con, webPipe)
 
 	website := &clientpb.WebContent{
 		Id:          contentId,
-		WebsiteId:   webPipe,
+		WebsiteId:   websiteName,
+		ListenerId:  listenerID,
 		File:        localFile,
 		Content:     content,
 		ContentType: typ,
@@ -138,9 +147,11 @@ func RemoveWebContent(con *core.Console, contentId string) (bool, error) {
 // ListWebContentCmd - 列出网站内容
 func ListWebContentCmd(cmd *cobra.Command, con *core.Console) error {
 	websiteName := cmd.Flags().Arg(0)
+	resolvedWebsite, listenerID, _ := resolveWebsiteTarget(con, websiteName)
 
 	website := &clientpb.Website{
-		Name: websiteName,
+		Name:       resolvedWebsite,
+		ListenerId: listenerID,
 	}
 
 	contents, err := con.Rpc.ListWebContent(con.Context(), website)
@@ -179,4 +190,18 @@ func ListWebContentCmd(cmd *cobra.Command, con *core.Console) error {
 	tableModel.SetRows(rowEntries)
 	con.Log.Console(tableModel.View())
 	return nil
+}
+
+func resolveWebsiteTarget(con *core.Console, key string) (string, string, bool) {
+	if con != nil && con.Pipelines != nil {
+		if pipeline, ok := con.Pipelines[key]; ok && pipeline != nil {
+			if pipeline.GetWeb() != nil {
+				return pipeline.Name, pipeline.ListenerId, true
+			}
+		}
+	}
+	if listenerID, name, ok := strings.Cut(key, ":"); ok && listenerID != "" && name != "" {
+		return name, listenerID, false
+	}
+	return key, "", false
 }

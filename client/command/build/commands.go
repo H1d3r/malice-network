@@ -638,7 +638,7 @@ func Register(con *core.Console) {
 
 	con.RegisterServerFunc("self_stager",
 		func(con *core.Console, sess *client.Session) (string, error) {
-			artifact, err := SearchArtifact(con, sess.PipelineId, "pulse", "raw", sess.Os.Name, sess.Os.Arch)
+			artifact, err := SearchArtifact(con, scopedSessionPipelineID(sess), "pulse", "raw", sess.Os.Name, sess.Os.Arch)
 			if err != nil {
 				return "", err
 			}
@@ -679,7 +679,7 @@ func Register(con *core.Console) {
 	})
 
 	con.RegisterServerFunc("self_payload", func(con *core.Console, sess *client.Session) (string, error) {
-		artifact, err := SearchArtifact(con, sess.PipelineId, "beacon", "shellcode", sess.Os.Name, sess.Os.Arch)
+		artifact, err := SearchArtifact(con, scopedSessionPipelineID(sess), "beacon", "shellcode", sess.Os.Name, sess.Os.Arch)
 		if err != nil {
 			return "", fmt.Errorf("get artifact error: %s", err)
 		}
@@ -716,6 +716,16 @@ func Register(con *core.Console) {
 		},
 		Example: `artifact_payload("tcp_default","raw","windows","x64")`,
 	})
+}
+
+func scopedSessionPipelineID(sess *client.Session) string {
+	if sess == nil || sess.PipelineId == "" || sess.ListenerId == "" {
+		if sess == nil {
+			return ""
+		}
+		return sess.PipelineId
+	}
+	return sess.ListenerId + ":" + sess.PipelineId
 }
 
 // registerWizardProviders registers dynamic option providers for wizard.

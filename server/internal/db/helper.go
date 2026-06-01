@@ -977,6 +977,19 @@ func (q *WebContentQuery) WherePipelineID(pipelineID string) *WebContentQuery {
 	return q
 }
 
+// WhereListenerID filters by listener ID.
+func (q *WebContentQuery) WhereListenerID(listenerID string) *WebContentQuery {
+	q.db = q.db.Where("listener_id = ?", listenerID)
+	return q
+}
+
+// WhereListenerIDOrLegacy filters by listener ID while retaining rows created
+// before web contents were listener-scoped.
+func (q *WebContentQuery) WhereListenerIDOrLegacy(listenerID string) *WebContentQuery {
+	q.db = q.db.Where("listener_id = ? OR listener_id = ''", listenerID)
+	return q
+}
+
 // WherePath filters by content path
 func (q *WebContentQuery) WherePath(path string) *WebContentQuery {
 	q.db = q.db.Where("path = ?", path)

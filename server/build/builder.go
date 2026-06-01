@@ -152,7 +152,7 @@ func AmountArtifact(artifactName string) error {
 		return true
 	})
 	for _, pipe := range result {
-		content, err := db.AddAmountWebContent(artifactName, pipe.Name)
+		content, err := db.AddAmountWebContent(artifactName, pipe.Name, pipe.ListenerId)
 		if err != nil {
 			return err
 		}

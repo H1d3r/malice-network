@@ -114,6 +114,66 @@ func TestMapContentsInitializesNilContentsMap(t *testing.T) {
 	}
 }
 
+func TestListWebContentUsesListenerScopedWebsite(t *testing.T) {
+	env := newRPCTestEnv(t)
+	_ = env.seedSession(t, "rpc-website-list", "rpc-website-pipe", true)
+	server := &Server{}
+
+	for _, item := range []struct {
+		listenerID string
+		body       string
+		path       string
+	}{
+		{listenerID: "listener-a", body: "a", path: "/a.html"},
+		{listenerID: "listener-b", body: "b", path: "/b.html"},
+	} {
+		if _, err := db.SavePipeline(models.FromPipelinePb(&clientpb.Pipeline{
+			Name:       "site-list-shared",
+			ListenerId: item.listenerID,
+			Type:       consts.WebsitePipeline,
+			Body: &clientpb.Pipeline_Web{
+				Web: &clientpb.Website{
+					Name:       "site-list-shared",
+					ListenerId: item.listenerID,
+					Root:       "/",
+					Port:       8080,
+				},
+			},
+		})); err != nil {
+			t.Fatalf("SavePipeline(%s) failed: %v", item.listenerID, err)
+		}
+		if _, err := db.AddContent(&clientpb.WebContent{
+			WebsiteId:  "site-list-shared",
+			ListenerId: item.listenerID,
+			Path:       item.path,
+			Type:       "raw",
+			Content:    []byte(item.body),
+		}); err != nil {
+			t.Fatalf("AddContent(%s) failed: %v", item.listenerID, err)
+		}
+	}
+
+	contents, err := server.ListWebContent(context.Background(), &clientpb.Website{
+		Name:       "site-list-shared",
+		ListenerId: "listener-b",
+	})
+	if err != nil {
+		t.Fatalf("ListWebContent failed: %v", err)
+	}
+	if len(contents.GetContents()) != 1 {
+		t.Fatalf("content count = %d, want 1", len(contents.GetContents()))
+	}
+	content := contents.GetContents()[0]
+	if content.GetListenerId() != "listener-b" || content.GetPath() != "/b.html" {
+		t.Fatalf("content = listener %q path %q, want listener-b /b.html", content.GetListenerId(), content.GetPath())
+	}
+
+	_, err = server.ListWebContent(context.Background(), &clientpb.Website{Name: "site-list-shared"})
+	if err == nil || !strings.Contains(err.Error(), "multiple websites named") {
+		t.Fatalf("ListWebContent without listener error = %v, want ambiguous website error", err)
+	}
+}
+
 func TestWebsiteHandlersRejectNilRequest(t *testing.T) {
 	server := &Server{}
 
