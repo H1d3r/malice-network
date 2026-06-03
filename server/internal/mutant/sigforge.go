@@ -127,6 +127,9 @@ func Sigforge(req *SigforgeRequest) ([]byte, error) {
 	}
 
 	// Execute malefic-mutant
+	if err := CheckBinaryExecutable(mutantPath); err != nil {
+		return nil, err
+	}
 	logs.Log.Infof("[mutant-sigforge] Executing: %s %v", mutantPath, args)
 	cmd := exec.Command(mutantPath, args...)
 	output, err := cmd.CombinedOutput()

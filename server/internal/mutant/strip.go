@@ -60,6 +60,9 @@ func Strip(req *StripRequest) ([]byte, error) {
 	}
 	mutantPath := filepath.Join(configs.BinPath, mutantBin)
 
+	if err := CheckBinaryExecutable(mutantPath); err != nil {
+		return nil, err
+	}
 	logs.Log.Infof("[mutant-strip] Executing: %s %v", mutantPath, args)
 	cmd := exec.Command(mutantPath, args...)
 	output, err := cmd.CombinedOutput()

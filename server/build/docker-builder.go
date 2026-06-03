@@ -21,6 +21,7 @@ import (
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
+	"github.com/chainreactors/malice-network/server/internal/mutant"
 	"github.com/docker/docker/api/types/container"
 )
 
@@ -35,7 +36,7 @@ type DockerBuilder struct {
 	volumes       []string
 }
 
-func resolveDockerMutantBinary() string {
+func resolveDockerMutantBinary() (string, error) {
 	candidates := []struct {
 		hostPath      string
 		containerPath string
@@ -51,13 +52,19 @@ func resolveDockerMutantBinary() string {
 	}
 
 	for _, candidate := range candidates {
-		info, err := os.Stat(candidate.hostPath)
-		if err == nil && !info.IsDir() {
-			return filepath.ToSlash(candidate.containerPath)
+		_, err := os.Stat(candidate.hostPath)
+		if err == nil {
+			if err := mutant.CheckBinaryExecutable(candidate.hostPath); err != nil {
+				return "", err
+			}
+			return filepath.ToSlash(candidate.containerPath), nil
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("failed to stat malefic-mutant candidate %s: %w", candidate.hostPath, err)
 		}
 	}
 
-	return "malefic-mutant"
+	return "malefic-mutant", nil
 }
 
 func NewDockerBuilder(req *clientpb.BuildConfig) *DockerBuilder {
@@ -174,7 +181,10 @@ func (d *DockerBuilder) Execute() error {
 	if d.config.OutputType == "lib" {
 		libFlag = " --lib"
 	}
-	mutantBin := resolveDockerMutantBinary()
+	mutantBin, err := resolveDockerMutantBinary()
+	if err != nil {
+		return err
+	}
 
 	// 资源合并前缀命令：先合并 builtin 和 custom resources 到目标目录
 	resourceMergePrefix := "mkdir -p /root/src/resources && " +

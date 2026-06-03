@@ -69,6 +69,9 @@ func PatchConfig(req *PatchConfigRequest) ([]byte, error) {
 		"-o", outputPath,
 	}
 
+	if err := CheckBinaryExecutable(mutantPath); err != nil {
+		return nil, err
+	}
 	logs.Log.Infof("[mutant-patch] Executing: %s %v", mutantPath, args)
 	cmd := exec.Command(mutantPath, args...)
 	output, err := cmd.CombinedOutput()
