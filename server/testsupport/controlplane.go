@@ -692,8 +692,32 @@ func (h *ControlPlaneHarness) GetWebContent(id string) (*clientpb.WebContent, er
 }
 
 func (h *ControlPlaneHarness) ReadWebsiteContent(websiteName, contentID string) ([]byte, error) {
+	if content, err := db.FindWebContent(contentID); err == nil {
+		contentPath := filepath.Join(configs.WebsitePath, content.StorageKey(), content.ID.String())
+		return os.ReadFile(contentPath)
+	}
+
 	contentPath := filepath.Join(configs.WebsitePath, websiteName, contentID)
-	return os.ReadFile(contentPath)
+	if data, err := os.ReadFile(contentPath); err == nil {
+		return data, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	matches, err := filepath.Glob(filepath.Join(configs.WebsitePath, "*", websiteName, contentID))
+	if err != nil {
+		return nil, err
+	}
+	for _, match := range matches {
+		data, err := os.ReadFile(match)
+		if err == nil {
+			return data, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
+	return nil, os.ErrNotExist
 }
 
 // StartRealWebsite reads a website's pipeline and content from DB, starts a real

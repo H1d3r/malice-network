@@ -63,7 +63,7 @@ func TestExecCommandConformance(t *testing.T) {
 				if req.Path != `C:\Windows\System32\cmd.exe` {
 					t.Fatalf("shell path = %q, want cmd.exe", req.Path)
 				}
-				wantArgs := []string{"/S", "/c", "whoami /all"}
+				wantArgs := []string{"/c", "whoami /all"}
 				if len(req.Args) != len(wantArgs) {
 					t.Fatalf("shell args = %#v, want %#v", req.Args, wantArgs)
 				}
@@ -86,7 +86,7 @@ func TestExecCommandConformance(t *testing.T) {
 				if req.Path != `C:\Windows\System32\cmd.exe` {
 					t.Fatalf("shell quiet path = %q, want cmd.exe", req.Path)
 				}
-				wantArgs := []string{"/S", "/c", "dir"}
+				wantArgs := []string{"/c", "dir"}
 				if len(req.Args) != len(wantArgs) {
 					t.Fatalf("shell quiet args = %#v, want %#v", req.Args, wantArgs)
 				}
