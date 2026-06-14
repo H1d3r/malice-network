@@ -267,13 +267,26 @@ func (rpc *Server) GenericInternal(ctx context.Context, req proto.Message, expec
 	return greq.Task.ToProtobuf(), nil
 }
 
+func loadPipelineStreamForSession(sess *core.Session) (interface{}, bool) {
+	if sess == nil || sess.PipelineID == "" {
+		return nil, false
+	}
+	if streamVal, ok := pipelinesCh.Load(core.PipelineRuntimeKey(sess.ListenerID, sess.PipelineID)); ok {
+		return streamVal, true
+	}
+	if sess.ListenerID != "" && runtimePipelineNameCount(sess.PipelineID) <= 1 {
+		return pipelinesCh.Load(sess.PipelineID)
+	}
+	return nil, false
+}
+
 func (rpc *Server) GenericHandler(ctx context.Context, req *GenericRequest) (chan *implantpb.Spite, error) {
 	spite, err := req.InitSpite(ctx)
 	if err != nil {
 		logs.Log.Errorf("%s", err.Error())
 		return nil, err
 	}
-	streamVal, ok := pipelinesCh.Load(req.Session.PipelineID)
+	streamVal, ok := loadPipelineStreamForSession(req.Session)
 	if !ok || streamVal == nil {
 		req.rollbackTask()
 		return nil, types.ErrNotFoundPipeline
@@ -297,7 +310,7 @@ func (rpc *Server) StreamGenericHandler(ctx context.Context, req *GenericRequest
 		logs.Log.Errorf("%s", err.Error())
 		return nil, nil, err
 	}
-	streamVal, ok := pipelinesCh.Load(req.Session.PipelineID)
+	streamVal, ok := loadPipelineStreamForSession(req.Session)
 	if !ok || streamVal == nil {
 		req.rollbackTask()
 		return nil, nil, types.ErrNotFoundPipeline

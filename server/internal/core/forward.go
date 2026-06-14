@@ -26,6 +26,13 @@ var (
 	}
 )
 
+func PipelineRuntimeKey(listenerID, pipelineID string) string {
+	if listenerID == "" || pipelineID == "" {
+		return pipelineID
+	}
+	return listenerID + ":" + pipelineID
+}
+
 type Message struct {
 	Spites     *implantpb.Spites
 	RawID      uint32
