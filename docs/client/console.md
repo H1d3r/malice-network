@@ -136,7 +136,7 @@ MCP 服务会注册通用工具和 Client 命令接口：
 - **Tools** ：`execute_command`、`execute_lua`、`search_commands`、`get_history`，以及从 Cobra 命令树生成的命令 Tool
 - **Resources** ：从命令树生成的只读 Resource，用于查询 session、listener、artifact 等常用状态
 
-支持 Claude Code / Claude Desktop 等任何兼容 MCP 协议的客户端接入。详见 [AI Agent 集成](agent.md)。
+默认使用 Streamable HTTP endpoint `http://127.0.0.1:5005/mcp`；旧版 SSE Client 可继续使用 `http://127.0.0.1:5005/mcp/sse`。支持 Claude Code / Claude Desktop 等任何兼容 MCP 协议的客户端接入。详见 [AI Agent 集成](agent.md)。
 
 ## LocalRPC 服务
 
