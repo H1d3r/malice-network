@@ -2,113 +2,121 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/IoM-go/types"
-	"github.com/chainreactors/utils/pty"
+	"github.com/chainreactors/logs"
 )
 
-var implantPTYRouters sync.Map
+var implantPTYManagers sync.Map
 
-func (rpc *Server) getImplantPTY(session string) (*pty.Router, *ImplantPTYManager) {
-	if v, ok := implantPTYRouters.Load(session); ok {
-		entry := v.(*implantPTYEntry)
-		return entry.router, entry.mgr
+func getImplantPTYManager(implantID string) *ImplantPTYManager {
+	if v, ok := implantPTYManagers.Load(implantID); ok {
+		return v.(*ImplantPTYManager)
 	}
 	mgr := NewImplantPTYManager()
-	router := pty.NewRouter(mgr, pty.WithOpener("shell", mgr.OpenShell(rpc)))
-	entry := &implantPTYEntry{router: router, mgr: mgr}
-	actual, _ := implantPTYRouters.LoadOrStore(session, entry)
-	e := actual.(*implantPTYEntry)
-	return e.router, e.mgr
-}
-
-type implantPTYEntry struct {
-	router *pty.Router
-	mgr    *ImplantPTYManager
+	actual, _ := implantPTYManagers.LoadOrStore(implantID, mgr)
+	return actual.(*ImplantPTYManager)
 }
 
 func (rpc *Server) PtyRequest(ctx context.Context, req *implantpb.PtyRequest) (*clientpb.Task, error) {
+	switch req.GetType() {
+	case consts.ModulePtyStart:
+		greq, err := newGenericRequest(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return rpc.handlePtyStart(ctx, greq, req)
+	case consts.ModulePtyStop:
+		return rpc.handlePtyStop(ctx, req)
+	default:
+		return rpc.handlePtyCommand(ctx, req)
+	}
+}
+
+func (rpc *Server) handlePtyStart(ctx context.Context, greq *GenericRequest, req *implantpb.PtyRequest) (*clientpb.Task, error) {
+	if req.Params == nil {
+		req.Params = make(map[string]string)
+	}
+	req.Params["streaming"] = "true"
+
+	greq.Count = -1
+	in, out, err := rpc.StreamGenericHandler(ctx, greq)
+	if err != nil {
+		return nil, err
+	}
+
+	mgr := getImplantPTYManager(greq.Session.ID)
+	mgr.Register(req.SessionId, in, greq)
+
+	runTaskHandler(greq.Task, func() error {
+		mgr.PumpOutput(req.SessionId, greq, out)
+		return nil
+	}, in.Close, func() {
+		greq.Task.Close()
+		mgr.Remove(req.SessionId)
+		logs.Log.Debugf("[pty] cleaned up session %s:%s", greq.Session.ID, req.SessionId)
+	})
+
+	return greq.Task.ToProtobuf(), nil
+}
+
+func (rpc *Server) handlePtyStop(ctx context.Context, req *implantpb.PtyRequest) (*clientpb.Task, error) {
 	session, err := getSession(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	router, _ := rpc.getImplantPTY(session.ID)
-	frame := protoToFrame(req)
-
-	var result pty.Frame
-	router.Handle(ctx, frame, func(out pty.Frame) {
-		result = out
-	})
-
-	if result.Type == pty.FrameError {
-		return nil, fmt.Errorf("pty: %s", result.Error)
-	}
-
-	if result.Type == pty.FrameOpened && result.Session != nil {
+	mgr := getImplantPTYManager(session.ID)
+	if mgr.SendCommand(req.SessionId, req) {
+		info, _ := mgr.Get(req.SessionId)
+		mgr.Remove(req.SessionId)
+		_ = info
 		greq, err := newGenericRequest(ctx, req)
-		if err == nil {
-			return greq.Task.ToProtobuf(), nil
+		if err != nil {
+			return nil, err
 		}
+		return greq.Task.ToProtobuf(), nil
 	}
 
 	greq, err := newGenericRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
+	ch, err := rpc.GenericHandler(ctx, greq)
+	if err != nil {
+		return nil, err
+	}
+	greq.HandlerResponse(ch, types.MsgPtyResponse)
+	return greq.Task.ToProtobuf(), nil
+}
 
-	switch req.GetType() {
-	case consts.ModulePtyStop:
-		return greq.Task.ToProtobuf(), nil
-	default:
-		ch, err := rpc.GenericHandler(ctx, greq)
+func (rpc *Server) handlePtyCommand(ctx context.Context, req *implantpb.PtyRequest) (*clientpb.Task, error) {
+	session, err := getSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	mgr := getImplantPTYManager(session.ID)
+	if mgr.SendCommand(req.SessionId, req) {
+		greq, err := newGenericRequest(ctx, req)
 		if err != nil {
 			return nil, err
 		}
-		greq.HandlerResponse(ch, types.MsgPtyResponse)
 		return greq.Task.ToProtobuf(), nil
 	}
-}
 
-func protoToFrame(req *implantpb.PtyRequest) pty.Frame {
-	switch req.GetType() {
-	case consts.ModulePtyStart:
-		return pty.Frame{
-			Type:    pty.FrameOpen,
-			Kind:    "shell",
-			Name:    req.Shell,
-			Command: req.Shell,
-			Cols:    int(req.Cols),
-			Rows:    int(req.Rows),
-		}
-	case consts.ModulePtyInput:
-		return pty.Frame{
-			Type:      pty.FrameInput,
-			SessionID: req.SessionId,
-			Data:      append(req.InputData, []byte(req.InputText)...),
-		}
-	case consts.ModulePtyStop:
-		return pty.Frame{
-			Type:      pty.FrameKill,
-			SessionID: req.SessionId,
-		}
-	case "resize":
-		return pty.Frame{
-			Type:      pty.FrameResize,
-			SessionID: req.SessionId,
-			Cols:      int(req.Cols),
-			Rows:      int(req.Rows),
-		}
-	default:
-		return pty.Frame{
-			Type:      pty.FrameInput,
-			SessionID: req.SessionId,
-			Data:      append(req.InputData, []byte(req.InputText)...),
-		}
+	greq, err := newGenericRequest(ctx, req)
+	if err != nil {
+		return nil, err
 	}
+	ch, err := rpc.GenericHandler(ctx, greq)
+	if err != nil {
+		return nil, err
+	}
+	greq.HandlerResponse(ch, types.MsgPtyResponse)
+	return greq.Task.ToProtobuf(), nil
 }
