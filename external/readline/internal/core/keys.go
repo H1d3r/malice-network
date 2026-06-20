@@ -26,6 +26,7 @@ var rxRcvCursorPos = regexp.MustCompile(`\x1b\[([0-9]+);([0-9]+)R`)
 
 // Keys is used to read, manage and use keys input by the shell user.
 type Keys struct {
+	input     io.Reader
 	buf       []byte      // Keys read and waiting to be used.
 	matched   []rune      // Keys that have been successfully matched against a bind.
 	macroKeys []rune      // Keys that have been fed by a macro.
@@ -39,6 +40,23 @@ type Keys struct {
 	eof   bool            // EOF has been reached.
 	cfg   *inputrc.Config // Configuration file used for meta key settings
 	mutex sync.RWMutex    // Concurrency safety
+}
+
+// SetInput sets the reader used for keyboard input.
+func (k *Keys) SetInput(input io.Reader) {
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
+	k.input = input
+}
+
+func (k *Keys) inputReader() io.Reader {
+	k.mutex.RLock()
+	input := k.input
+	k.mutex.RUnlock()
+	if input != nil {
+		return input
+	}
+	return Stdin
 }
 
 // WaitAvailableKeys waits until an input key is either read from standard input,

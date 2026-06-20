@@ -108,10 +108,10 @@ func (p *Prompt) PrimaryPrint() {
 
 	// Print the various lines.
 	if prompt != "" {
-		fmt.Print(prompt)
+		term.Print(prompt)
 	}
 
-	fmt.Print(lastPrompt)
+	term.Print(lastPrompt)
 
 	// And compute coordinates
 	p.primaryRows = strings.Count(prompt, "\n")
@@ -145,7 +145,7 @@ func (p *Prompt) LastPrint() {
 
 	prompt := p.formatLastPrompt(lines[len(lines)-1])
 
-	fmt.Print(prompt)
+	term.Print(prompt)
 
 	p.primaryCols = strutil.RealLength(prompt)
 }
@@ -177,11 +177,11 @@ func (p *Prompt) LastUsed() int {
 // which is always activated when the current input line is a multiline one.
 func (p *Prompt) SecondaryPrint() {
 	if p.secondaryF != nil {
-		fmt.Print(p.secondaryF())
+		term.Print(p.secondaryF())
 		return
 	}
 
-	fmt.Print(secondaryPromptDefault)
+	term.Print(secondaryPromptDefault)
 }
 
 // MultilineColumnPrint prints the multiline editor column status indicator.
@@ -198,7 +198,7 @@ func (p *Prompt) MultilineColumnPrint() {
 			column += fmt.Sprintf("\n\x1b[1;30m%d\x1b[0m", pos+2)
 		}
 
-		fmt.Print(column)
+		term.Print(column)
 
 	case len(custom) > 0:
 		column := ""
@@ -206,7 +206,7 @@ func (p *Prompt) MultilineColumnPrint() {
 			column += fmt.Sprintf("\n%s\x1b[0m", custom)
 		}
 
-		fmt.Print(column)
+		term.Print(column)
 
 	case defaultCol:
 		column := ""
@@ -214,7 +214,7 @@ func (p *Prompt) MultilineColumnPrint() {
 			column += "\n" + multilineColumnDefault
 		}
 
-		fmt.Print(column)
+		term.Print(column)
 	}
 }
 
@@ -238,9 +238,9 @@ func (p *Prompt) RightPrint(startColumn int, force bool) {
 	}
 
 	if prompt, canPrint := p.formatRightPrompt(rprompt, startColumn); canPrint {
-		fmt.Print(prompt)
+		term.Print(prompt)
 	} else {
-		fmt.Print(term.ClearLineAfter)
+		term.Print(term.ClearLineAfter)
 	}
 }
 
@@ -253,10 +253,10 @@ func (p *Prompt) TransientPrint() {
 	// Clean everything below where the prompt will be printed.
 	term.MoveCursorBackwards(term.GetWidth())
 	term.MoveCursorUp(p.primaryRows)
-	fmt.Print(term.ClearScreenBelow)
+	term.Print(term.ClearScreenBelow)
 
 	// And print the prompt
-	fmt.Print(p.transientF())
+	term.Print(p.transientF())
 }
 
 // Refreshing returns true if the prompt is currently redisplaying

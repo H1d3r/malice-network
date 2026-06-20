@@ -1,7 +1,6 @@
 package display
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/reeflective/readline/inputrc"
@@ -98,7 +97,7 @@ func (e *Engine) inlineSuggestionApplies(currentLine string) bool {
 // Refresh recomputes and redisplays the entire readline interface, except
 // the first lines of the primary prompt when the latter is a multiline one.
 func (e *Engine) Refresh() {
-	fmt.Print(term.HideCursor)
+	term.Print(term.HideCursor)
 
 	// Trigger autocomplete early so that inline suggestions are ready
 	// before displayLine() is called. This ensures fish-style suggestions
@@ -129,7 +128,7 @@ func (e *Engine) Refresh() {
 	e.displayHelpers()
 	e.cursorHintToLineStart()
 	e.lineStartToCursorPos()
-	fmt.Print(term.ShowCursor)
+	term.Print(term.ShowCursor)
 }
 
 // PrintPrimaryPrompt redraws the primary prompt.
@@ -143,7 +142,7 @@ func (e *Engine) PrintPrimaryPrompt() {
 // ClearHelpers clears the hint and completion sections below the line.
 func (e *Engine) ClearHelpers() {
 	e.CursorBelowLine()
-	fmt.Print(term.ClearScreenBelow)
+	term.Print(term.ClearScreenBelow)
 
 	term.MoveCursorUp(1)
 	term.MoveCursorUp(e.lineRows)
@@ -171,14 +170,14 @@ func (e *Engine) AcceptLine() {
 	term.MoveCursorBackwards(term.GetWidth())
 	term.MoveCursorDown(e.lineRows)
 	term.MoveCursorForwards(e.lineCol)
-	fmt.Print(term.ClearScreenBelow)
+	term.Print(term.ClearScreenBelow)
 
 	// Reprint the right-side prompt if it's not a tooltip one.
 	e.prompt.RightPrint(e.lineCol, false)
 
 	// Go below this non-suggested line and clear everything.
 	term.MoveCursorBackwards(term.GetWidth())
-	fmt.Print(term.NewlineReturn)
+	term.Print(term.NewlineReturn)
 }
 
 // RefreshTransient goes back to the first line of the input buffer
@@ -195,7 +194,7 @@ func (e *Engine) RefreshTransient() {
 	// And redisplay the transient/primary/line.
 	e.prompt.TransientPrint()
 	e.displayLine()
-	fmt.Print(term.NewlineReturn)
+	term.Print(term.NewlineReturn)
 }
 
 // CursorToLineStart moves the cursor just after the primary prompt.
@@ -214,7 +213,7 @@ func (e *Engine) CursorToLineStart() {
 func (e *Engine) CursorBelowLine() {
 	term.MoveCursorUp(e.cursorRow)
 	term.MoveCursorDown(e.lineRows)
-	fmt.Print(term.NewlineReturn)
+	term.Print(term.NewlineReturn)
 }
 
 // lineStartToCursorPos can be used if the cursor is currently
@@ -317,8 +316,8 @@ func (e *Engine) displayLine() {
 
 	// Adjust the cursor if the line fits exactly in the terminal width.
 	if e.lineCol == 0 {
-		fmt.Print(term.NewlineReturn)
-		fmt.Print(term.ClearLineAfter)
+		term.Print(term.NewlineReturn)
+		term.Print(term.ClearLineAfter)
 	}
 }
 
@@ -347,8 +346,8 @@ func (e *Engine) displayMultilinePrompts() {
 // It assumes that the cursor is on the last line of input,
 // and goes back to this same line after displaying this.
 func (e *Engine) displayHelpers() {
-	fmt.Print(term.NewlineReturn)
-	fmt.Print(term.ClearScreenBelow)
+	term.Print(term.NewlineReturn)
+	term.Print(term.ClearScreenBelow)
 
 	// Display hint and completions.
 	ui.DisplayHint(e.hint)

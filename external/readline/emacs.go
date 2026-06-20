@@ -292,8 +292,8 @@ func (rl *Shell) downLine() {
 func (rl *Shell) clearScreen() {
 	rl.History.SkipSave()
 
-	fmt.Print(term.CursorTopLeft)
-	fmt.Print(term.ClearScreen)
+	term.Print(term.CursorTopLeft)
+	term.Print(term.ClearScreen)
 
 	rl.Display.PrintPrimaryPrompt()
 }
@@ -303,8 +303,8 @@ func (rl *Shell) clearScreen() {
 func (rl *Shell) clearDisplay() {
 	rl.History.SkipSave()
 
-	fmt.Print(term.CursorTopLeft)
-	fmt.Print(term.ClearDisplay)
+	term.Print(term.CursorTopLeft)
+	term.Print(term.ClearDisplay)
 
 	rl.Display.PrintPrimaryPrompt()
 }
@@ -1253,7 +1253,7 @@ func (rl *Shell) abort() {
 		key := rl.Keys.Caller()
 		if key[0] == rune(inputrc.Unescape(`\C-C`)[0]) {
 			quoted, _ := strutil.Quote(key[0])
-			fmt.Print(string(quoted))
+			term.Print(string(quoted))
 		}
 	}
 
@@ -1450,7 +1450,7 @@ func (rl *Shell) insertComment() {
 // can be made part of an inputrc file.
 func (rl *Shell) dumpFunctions() {
 	rl.Display.ClearHelpers()
-	fmt.Println()
+	term.Println()
 
 	defer func() {
 		rl.Prompt.PrimaryPrint()
@@ -1467,7 +1467,7 @@ func (rl *Shell) dumpFunctions() {
 // can be made part of an inputrc file.
 func (rl *Shell) dumpVariables() {
 	rl.Display.ClearHelpers()
-	fmt.Println()
+	term.Println()
 
 	defer func() {
 		rl.Prompt.PrimaryPrint()
@@ -1487,12 +1487,12 @@ func (rl *Shell) dumpVariables() {
 	if rl.Iterations.IsSet() {
 		for _, variable := range variables {
 			value := rl.Config.Vars[variable]
-			fmt.Printf("set %s %v\n", variable, value)
+			term.Printf("set %s %v\n", variable, value)
 		}
 	} else {
 		for _, variable := range variables {
 			value := rl.Config.Vars[variable]
-			fmt.Printf("%s is set to `%v'\n", variable, value)
+			term.Printf("%s is set to `%v'\n", variable, value)
 		}
 	}
 }
@@ -1503,7 +1503,7 @@ func (rl *Shell) dumpVariables() {
 // can be made part of an inputrc file.
 func (rl *Shell) dumpMacros() {
 	rl.Display.ClearHelpers()
-	fmt.Println()
+	term.Println()
 
 	defer func() {
 		rl.Prompt.PrimaryPrint()
@@ -1529,12 +1529,12 @@ func (rl *Shell) dumpMacros() {
 	if rl.Iterations.IsSet() {
 		for _, key := range macroBinds {
 			action := inputrc.Escape(binds[inputrc.Unescape(key)].Action)
-			fmt.Printf("\"%s\": \"%s\"\n", key, action)
+			term.Printf("\"%s\": \"%s\"\n", key, action)
 		}
 	} else {
 		for _, key := range macroBinds {
 			action := inputrc.Escape(binds[inputrc.Unescape(key)].Action)
-			fmt.Printf("%s outputs %s\n", key, action)
+			term.Printf("%s outputs %s\n", key, action)
 		}
 	}
 }

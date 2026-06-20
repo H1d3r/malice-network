@@ -5,6 +5,7 @@ package display
 
 import (
 	"github.com/reeflective/readline/internal/core"
+	"github.com/reeflective/readline/internal/term"
 )
 
 // WatchResize redisplays the interface on terminal resize events on Windows.
@@ -12,8 +13,17 @@ import (
 func WatchResize(eng *Engine) chan<- bool {
 	resizeChannel := core.GetTerminalResize(eng.keys)
 	done := make(chan bool, 1)
+	output := term.Output()
+	control := term.CurrentControl()
+	unregister := term.OnResize(func(_, _ int) {
+		restore := term.Activate(output, control)
+		eng.completer.GenerateCached()
+		eng.Refresh()
+		restore()
+	})
 
 	go func() {
+		defer unregister()
 		for {
 			select {
 			case <-resizeChannel:
@@ -45,8 +55,10 @@ func WatchResize(eng *Engine) chan<- bool {
 				// 	fmt.Println(term.ShowCursor)
 				// }
 				//
+				restore := term.Activate(output, control)
 				eng.completer.GenerateCached()
 				eng.Refresh()
+				restore()
 			case <-done:
 				return
 			}

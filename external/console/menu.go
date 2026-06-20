@@ -65,7 +65,10 @@ func newMenu(name string, console *Console) *Menu {
 		interruptHandlers: make(map[error]func(c *Console)),
 		histories:         make(map[string]readline.History),
 		mutex:             &sync.RWMutex{},
-		ErrorHandler:      defaultErrorHandler,
+		ErrorHandler: func(err error) error {
+			fmt.Fprintf(console.terminal.Err, "Error: %s\n", err)
+			return nil
+		},
 	}
 
 	// Add a default in memory history to each menu

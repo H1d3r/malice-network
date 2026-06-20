@@ -5,7 +5,6 @@ package core
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -13,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/reeflective/readline/internal/term"
 	"golang.org/x/sys/unix"
 )
 
@@ -41,7 +41,7 @@ drain:
 
 	// Echo the query and wait for the main key
 	// reading routine to send us the response back.
-	fmt.Print("\x1b[6n")
+	term.Print("\x1b[6n")
 	// In order not to get stuck with an input that might be user-one
 	// (like when the user typed before the shell is fully started, and yet not having
 	// queried cursor yet), we keep reading from stdin until we find the cursor response.
@@ -88,7 +88,7 @@ drain:
 
 			buf := make([]byte, keyScanBufSize)
 
-			read, err := readStdinWithTimeout(buf, remaining)
+			read, err := readInputWithTimeout(k.inputReader(), buf, remaining)
 			if err != nil {
 				if errors.Is(err, errCursorPosTimeout) {
 					return -1, -1
@@ -148,7 +148,7 @@ func (k *Keys) readInputFiltered() (keys []byte, err error) {
 	// send by ourselves, because we pause reading.
 	buf := make([]byte, keyScanBufSize)
 
-	read, err := Stdin.Read(buf)
+	read, err := k.inputReader().Read(buf)
 	if err != nil && errors.Is(err, io.EOF) {
 		return
 	}
@@ -167,10 +167,24 @@ func (k *Keys) readInputFiltered() (keys []byte, err error) {
 	return keys, nil
 }
 
-func readStdinWithTimeout(buf []byte, timeout time.Duration) (int, error) {
-	file, ok := Stdin.(*os.File)
+func readInputWithTimeout(reader io.Reader, buf []byte, timeout time.Duration) (int, error) {
+	file, ok := reader.(*os.File)
 	if !ok {
-		return 0, errCursorPosTimeout
+		type readResult struct {
+			n   int
+			err error
+		}
+		ch := make(chan readResult, 1)
+		go func() {
+			n, err := reader.Read(buf)
+			ch <- readResult{n: n, err: err}
+		}()
+		select {
+		case result := <-ch:
+			return result.n, result.err
+		case <-time.After(timeout):
+			return 0, errCursorPosTimeout
+		}
 	}
 
 	fds := []unix.PollFd{{

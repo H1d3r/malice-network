@@ -1,13 +1,13 @@
 package macro
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/reeflective/readline/inputrc"
 	"github.com/reeflective/readline/internal/color"
 	"github.com/reeflective/readline/internal/core"
+	"github.com/reeflective/readline/internal/term"
 	"github.com/reeflective/readline/internal/ui"
 )
 
@@ -152,7 +152,7 @@ func (e *Engine) PrintLastMacro() {
 	// Print the macro and the prompt.
 	// The shell takes care of clearing itself
 	// before printing, and refreshing after.
-	fmt.Printf("\n%s\n", e.macros[e.currentKey])
+	term.Printf("\n%s\n", e.macros[e.currentKey])
 }
 
 // PrintAllMacros dumps all macros to the screen, which one line
@@ -178,7 +178,7 @@ func (e *Engine) PrintAllMacros() {
 			macro = '"'
 		}
 
-		fmt.Printf("\"%s\": %s\n", string(macro), sequence)
+		term.Printf("\"%s\": %s\n", string(macro), sequence)
 	}
 }
 

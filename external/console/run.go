@@ -254,10 +254,10 @@ func (c *Console) displayPreRun(line string) {
 	if c.NewlineBefore {
 		if !c.NewlineWhenEmpty {
 			if !c.lineEmpty(line) {
-				fmt.Println()
+				fmt.Fprintln(c.terminal.Out)
 			}
 		} else {
-			fmt.Println()
+			fmt.Fprintln(c.terminal.Out)
 		}
 	}
 }
@@ -266,10 +266,10 @@ func (c *Console) displayPostRun(lastLine string) {
 	if c.NewlineAfter {
 		if !c.NewlineWhenEmpty {
 			if !c.lineEmpty(lastLine) {
-				fmt.Println()
+				fmt.Fprintln(c.terminal.Out)
 			}
 		} else {
-			fmt.Println()
+			fmt.Fprintln(c.terminal.Out)
 		}
 	}
 

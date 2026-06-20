@@ -1,13 +1,13 @@
 package keymap
 
 import (
-	"fmt"
 	"os"
 	"os/user"
 	"sort"
 	"strings"
 
 	"github.com/reeflective/readline/inputrc"
+	"github.com/reeflective/readline/internal/term"
 )
 
 // readline global options specific to this library.
@@ -150,7 +150,7 @@ func printBindsReadable(commands []string, all map[string][]string) {
 			}
 
 			bindsStr := strings.Join(firstBinds, ", ")
-			fmt.Printf("%s can be found on %s ...\n", command, bindsStr)
+			term.Printf("%s can be found on %s ...\n", command, bindsStr)
 
 		default:
 			var firstBinds []string
@@ -160,7 +160,7 @@ func printBindsReadable(commands []string, all map[string][]string) {
 			}
 
 			bindsStr := strings.Join(firstBinds, ", ")
-			fmt.Printf("%s can be found on %s\n", command, bindsStr)
+			term.Printf("%s can be found on %s\n", command, bindsStr)
 		}
 	}
 }
@@ -172,7 +172,7 @@ func printBindsInputrc(commands []string, all map[string][]string) {
 
 		if len(commandBinds) > 0 {
 			for _, bind := range commandBinds {
-				fmt.Printf("\"%s\": %s\n", bind, command)
+				term.Printf("\"%s\": %s\n", bind, command)
 			}
 		}
 	}

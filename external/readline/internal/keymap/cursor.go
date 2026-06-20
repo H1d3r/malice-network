@@ -1,8 +1,9 @@
 package keymap
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/reeflective/readline/internal/term"
 )
 
 // CursorStyle is the style of the cursor
@@ -58,14 +59,14 @@ func (m *Engine) PrintCursor(keymap Mode) {
 	modeSet := strings.TrimSpace(m.config.GetString(cursorOptname))
 
 	if _, valid := cursors[CursorStyle(modeSet)]; valid {
-		fmt.Print(cursors[CursorStyle(modeSet)])
+		term.Print(cursors[CursorStyle(modeSet)])
 		return
 	}
 
 	if defaultCur, valid := defaultCursors[keymap]; valid {
-		fmt.Print(cursors[defaultCur])
+		term.Print(cursors[defaultCur])
 		return
 	}
 
-	fmt.Print(cursors[cursor])
+	term.Print(cursors[cursor])
 }

@@ -16,7 +16,7 @@ func ExecuteShell() *cobra.Command {
 		Use:                "!",
 		Short:              "Execute the remaining arguments with system shell",
 		DisableFlagParsing: true,
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			// Only at least one argument is needed, since the command
 			// itself is stripped before those args are passed as an array.
 			if len(args) < 1 {
@@ -39,7 +39,7 @@ func ExecuteShell() *cobra.Command {
 				return err
 			}
 
-			fmt.Print(string(out))
+			fmt.Fprint(cmd.OutOrStdout(), string(out))
 
 			return nil
 		},

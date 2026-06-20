@@ -74,7 +74,7 @@ func (k *Keys) readInputFiltered() (keys []byte, err error) {
 		// send by ourselves, because we pause reading.
 		buf := make([]byte, keyScanBufSize)
 
-		read, err := Stdin.Read(buf)
+		read, err := k.inputReader().Read(buf)
 		if err != nil && errors.Is(err, io.EOF) {
 			return keys, err
 		}

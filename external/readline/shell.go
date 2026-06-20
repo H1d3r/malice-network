@@ -2,6 +2,7 @@ package readline
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/reeflective/readline/inputrc"
@@ -14,6 +15,7 @@ import (
 	"github.com/reeflective/readline/internal/macro"
 	"github.com/reeflective/readline/internal/term"
 	"github.com/reeflective/readline/internal/ui"
+	rlterm "github.com/reeflective/readline/terminal"
 )
 
 // Shell is the main readline shell instance. It contains all the readline state
@@ -62,6 +64,9 @@ type Shell struct {
 	// It takes the readline line ([]rune) and cursor pos as parameters,
 	// and returns completions with their associated metadata/settings.
 	Completer func(line []rune, cursor int) Completions
+
+	// Terminal is the transport backing this shell.
+	Terminal *rlterm.Terminal
 }
 
 // NewShell returns a readline shell instance initialized with a default
@@ -69,10 +74,29 @@ type Shell struct {
 // The constructor accepts an optional list of inputrc configuration options,
 // which are used when parsing/loading and applying any inputrc configuration.
 func NewShell(opts ...inputrc.Option) *Shell {
+	return NewShellWithTerminal(nil, opts...)
+}
+
+// NewShellWithTerminal returns a shell bound to a caller-provided terminal.
+func NewShellWithTerminal(t *rlterm.Terminal, opts ...inputrc.Option) *Shell {
+	if t == nil {
+		t = rlterm.Local()
+	}
+	if t.In == nil {
+		t.In = strings.NewReader("")
+	}
+	if t.Out == nil {
+		t.Out = io.Discard
+	}
+	if t.Err == nil {
+		t.Err = t.Out
+	}
 	shell := new(Shell)
+	shell.Terminal = t
 
 	// Core editor
 	keys := new(core.Keys)
+	keys.SetInput(t.In)
 	line := new(core.Line)
 	cursor := core.NewCursor(line)
 	selection := core.NewSelection(line, cursor)
@@ -142,14 +166,16 @@ func (rl *Shell) Selection() *core.Selection { return rl.selection }
 // and input line (and possibly completions/hints if active) below the logged string.
 // A newline is added to the message so that the prompt is correctly refreshed below.
 func (rl *Shell) Printf(msg string, args ...any) (n int, err error) {
+	restore := term.Activate(rl.Terminal.Out, rl.Terminal.Control)
+	defer restore()
 	// First go back to the last line of the input line,
 	// and clear everything below (hints and completions).
 	rl.Display.CursorBelowLine()
 	term.MoveCursorBackwards(term.GetWidth())
-	fmt.Print(term.ClearScreenBelow)
+	term.Print(term.ClearScreenBelow)
 
 	// Skip a line, and print the formatted message.
-	n, err = fmt.Printf(msg+"\n", args...)
+	n, err = fmt.Fprintf(rl.Terminal.Out, msg+"\n", args...)
 
 	// Redisplay the prompt, input line and active helpers.
 	rl.Prompt.PrimaryPrint()
@@ -161,12 +187,14 @@ func (rl *Shell) Printf(msg string, args ...any) (n int, err error) {
 // PrintTransientf prints a formatted string in place of the current prompt and input
 // line, and then refreshes, or "pushes" the prompt/line below this printed message.
 func (rl *Shell) PrintTransientf(msg string, args ...any) (n int, err error) {
+	restore := term.Activate(rl.Terminal.Out, rl.Terminal.Control)
+	defer restore()
 	// First go back to the beginning of the line/prompt, and
 	// clear everything below (prompt/line/hints/completions).
 	rl.Display.CursorToLineStart()
 	term.MoveCursorBackwards(term.GetWidth())
 	term.MoveCursorUp(rl.Prompt.PrimaryUsed())
-	fmt.Print(term.ClearScreenBelow)
+	term.Print(term.ClearScreenBelow)
 
 	// Print the logged message.
 	// Ensure exactly one trailing newline to separate message from redrawn prompt.
@@ -174,7 +202,7 @@ func (rl *Shell) PrintTransientf(msg string, args ...any) (n int, err error) {
 	if !strings.HasSuffix(formatted, "\n") {
 		formatted += "\n"
 	}
-	n, err = fmt.Print(formatted)
+	n, err = fmt.Fprint(rl.Terminal.Out, formatted)
 
 	// Redisplay the prompt, input line and active helpers.
 	rl.Prompt.PrimaryPrint()
@@ -196,4 +224,14 @@ func (rl *Shell) ClearInlineSuggestion() {
 // GetInlineSuggestion returns the current inline suggestion.
 func (rl *Shell) GetInlineSuggestion() string {
 	return rl.Display.GetInlineSuggestion()
+}
+
+// Refresh redraws the display using this shell's terminal.
+func (rl *Shell) Refresh() {
+	if rl == nil || rl.Display == nil {
+		return
+	}
+	restore := term.Activate(rl.Terminal.Out, rl.Terminal.Control)
+	defer restore()
+	rl.Display.Refresh()
 }

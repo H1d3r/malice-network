@@ -50,14 +50,19 @@ var ErrInterrupt = errors.New(os.Interrupt.String())
 // and it is up to the caller to decide what to do with the line result.
 // When the error is not nil, the returned line is not written to history.
 func (rl *Shell) Readline() (string, error) {
-	descriptor := int(os.Stdin.Fd())
+	if rl.Terminal != nil {
+		restore := term.Activate(rl.Terminal.Out, rl.Terminal.Control)
+		defer restore()
+	}
 
-	if term.IsTerminal(descriptor) {
-		state, err := term.MakeRaw(descriptor)
+	if rl.Terminal != nil && rl.Terminal.Control != nil && rl.Terminal.Control.IsTerminal() {
+		restoreRaw, err := rl.Terminal.Control.MakeRaw()
 		if err != nil {
 			return "", err
 		}
-		defer term.Restore(descriptor, state)
+		if restoreRaw != nil {
+			defer restoreRaw()
+		}
 	}
 
 	// Prompts and cursor styles
@@ -67,11 +72,11 @@ func (rl *Shell) Readline() (string, error) {
 	// in \e[200~ ... \e[201~ markers instead of injecting raw chars.
 	// Placed after prompt printing to avoid VT sequence interference.
 	if rl.Config.GetBool("enable-bracketed-paste") {
-		fmt.Print("\033[?2004h")
-		defer fmt.Print("\033[?2004l")
+		term.Print("\033[?2004h")
+		defer term.Print("\033[?2004l")
 	}
 	defer rl.Display.RefreshTransient()
-	defer fmt.Print(keymap.CursorStyle("default"))
+	defer term.Print(keymap.CursorStyle("default"))
 
 	rl.init()
 

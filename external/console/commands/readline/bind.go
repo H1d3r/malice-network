@@ -104,7 +104,7 @@ Exporting binds:
 		// Function names
 		if cmd.Flags().Changed("list") {
 			for name := range shell.Keymap.Commands() {
-				fmt.Println(name)
+				fmt.Fprintln(cmd.OutOrStdout(), name)
 			}
 
 			return nil
@@ -245,7 +245,7 @@ func readFileConfig(sh *readline.Shell, cmd *cobra.Command, _ string) error {
 		return err
 	}
 
-	fmt.Printf("Read and parsed %s\n", file.Name())
+	fmt.Fprintf(cmd.OutOrStdout(), "Read and parsed %s\n", file.Name())
 
 	return nil
 }

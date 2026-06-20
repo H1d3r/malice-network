@@ -5,13 +5,15 @@ import (
 	"sync"
 
 	"github.com/reeflective/readline"
+	rlterm "github.com/reeflective/readline/terminal"
 )
 
 // Console is an integrated console application instance.
 type Console struct {
 	// Application
-	name          string           // Used in the prompt, and for readline `.inputrc` application-specific settings.
-	shell         *readline.Shell  // Provides readline functionality (inputs, completions, hints, history)
+	name          string          // Used in the prompt, and for readline `.inputrc` application-specific settings.
+	shell         *readline.Shell // Provides readline functionality (inputs, completions, hints, history)
+	terminal      *rlterm.Terminal
 	printLogo     func(c *Console) // Simple logo printer.
 	cmdHighlight  string           // Ansi code for highlighting of command in default highlighter. Green by default.
 	flagHighlight string           // Ansi code for highlighting of flag in default highlighter. Grey by default.
@@ -72,12 +74,21 @@ type Console struct {
 // things, print asynchronous messages, or modify various operating parameters on the fly.
 // The app parameter is an optional name of the application using this console.
 func New(app string) *Console {
+	return NewWithTerminal(app, nil)
+}
+
+// NewWithTerminal instantiates a console using a caller-provided terminal.
+func NewWithTerminal(app string, t *rlterm.Terminal) *Console {
+	if t == nil {
+		t = rlterm.Local()
+	}
 	console := &Console{
 		name: app,
 		//shell: readline.NewShell(inputrc.WithApp(strings.ToLower(app))),
-		shell: readline.NewShell(),
-		menus: make(map[string]*Menu),
-		mutex: &sync.RWMutex{},
+		shell:    readline.NewShellWithTerminal(t),
+		terminal: t,
+		menus:    make(map[string]*Menu),
+		mutex:    &sync.RWMutex{},
 	}
 
 	// Quality of life improvements.
@@ -192,14 +203,14 @@ func (c *Console) SwitchMenu(menu string) {
 // below the line, and will not print the prompt. In any other case this function works normally.
 func (c *Console) TransientPrintf(msg string, args ...any) (n int, err error) {
 	if c.isExecuting {
-		return fmt.Printf(msg, args...)
+		return fmt.Fprintf(c.terminal.Out, msg, args...)
 	}
 
 	// If the last message we printed asynchronously
 	// immediately precedes this new message, move up
 	// another row, so we don't waste too much space.
 	if c.printed && c.NewlineAfter {
-		fmt.Print("\x1b[1A")
+		fmt.Fprint(c.terminal.Out, "\x1b[1A")
 	}
 
 	if c.NewlineAfter {
@@ -218,7 +229,7 @@ func (c *Console) TransientPrintf(msg string, args ...any) (n int, err error) {
 // below the line, and will not print the prompt. In any other case this function works normally.
 func (c *Console) Printf(msg string, args ...any) (n int, err error) {
 	if c.isExecuting {
-		return fmt.Printf(msg, args...)
+		return fmt.Fprintf(c.terminal.Out, msg, args...)
 	}
 
 	return c.shell.Printf(msg, args...)
@@ -243,7 +254,7 @@ func (c *Console) setupShell() {
 	// are quite neceessary for efficient console use.
 	cfg.Set("skip-completed-text", true)
 	cfg.Set("menu-complete-display-prefix", true)
-	cfg.Set("autocomplete", true)       // Enable as-you-type completion for inline suggestions
+	cfg.Set("autocomplete", true)      // Enable as-you-type completion for inline suggestions
 	cfg.Set("usage-hint-always", true) // Always show command usage hints below input
 }
 
