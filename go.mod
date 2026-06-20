@@ -7,12 +7,13 @@ require (
 	github.com/carapace-sh/carapace v1.10.3
 	github.com/chainreactors/IoM-go v0.0.0-20251104165543-b0edd05b982e
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0
-	github.com/chainreactors/logs v0.0.0-20250312104344-9f30fa69d3c9
+	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/chainreactors/mals v0.0.0-20250717185731-227f71a931fa
 	github.com/chainreactors/parsers v0.0.0-20250225073555-ab576124d61f
 	github.com/chainreactors/rem v0.3.0
 	github.com/chainreactors/tui v0.1.1
-	github.com/chainreactors/utils v0.0.0-20241209140746-65867d2f78b2
+	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
+	github.com/chainreactors/utils/pty v0.0.0-20260620140628-4a3715583ae7
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/charmbracelet/huh v0.8.0
@@ -29,7 +30,7 @@ require (
 	github.com/h2non/filetype v1.1.3
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
-	github.com/klauspost/compress v1.17.8
+	github.com/klauspost/compress v1.18.0
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/mattn/go-tty v0.0.7
 	github.com/muesli/termenv v0.16.0
@@ -41,7 +42,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.9
-	github.com/tetratelabs/wazero v1.5.0
+	github.com/tetratelabs/wazero v1.9.0
 	github.com/traefik/yaegi v0.14.3
 	github.com/wabzsy/gonut v1.0.0
 	github.com/yuin/gopher-lua v1.1.1
@@ -54,11 +55,11 @@ require (
 // compatibility
 require (
 	github.com/docker/docker v27.5.1+incompatible
-	golang.org/x/crypto v0.48.0
-	golang.org/x/exp v0.0.0-20241210194714-1829a127f884
+	golang.org/x/crypto v0.51.0
+	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/term v0.40.0
 	golang.org/x/text v0.34.0
 	google.golang.org/grpc v1.79.3
@@ -95,6 +96,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.6 // indirect
 	github.com/aws/smithy-go v1.24.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/aymanbagabas/go-pty v0.2.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/blinkbean/dingtalk v1.1.3 // indirect
@@ -104,7 +106,7 @@ require (
 	github.com/cbroglie/mustache v1.4.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chainreactors/fingers v0.0.0-20240702104653-a66e34aa41df // indirect
+	github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f // indirect
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0 // indirect
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -186,7 +188,7 @@ require (
 	github.com/ncruces/julianday v0.1.5 // indirect
 	github.com/nrdcg/dnspod-go v0.4.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/reeflective/readline v1.1.3 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
@@ -200,6 +202,7 @@ require (
 	github.com/tengattack/gluacrypto v0.0.0-20240324200146-54b58c95c255 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/twmb/murmur3 v1.1.8 // indirect
+	github.com/u-root/u-root v0.16.0 // indirect
 	github.com/wabzsy/compression v0.0.0-20230725232933-73109bacf457 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
@@ -222,7 +225,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect
 	gotest.tools/v3 v3.5.1 // indirect
-	mvdan.cc/sh/v3 v3.7.0 // indirect
+	mvdan.cc/sh/v3 v3.11.0 // indirect
 )
 
 replace (
@@ -239,7 +242,6 @@ replace (
 replace (
 	github.com/chainreactors/IoM-go => ./external/IoM-go
 	github.com/chainreactors/proxyclient => github.com/chainreactors/proxyclient v1.0.3
-	github.com/chainreactors/rem => ./external/rem
 	github.com/chainreactors/tui => ./external/tui
 	github.com/reeflective/console => ./external/console
 	github.com/reeflective/readline => ./external/readline
