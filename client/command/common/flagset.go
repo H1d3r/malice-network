@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/malice-network/helper/cryptography"
@@ -193,19 +194,34 @@ func ParseTLSFlags(cmd *cobra.Command) (*clientpb.TLS, string, error) {
 
 func EncryptionFlagSet(f *pflag.FlagSet) {
 	f.String("parser", "default", "pipeline parser")
-	f.String("encryption-type", "", "encryption type")
-	f.String("encryption-key", "", "encryption key")
+	f.StringSlice("encryption-type", []string{consts.CryptorAES, consts.CryptorXOR}, "encryption type")
+	f.StringSlice("encryption-key", []string{"maliceofinternal"}, "encryption key")
 	SetFlagSetGroup(f, "encryption")
 }
 
 func ParseEncryptionFlags(cmd *cobra.Command) (string, []*clientpb.Encryption) {
-	encryptionType, _ := cmd.Flags().GetString("encryption-type")
-	encryptionKey, _ := cmd.Flags().GetString("encryption-key")
+	encryptionTypes, _ := cmd.Flags().GetStringSlice("encryption-type")
+	encryptionKeys, _ := cmd.Flags().GetStringSlice("encryption-key")
 	parser, _ := cmd.Flags().GetString("parser")
-	return parser, []*clientpb.Encryption{&clientpb.Encryption{
-		Type: encryptionType,
-		Key:  encryptionKey,
-	}}
+
+	encryptions := make([]*clientpb.Encryption, 0, len(encryptionTypes))
+	for i, encryptionType := range encryptionTypes {
+		encryptions = append(encryptions, &clientpb.Encryption{
+			Type: encryptionType,
+			Key:  encryptionKeyAt(encryptionKeys, i),
+		})
+	}
+	return parser, encryptions
+}
+
+func encryptionKeyAt(keys []string, index int) string {
+	if len(keys) == 0 {
+		return ""
+	}
+	if index < len(keys) {
+		return keys[index]
+	}
+	return keys[len(keys)-1]
 }
 
 func GenerateFlagSet(f *pflag.FlagSet) {

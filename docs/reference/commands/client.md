@@ -1967,8 +1967,8 @@ http --listener listener --tls --cert /path/to/cert --key /path/to/key
 ```
       --cert string              tls cert path
       --cert-name string         certificate name
-      --encryption-key string    encryption key
-      --encryption-type string   encryption type
+      --encryption-key strings   encryption key (default [maliceofinternal])
+      --encryption-type strings  encryption type (default [AES,XOR])
       --error-page string        Path to custom error page file
       --headers stringToString   HTTP response headers (key=value) (default [])
       --host string              pipeline host, the default value is **0.0.0.0** (default "0.0.0.0")
@@ -2194,8 +2194,8 @@ tcp --listener listener --tls --cert /path/to/cert --key /path/to/key
 ```
       --cert string              tls cert path
       --cert-name string         certificate name
-      --encryption-key string    encryption key
-      --encryption-type string   encryption type
+      --encryption-key strings   encryption key (default [maliceofinternal])
+      --encryption-type strings  encryption type (default [AES,XOR])
       --host string              pipeline host, the default value is **0.0.0.0** (default "0.0.0.0")
       --ip string                external ip (default "ip")
       --key string               tls key path

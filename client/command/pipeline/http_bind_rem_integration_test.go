@@ -86,8 +86,10 @@ func TestNewBindPipelineCmdGeneratesNameWhenOmitted(t *testing.T) {
 	if !model.Enable || model.Type != consts.BindPipeline {
 		t.Fatalf("bind pipeline = %#v, want enabled bind pipeline", model)
 	}
-	if got := model.GetEncryption(); len(got) != 1 || got[0].GetType() != consts.CryptorAES || got[0].GetKey() != "maliceofinternal" {
-		t.Fatalf("bind encryption = %#v, want default aes/maliceofinternal", got)
+	if got := model.GetEncryption(); len(got) != 2 ||
+		got[0].GetType() != consts.CryptorAES || got[0].GetKey() != "maliceofinternal" ||
+		got[1].GetType() != consts.CryptorXOR || got[1].GetKey() != "maliceofinternal" {
+		t.Fatalf("bind encryption = %#v, want default AES+XOR/maliceofinternal", got)
 	}
 }
 

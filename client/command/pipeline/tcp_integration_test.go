@@ -35,6 +35,11 @@ func TestNewTcpPipelineCmdIntegration(t *testing.T) {
 	if !model.Enable {
 		t.Fatalf("expected pipeline to be enabled in db")
 	}
+	if got := model.GetEncryption(); len(got) != 2 ||
+		got[0].GetType() != consts.CryptorAES || got[0].GetKey() != "maliceofinternal" ||
+		got[1].GetType() != consts.CryptorXOR || got[1].GetKey() != "maliceofinternal" {
+		t.Fatalf("tcp encryption = %#v, want default AES+XOR/maliceofinternal", got)
+	}
 
 	history := h.ControlHistory()
 	if len(history) == 0 {

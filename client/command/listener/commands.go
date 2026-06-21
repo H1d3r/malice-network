@@ -157,7 +157,7 @@ listener forward connect listener --host 10.0.0.5 --port 5005
 			return ForwardDisconnectCmd(cmd, con)
 		},
 	}
-	common.BindArgCompletions(forwardDisconnectCmd, nil, common.ListenerIDCompleter(con))
+	common.BindArgCompletions(forwardDisconnectCmd, nil, common.ForwardListenerIDCompleter(con))
 
 	forwardStatusCmd := &cobra.Command{
 		Use:   "status [listener_id]",
@@ -167,7 +167,7 @@ listener forward connect listener --host 10.0.0.5 --port 5005
 			return ForwardStatusCmd(cmd, con)
 		},
 	}
-	common.BindArgCompletions(forwardStatusCmd, nil, common.ListenerIDCompleter(con))
+	common.BindArgCompletions(forwardStatusCmd, nil, common.ForwardListenerIDCompleter(con))
 
 	forwardListCmd := &cobra.Command{
 		Use:   "list",

@@ -102,6 +102,25 @@ func ListenerIDCompleter(con *core.Console) carapace.Action {
 
 }
 
+func ForwardListenerIDCompleter(con *core.Console) carapace.Action {
+	callback := func(c carapace.Context) carapace.Action {
+		results := make([]string, 0)
+		statuses, err := con.Rpc.ListForwardListeners(con.Context(), &clientpb.Empty{})
+		if err != nil {
+			return carapace.ActionValuesDescribed(results...).Tag("forward listener id")
+		}
+		for _, status := range statuses.GetListeners() {
+			listenerID := status.GetListenerId()
+			if listenerID == "" || !status.GetActive() {
+				continue
+			}
+			results = append(results, listenerID, fmt.Sprintf("ForwardListener, %s", listenerID))
+		}
+		return carapace.ActionValuesDescribed(results...).Tag("forward listener id")
+	}
+	return carapace.ActionCallback(callback)
+}
+
 func ListenerPipelineNameCompleter(con *core.Console, cmd *cobra.Command) carapace.Action {
 	callback := func(c carapace.Context) carapace.Action {
 		results := make([]string, 0)
