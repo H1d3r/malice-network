@@ -192,6 +192,10 @@ func (plug *EmbedPlugin) registerEmbedResourceFunctions() {
 		return resourceFile, nil
 	}, nil)
 
+	plug.registerFunction("list_resource", func(dirname string) ([]string, error) {
+		return listEmbedResourceDir(plug, dirname)
+	}, nil)
+
 	// 重写find_resource函数 - 查找架构特定的资源文件
 	plug.registerFunction("find_resource", func(sess *client.Session, base string, ext string) (string, error) {
 		// 这里简化处理，直接使用默认架构

@@ -211,6 +211,11 @@ func (plug *LuaPlugin) RegisterLuaFunction() {
 		return resourceFile, nil
 	}, nil)
 
+	plug.registerFunction("list_resource", func(dirname string) ([]string, error) {
+		resourceRoot := filepath.Join(assets.GetMalsDir(), plug.Name, "resources")
+		return listFilesystemResourceDir(resourceRoot, dirname)
+	}, nil)
+
 	plug.registerFunction("find_resource", func(sess *client.Session, base string, ext string) (string, error) {
 		filename := fmt.Sprintf("%s.%s.%s", base, consts.FormatArch(sess.Os.Arch), ext)
 		resourceFile := filepath.Join(assets.GetMalsDir(), plug.Name, "resources", filename)

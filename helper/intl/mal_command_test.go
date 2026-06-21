@@ -1,6 +1,9 @@
 package intl
 
 import (
+	"io/fs"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -63,6 +66,64 @@ func TestKeyCommandsExist(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadPrebuildDocumentsResourceModules(t *testing.T) {
+	h := getSharedHarness(t)
+	cmd, ok := h.Commands["load_prebuild"]
+	if !ok {
+		t.Fatal("load_prebuild command not registered")
+	}
+
+	modules := loadPrebuildModuleNames(t)
+	if len(modules) == 0 {
+		t.Fatal("expected at least one prebuild module resource")
+	}
+
+	for _, module := range modules {
+		if !strings.Contains(cmd.Short, module) {
+			t.Errorf("load_prebuild short description missing module %q: %q", module, cmd.Short)
+		}
+		if !strings.Contains(cmd.HelpText, module) {
+			t.Errorf("load_prebuild help missing module %q", module)
+		}
+	}
+}
+
+func loadPrebuildModuleNames(t *testing.T) []string {
+	t.Helper()
+
+	var entries []fs.DirEntry
+	for _, dir := range []string{
+		"community/community/resources/modules",
+		"community/resources/modules",
+		"resources/modules",
+	} {
+		var err error
+		entries, err = UnifiedFS.ReadDir(dir)
+		if err == nil {
+			break
+		}
+	}
+
+	seen := make(map[string]struct{})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		dot := strings.IndexByte(entry.Name(), '.')
+		if dot <= 0 {
+			continue
+		}
+		seen[entry.Name()[:dot]] = struct{}{}
+	}
+
+	modules := make([]string, 0, len(seen))
+	for module := range seen {
+		modules = append(modules, module)
+	}
+	sort.Strings(modules)
+	return modules
 }
 
 // TestAllCommandsHaveTTP verifies that every registered command has a

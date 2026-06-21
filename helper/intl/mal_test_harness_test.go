@@ -3,6 +3,7 @@ package intl
 import (
 	"fmt"
 	"io/fs"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -72,7 +73,7 @@ func NewTestHarness() *TestHarness {
 
 func requireCommunityFixture(t *testing.T, path string) {
 	t.Helper()
-	if FileExists(path) {
+	if _, err := readCommunityFixture(path); err == nil {
 		return
 	}
 	t.Skipf("community fixture %q not present in repository checkout", path)
@@ -91,6 +92,21 @@ func readCommunityFixture(path string) ([]byte, error) {
 		}
 	}
 	return nil, fmt.Errorf("embedded fixture not found: %s", path)
+}
+
+func readCommunityDir(path string) ([]fs.DirEntry, error) {
+	candidates := []string{
+		path,
+		"community/" + path,
+		"community/community/" + path,
+	}
+	for _, candidate := range candidates {
+		entries, err := UnifiedFS.ReadDir(candidate)
+		if err == nil {
+			return entries, nil
+		}
+	}
+	return nil, fmt.Errorf("embedded directory not found: %s", path)
 }
 
 // NewMockVM creates a gopher-lua VM with all standard libraries from mals
@@ -260,6 +276,29 @@ func (h *TestHarness) registerMockFunctions(vm *lua.LState) {
 	// global_resource(filename) -> string
 	vm.SetGlobal("global_resource", vm.NewFunction(func(L *lua.LState) int {
 		L.Push(lua.LString("mock://global/" + L.CheckString(1)))
+		return 1
+	}))
+
+	// list_resource(dirname) -> table<string>
+	vm.SetGlobal("list_resource", vm.NewFunction(func(L *lua.LState) int {
+		dirname := L.CheckString(1)
+		entries, err := readCommunityDir("resources/" + dirname)
+		if err != nil {
+			L.RaiseError("%s", err.Error())
+			return 0
+		}
+
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		sort.Strings(names)
+
+		result := L.NewTable()
+		for _, name := range names {
+			result.Append(lua.LString(name))
+		}
+		L.Push(result)
 		return 1
 	}))
 
