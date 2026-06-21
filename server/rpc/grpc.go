@@ -89,7 +89,7 @@ func ReInitLogs() {
 // not leak across isolated in-process test harnesses.
 func ResetTransientRPCState() {
 	pipelinesCh = sync.Map{}
-	ptyStreamingSessions = sync.Map{}
+	implantPTYManagers = sync.Map{}
 	resetForwardListenerRuntimes()
 }
 
