@@ -4,14 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"github.com/chainreactors/IoM-go/mtls"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/IoM-go/proto/client/rootpb"
 	"github.com/chainreactors/malice-network/helper/certs"
 	"github.com/chainreactors/malice-network/server/internal/certutils"
 	"github.com/chainreactors/malice-network/server/internal/configs"
+	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 )
 
@@ -160,8 +166,25 @@ func (rpc *Server) AddListener(ctx context.Context, req *rootpb.Operator) (*root
 }
 
 func (rpc *Server) RemoveListener(ctx context.Context, req *rootpb.Operator) (*rootpb.Response, error) {
-	opCache.InvalidateByName(req.Args[0])
-	err := db.RemoveOperator(req.Args[0])
+	listenerID := ""
+	if req != nil && len(req.Args) > 0 {
+		listenerID = strings.TrimSpace(req.Args[0])
+	}
+	if listenerID == "" {
+		err := status.Error(codes.InvalidArgument, "listener name is required")
+		return &rootpb.Response{
+			Status: 1,
+			Error:  err.Error(),
+		}, err
+	}
+	if err := ensureListenerIdentityRemovable(listenerID); err != nil {
+		return &rootpb.Response{
+			Status: 1,
+			Error:  err.Error(),
+		}, err
+	}
+	opCache.InvalidateByName(listenerID)
+	err := db.RemoveOperator(listenerID)
 	if err != nil {
 		return &rootpb.Response{
 			Status: 1,
@@ -172,6 +195,16 @@ func (rpc *Server) RemoveListener(ctx context.Context, req *rootpb.Operator) (*r
 		Status:   0,
 		Response: "",
 	}, nil
+}
+
+func ensureListenerIdentityRemovable(listenerID string) error {
+	if lns, err := core.Listeners.Get(listenerID); err == nil && lns.Active() {
+		return status.Errorf(codes.FailedPrecondition, "listener %s is active; retire it before removing its identity", listenerID)
+	}
+	if _, ok := getForwardListenerRuntime(listenerID); ok {
+		return status.Errorf(codes.FailedPrecondition, "forward listener %s is connected; disconnect or retire it before removing its identity", listenerID)
+	}
+	return nil
 }
 
 func (rpc *Server) ListListeners(ctx context.Context, req *rootpb.Operator) (*clientpb.Listeners, error) {

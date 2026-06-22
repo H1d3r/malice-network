@@ -76,6 +76,8 @@ listener retire listener-a --no-revoke --yes
 
 `--purge-config` 只删除 Listener 进程当前 `-c` 使用的配置文件；`--purge-auth` 只删除 Listener 配置中的 `auth` 文件。两个删除行为都是显式 opt-in，默认不删除本地文件。`--no-revoke` 会保留 Server DB 中同名 Listener Operator 的有效性，默认不建议使用。`--timeout` 控制 Server 等待 Listener retire 确认的秒数。
 
+删除 Listener Operator 只适合处理未连接的身份记录。若同名 reverse Listener 运行时仍处于 active 状态，或 Server 侧仍保持 forward Listener runtime，`RemoveListener` 会返回 `FailedPrecondition` 并保留 DB 中的身份记录。需要先执行 `listener retire`，或对 forward runtime 执行 `listener forward disconnect`，再删除或重置身份。
+
 !!! warning "forward 模式当前限制"
     旧的 client-only `listener.auth` 仍可用于 `reverse`，但用于 `forward` 时需要重新生成双用途 Listener auth。forward transport 解决的是 Server 主动拨入 Listener 的方向问题；如果 Server 也无法访问 Listener，需要额外 relay/中继。
 
