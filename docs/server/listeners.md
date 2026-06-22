@@ -32,7 +32,7 @@ Listener 是 malice-network 的分布式通信层，与 Server 解耦设计：
 - Server 拨入 Listener 时使用 Server 本地 Root CA 签发/保存的 forward client cert，不会读取或复用 Listener 的私钥。
 - 双方都用 Root CA 公钥验证对端证书链和证书用途。
 
-forward 示例：
+Listener-only forward 最小示例：
 
 ```yaml
 listeners:
@@ -43,11 +43,9 @@ listeners:
   forward:
     listen_host: 0.0.0.0
     listen_port: 5005
-    connect_host: 10.10.1.20
-    connect_port: 5005
 ```
 
-`listen_*` 是 Listener 端绑定地址；`connect_*` 是 Server 端拨号地址。forward 模式要求 Server 到 Listener 的 TCP 连接可达；如果双向都不可达，需要额外 relay/中继。
+`listen_*` 是 Listener 端绑定地址。Server 端拨号地址由 Server 侧 `connect_*` 配置或 `listener forward connect --host/--port` 提供。forward 模式要求 Server 到 Listener 的 TCP 连接可达；如果双向都不可达，需要额外 relay/中继。
 
 ### forward 动态连接
 

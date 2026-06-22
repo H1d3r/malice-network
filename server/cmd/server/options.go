@@ -58,6 +58,15 @@ type Options struct {
 }
 
 func (opt *Options) Validate() error {
+	if opt.ListenerOnly {
+		if opt.Listeners == nil {
+			return errors.New("config section 'listeners' is missing or invalid, check config.yaml format")
+		}
+		if !opt.Listeners.Enable {
+			return errors.New("must enable listener")
+		}
+		return nil
+	}
 	if opt.Server == nil {
 		return errors.New("config section 'server' is missing or invalid, check config.yaml format")
 	}
@@ -359,11 +368,15 @@ func (opt *Options) PrepareServer() error {
 func (opt *Options) PrepareListener() error {
 	logs.Log.Importantf("listener - config_enabled action=start_listeners")
 	if opt.IP != "" {
-		logs.Log.Infof("manually specified IP: %s will override config: %s", opt.IP, opt.Server.IP)
+		currentIP := ""
+		if opt.Server != nil {
+			currentIP = opt.Server.IP
+		}
+		logs.Log.Infof("manually specified IP: %s will override config: %s", opt.IP, currentIP)
 		opt.Listeners.IP = opt.IP
 		config.Set("listeners.ip", opt.IP)
 	}
-	serverEnabled := opt.Server.Enable && !opt.ListenerOnly // only treat server as local when it's actually running
+	serverEnabled := opt.Server != nil && opt.Server.Enable && !opt.ListenerOnly // only treat server as local when it's actually running
 	err := StartListener(opt.Listeners, serverEnabled)
 	if err != nil {
 		return err

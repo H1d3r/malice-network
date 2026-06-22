@@ -60,10 +60,10 @@ listeners:
 
 ### 独立部署listener
 
-从项目设计开始，我们就将listener和server解耦，可以通过启动命令独立部署listener，需要将malice-network、config.yaml和xxx.auth放到独立的机器然后执行--listener-only。
+从项目设计开始，我们就将listener和server解耦，可以通过启动命令独立部署listener，需要将malice-network、listener.yaml（或默认config.yaml）和xxx.auth放到独立的机器然后执行--listener-only。纯listener-only配置可以只保留`listeners`段，不需要`server`段。
 
 ```bash
-./malice-network --listener-only
+./malice-network --listener-only -c listener.yaml
 ```
 
 ![image-20250710233407269](../assets/listener_start.png)
@@ -80,9 +80,9 @@ listeners:
   forward:
     listen_host: 0.0.0.0
     listen_port: 5005
-    connect_host: 10.10.1.20
-    connect_port: 5005
 ```
+
+远程 Listener 的最小配置只需要监听地址和监听端口。Server 要连接哪个 Listener 地址，由 Server 侧配置或 `listener forward connect --host/--port` 决定。
 
 如果不想只依赖 Server 启动配置，也可以由 Client 请求 Server 临时连接一个已注册的 forward Listener：
 
