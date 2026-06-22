@@ -45,6 +45,8 @@ listeners:
 
 当您需要添加一个新的listener， 在确保 **Malice-Network** 服务器已经运行后，在终端输入以下指令：
 
+`listener add` / `listener del` 属于 `RootRPC` 身份管理操作，默认只允许在 Server 本机 localhost 调用。远程 WebUI 或远程 admin 客户端需要执行这些操作时，需要在 Server `config.yaml` 的 `server.root_rpc` 中显式开启远程 RootRPC，并限制来源 CIDR 和允许的方法。
+
 ```powershell
 .\malice-network listener add [listener_name]
 ```

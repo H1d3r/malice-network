@@ -119,6 +119,29 @@ server:
     timeout: 120                    # 超时时间（秒）
 ```
 
+#### Remote RootRPC 配置
+
+`RootRPC` 用于 Operator 和 Listener 身份管理，默认只允许 localhost 调用。远程 WebUI 或远程 admin 客户端需要调用 `RootRPC` 时，必须显式开启：
+
+```yaml
+server:
+  root_rpc:
+    allow_remote: true
+    allowed_cidrs:
+      - 192.168.239.0/24
+    allowed_methods:
+      - /clientrpc.RootRPC/ListListeners
+      - /clientrpc.RootRPC/AddListener
+      - /clientrpc.RootRPC/RemoveListener
+```
+
+- `allow_remote` 默认为 `false`，保持仅 localhost 可用。
+- `allowed_cidrs` 为空时表示不限制远程来源 IP；可填写 CIDR 或单个 IP。
+- `allowed_methods` 为空时表示允许 admin 调用所有 `RootRPC` 方法；建议只开放需要的具体方法。
+
+!!! warning "安全提示"
+    `RootRPC` 可以生成或删除 Client/Listener auth。只在可信网络中开启远程访问，并尽量配置 `allowed_cidrs` 与 `allowed_methods`。
+
 #### 消息通知配置
 
 ```yaml

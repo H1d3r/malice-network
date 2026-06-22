@@ -81,6 +81,7 @@ type ServerConfig struct {
 	AcmeConfig     *AcmeConfig     `config:"acme" yaml:"acme"`
 	LLMConfig      *LLMConfig      `config:"llm" yaml:"llm"`
 	DatabaseConfig *DatabaseConfig `config:"database" yaml:"database"`
+	RootRPCConfig  *RootRPCConfig  `config:"root_rpc" yaml:"root_rpc"`
 }
 
 func (c *ServerConfig) Address() string {
@@ -120,6 +121,12 @@ type MiscConfig struct {
 	PacketLength int    `config:"packet_length" default:"4194304" yaml:"packet_length"`
 	Certificate  string `config:"certificate" default:"" yaml:"certificate"`
 	PrivateKey   string `config:"certificate_key" default:"" yaml:"certificate_key"`
+}
+
+type RootRPCConfig struct {
+	AllowRemote    bool     `config:"allow_remote" default:"false" yaml:"allow_remote"`
+	AllowedCIDRs   []string `config:"allowed_cidrs" yaml:"allowed_cidrs"`
+	AllowedMethods []string `config:"allowed_methods" yaml:"allowed_methods"`
 }
 
 func LoadMiscConfig() ([]byte, []byte, error) {

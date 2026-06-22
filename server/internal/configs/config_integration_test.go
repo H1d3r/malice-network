@@ -29,6 +29,9 @@ func TestRepositoryServerConfigParses(t *testing.T) {
 	if serverCfg.NotifyConfig == nil || serverCfg.NotifyConfig.Enable {
 		t.Fatalf("unexpected notify config: %#v", serverCfg.NotifyConfig)
 	}
+	if serverCfg.RootRPCConfig != nil && serverCfg.RootRPCConfig.AllowRemote {
+		t.Fatal("root_rpc.allow_remote must default to false when not configured")
+	}
 	if len(listenerCfg.REMs) != 1 || listenerCfg.REMs[0].Name != "rem_default" {
 		t.Fatalf("unexpected rem config: %#v", listenerCfg.REMs)
 	}
@@ -125,6 +128,19 @@ func TestFullConfigFixtureParsesAndDrivesMechanisms(t *testing.T) {
 	if llm := GetLLMConfig(); llm == nil || llm.DefaultProvider != "openai" || llm.Timeout != 25 || llm.ProxyURL != "http://127.0.0.1:7890" || llm.Providers["openai"] == nil || llm.Providers["openai"].APIKey != "fixture-openai-key" {
 		t.Fatalf("unexpected llm config: %#v", llm)
 	}
+	if serverCfg.RootRPCConfig == nil {
+		t.Fatal("expected root_rpc config")
+	}
+	if !serverCfg.RootRPCConfig.AllowRemote {
+		t.Fatal("expected allow_remote=true")
+	}
+	if len(serverCfg.RootRPCConfig.AllowedCIDRs) != 2 || serverCfg.RootRPCConfig.AllowedCIDRs[0] != "192.168.239.0/24" || serverCfg.RootRPCConfig.AllowedCIDRs[1] != "10.10.10.10" {
+		t.Fatalf("unexpected allowed_cidrs: %#v", serverCfg.RootRPCConfig.AllowedCIDRs)
+	}
+	if len(serverCfg.RootRPCConfig.AllowedMethods) != 2 || serverCfg.RootRPCConfig.AllowedMethods[0] != "/clientrpc.RootRPC/ListListeners" || serverCfg.RootRPCConfig.AllowedMethods[1] != "/clientrpc.RootRPC/AddListener" {
+		t.Fatalf("unexpected allowed_methods: %#v", serverCfg.RootRPCConfig.AllowedMethods)
+	}
+
 	if serverCfg.DatabaseConfig == nil {
 		t.Fatal("expected database config")
 	}
@@ -368,6 +384,14 @@ func fullConfigYAML(certPath, keyPath, caPath, errorPagePath, webContentPath str
 		"      deepseek:\n" +
 		"        endpoint: https://api.deepseek.com/v1\n" +
 		"        api_key: fixture-deepseek-key\n" +
+		"  root_rpc:\n" +
+		"    allow_remote: true\n" +
+		"    allowed_cidrs:\n" +
+		"    - 192.168.239.0/24\n" +
+		"    - 10.10.10.10\n" +
+		"    allowed_methods:\n" +
+		"    - /clientrpc.RootRPC/ListListeners\n" +
+		"    - /clientrpc.RootRPC/AddListener\n" +
 		"  database:\n" +
 		"    dialect: postgresql\n" +
 		"    host: db.example.com\n" +

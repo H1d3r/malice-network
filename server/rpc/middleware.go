@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"net"
 	"reflect"
 	"strings"
 	"sync"
 
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/server/internal/certutils"
+	"github.com/chainreactors/malice-network/server/internal/configs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -115,10 +117,8 @@ func authInterceptor(log *logs.Logger) grpc.UnaryServerInterceptor {
 			return nil, err
 		}
 
-		// Root operation localhost check
-		if isRootOperation(info.FullMethod) && !identity.IsLoopback {
-			return nil, status.Errorf(codes.PermissionDenied,
-				"root operations only allowed from localhost, got: %s", identity.RemoteIP)
+		if err := enforceRootRemoteGate(info.FullMethod, identity); err != nil {
+			return nil, err
 		}
 
 		return handler(ctx, req)
@@ -153,6 +153,10 @@ func authStreamInterceptor(log *logs.Logger) grpc.StreamServerInterceptor {
 		}
 
 		if err := authenticateByFingerprint(identity, info.FullMethod); err != nil {
+			return err
+		}
+
+		if err := enforceRootRemoteGate(info.FullMethod, identity); err != nil {
 			return err
 		}
 
@@ -213,4 +217,72 @@ func authorizeByRole(role, method string) error {
 // isRootOperation checks if the method is a root operation requiring localhost access.
 func isRootOperation(method string) bool {
 	return strings.Contains(method, ".Root")
+}
+
+func enforceRootRemoteGate(method string, identity *PeerIdentity) error {
+	if !isRootOperation(method) || identity.IsLoopback {
+		return nil
+	}
+	if remoteRootOperationAllowed(method, identity.RemoteIP, getRootRPCConfig()) {
+		return nil
+	}
+	return status.Errorf(codes.PermissionDenied,
+		"root operations only allowed from localhost, got: %s", identity.RemoteIP)
+}
+
+func getRootRPCConfig() *configs.RootRPCConfig {
+	cfg := configs.GetServerConfig()
+	if cfg == nil {
+		return nil
+	}
+	return cfg.RootRPCConfig
+}
+
+func remoteRootOperationAllowed(method string, remoteIP string, cfg *configs.RootRPCConfig) bool {
+	if cfg == nil || !cfg.AllowRemote {
+		return false
+	}
+	return remoteRootMethodAllowed(method, cfg.AllowedMethods) && remoteRootIPAllowed(remoteIP, cfg.AllowedCIDRs)
+}
+
+func remoteRootMethodAllowed(method string, allowedMethods []string) bool {
+	if len(allowedMethods) == 0 {
+		return true
+	}
+	for _, pattern := range allowedMethods {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			continue
+		}
+		if matchMethod(pattern, method) {
+			return true
+		}
+	}
+	return false
+}
+
+func remoteRootIPAllowed(remoteIP string, allowedCIDRs []string) bool {
+	if len(allowedCIDRs) == 0 {
+		return true
+	}
+
+	parsedIP := net.ParseIP(remoteIP)
+	if parsedIP == nil {
+		return false
+	}
+
+	for _, cidr := range allowedCIDRs {
+		cidr = strings.TrimSpace(cidr)
+		if cidr == "" {
+			continue
+		}
+		if exactIP := net.ParseIP(cidr); exactIP != nil && exactIP.Equal(parsedIP) {
+			return true
+		}
+		_, network, err := net.ParseCIDR(cidr)
+		if err == nil && network.Contains(parsedIP) {
+			return true
+		}
+	}
+	return false
 }

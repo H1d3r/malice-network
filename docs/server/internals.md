@@ -11,7 +11,7 @@ Server 通过 gRPC 暴露三类服务，分别面向不同的调用方：
 | 服务 | 调用方 | 职责 | Proto 定义 |
 |------|--------|------|-----------|
 | **MaliceRPC** | Client | Session/Task/Build/Profile/Module 等全部操作 | `services/clientrpc/service.proto` |
-| **RootRPC** | 本地管理 | Operator 管理、Listener 增删（仅 localhost） | `client/rootpb/root.proto` |
+| **RootRPC** | 本地管理 / 显式允许的远程 admin | Operator 管理、Listener 增删（默认仅 localhost） | `client/rootpb/root.proto` |
 | **ListenerRPC** | Listener | Pipeline 注册、SpiteStream/JobStream 双向流 | `services/listenerrpc/service.proto` |
 
 ### mTLS 认证
@@ -34,6 +34,8 @@ Server 通过 gRPC 暴露三类服务，分别面向不同的调用方：
 | **listener** | 仅 ListenerRPC 权限 |
 
 `AuthzRule` 支持方法级的 allow/deny 规则，支持通配符匹配（如 `/clientrpc.MaliceRPC/*`）。
+
+`RootRPC` 额外受来源限制保护：默认只允许 localhost 调用。即使 `admin` 角色拥有 `/clientrpc.RootRPC/*` 授权，远程调用也需要在 `server.root_rpc.allow_remote` 中显式开启，并可通过 `allowed_cidrs` 与 `allowed_methods` 收敛来源和方法范围。
 
 ### 拦截器链
 
