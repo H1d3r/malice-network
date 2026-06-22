@@ -18,6 +18,7 @@ import (
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
+	listenerpkg "github.com/chainreactors/malice-network/server/listener"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -185,6 +186,97 @@ func TestStartForwardListenerClientDeliversCtrlAndReceivesStatus(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for forwarded task")
+	}
+}
+
+func TestRetireListenerThroughForwardControlStream(t *testing.T) {
+	initForwardRPCTestDB(t)
+	withIsolatedListenersAndJobs(t)
+	withIsolatedPipelinesCh(t)
+	t.Cleanup(resetForwardListenerRuntimes)
+	oldBroker := core.EventBroker
+	core.EventBroker = core.NewBroker()
+	t.Cleanup(func() {
+		if core.EventBroker != nil {
+			core.EventBroker.Stop()
+		}
+		core.EventBroker = oldBroker
+	})
+
+	portListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve forward listener port: %v", err)
+	}
+	port := uint16(portListener.Addr().(*net.TCPAddr).Port)
+	_ = portListener.Close()
+
+	authPath, fingerprint := writeForwardAuthConfig(t)
+	configPath := filepath.Join(t.TempDir(), "listener.yaml")
+	if err := os.WriteFile(configPath, []byte("listeners: {}\n"), 0600); err != nil {
+		t.Fatalf("write listener config: %v", err)
+	}
+	oldConfigFilename := configs.CurrentServerConfigFilename
+	configs.CurrentServerConfigFilename = configPath
+	t.Cleanup(func() { configs.CurrentServerConfigFilename = oldConfigFilename })
+
+	cfg := &configs.ListenerConfig{
+		Enable:    true,
+		Name:      "forward-retire-e2e",
+		Auth:      authPath,
+		IP:        "127.0.0.1",
+		Transport: configs.ListenerTransportForward,
+		Forward: &configs.ForwardListenerConfig{
+			ListenHost:  "127.0.0.1",
+			ListenPort:  port,
+			ConnectHost: "127.0.0.1",
+			ConnectPort: port,
+		},
+	}
+	forwardRuntime, err := listenerpkg.NewForwardListener(cfg)
+	if err != nil {
+		t.Fatalf("NewForwardListener failed: %v", err)
+	}
+	t.Cleanup(func() { _ = forwardRuntime.Close() })
+
+	seedForwardAdminOperator(t, "admin-retire-e2e", "admin-retire-e2e-fp")
+	seedForwardListenerOperator(t, cfg.Name, fingerprint)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := StartForwardListenerClient(ctx, cfg); err != nil {
+		t.Fatalf("StartForwardListenerClient failed: %v", err)
+	}
+
+	adminCtx := contextWithIdentity(context.Background(), &PeerIdentity{Fingerprint: "admin-retire-e2e-fp"})
+	reply, err := (&Server{}).RetireListener(adminCtx, &clientpb.ListenerRetire{
+		ListenerId:     cfg.Name,
+		PurgeConfig:    true,
+		PurgeAuth:      true,
+		TimeoutSeconds: 3,
+	})
+	if err != nil {
+		t.Fatalf("RetireListener failed: %v", err)
+	}
+	if reply.GetListenerId() != cfg.Name || reply.GetActive() {
+		t.Fatalf("reply = %#v, want inactive %s", reply, cfg.Name)
+	}
+	if _, ok := getForwardListenerRuntime(cfg.Name); ok {
+		t.Fatalf("forward runtime for %s still registered", cfg.Name)
+	}
+	if _, err := core.Listeners.Get(cfg.Name); err == nil {
+		t.Fatalf("core listener %s still registered", cfg.Name)
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("config stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(authPath); !os.IsNotExist(err) {
+		t.Fatalf("auth stat error = %v, want not exist", err)
+	}
+	operator, err := db.FindOperatorByName(cfg.Name)
+	if err != nil {
+		t.Fatalf("FindOperatorByName failed: %v", err)
+	}
+	if !operator.Revoked {
+		t.Fatalf("listener operator %s was not revoked", cfg.Name)
 	}
 }
 
