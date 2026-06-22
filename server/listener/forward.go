@@ -66,6 +66,7 @@ func NewForwardListener(cfg *configs.ListenerConfig) (*ForwardListener, error) {
 		server:   grpcServer,
 		listener: ln,
 	}
+	lns.shutdown = runtime.Close
 	core.GoGuarded("forward-listener:"+cfg.Name, func() error {
 		if err := grpcServer.Serve(ln); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			return err

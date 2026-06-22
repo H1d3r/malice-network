@@ -67,11 +67,18 @@ func (l *Listener) PushCtrl(ctrl *clientpb.JobCtrl) uint32 {
 // WaitCtrl waits for a control response from the listener. Returns nil if the
 // response does not arrive within DefaultCtrlTimeout or if ctrlID is 0 (PushCtrl failed).
 func (l *Listener) WaitCtrl(i uint32) *clientpb.JobStatus {
+	return l.WaitCtrlWithTimeout(i, DefaultCtrlTimeout)
+}
+
+func (l *Listener) WaitCtrlWithTimeout(i uint32, timeout time.Duration) *clientpb.JobStatus {
 	if i == 0 {
 		return nil
 	}
+	if timeout <= 0 {
+		timeout = DefaultCtrlTimeout
+	}
 	defer l.CtrlJob.Delete(i)
-	deadline := time.Now().Add(DefaultCtrlTimeout)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		done, ok := l.CtrlJob.Load(i)
 		if ok && done != nil {
@@ -79,7 +86,7 @@ func (l *Listener) WaitCtrl(i uint32) *clientpb.JobStatus {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	logs.Log.Warnf("listener %s: WaitCtrl(%d) timed out after %v", l.Name, i, DefaultCtrlTimeout)
+	logs.Log.Warnf("listener %s: WaitCtrl(%d) timed out after %v", l.Name, i, timeout)
 	return nil
 }
 

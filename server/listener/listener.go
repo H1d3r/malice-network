@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/chainreactors/IoM-go/consts"
@@ -61,6 +62,7 @@ func NewListener(clientConf *mtls.ClientConfig, cfg *configs.ListenerConfig, ser
 		cfg:       cfg,
 		websites:  make(map[string]*Website),
 	}
+	lns.shutdown = lns.Close
 	lns.pipelineRPC = &reversePipelineRPC{ListenerRPCClient: lns.Rpc}
 
 	_, err = lns.Rpc.RegisterListener(lns.Context(), &clientpb.RegisterListener{
@@ -213,6 +215,8 @@ type listener struct {
 	conn        *grpc.ClientConn
 	cfg         *configs.ListenerConfig
 	websites    map[string]*Website
+	shutdown    func() error
+	retireOnce  sync.Once
 }
 
 func (lns *listener) Close() error {
@@ -379,6 +383,8 @@ func (lns *listener) handleJobCtrl(msg *clientpb.JobCtrl) *clientpb.JobStatus {
 	case consts.CtrlListenerSyncSession:
 		core.ListenerSessions.Add(msg.Session)
 		return nil
+	case consts.CtrlListenerRetire:
+		handlerErr = lns.handleRetire(msg.Retire)
 	}
 
 	jobName := ""

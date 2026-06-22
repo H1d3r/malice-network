@@ -177,7 +177,30 @@ listener forward connect listener --host 10.0.0.5 --port 5005
 		},
 	}
 	forwardCmd.AddCommand(forwardConnectCmd, forwardDisconnectCmd, forwardStatusCmd, forwardListCmd)
-	listenerCmd.AddCommand(forwardCmd)
+
+	retireCmd := &cobra.Command{
+		Use:   "retire [listener_id]",
+		Short: "Retire a listener",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return RetireListenerCmd(cmd, con)
+		},
+		Example: `~~~
+listener retire listener-a --purge-config --purge-auth --yes
+~~~`,
+	}
+	common.BindFlag(retireCmd, func(f *pflag.FlagSet) {
+		f.Bool("purge-config", false, "remove the listener config file before shutdown")
+		f.Bool("purge-auth", false, "remove the listener auth file before shutdown")
+		f.Bool("no-revoke", false, "do not revoke the listener operator after retirement")
+		f.Uint32("timeout", 10, "retire timeout in seconds")
+	})
+	common.BindArgCompletions(retireCmd, nil, common.ListenerIDCompleter(con))
+	common.BindFlagCompletions(retireCmd, func(comp carapace.ActionMap) {
+		comp["timeout"] = carapace.ActionValues("5", "10", "30").Usage("retire timeout in seconds")
+	})
+
+	listenerCmd.AddCommand(forwardCmd, retireCmd)
 
 	return []*cobra.Command{listenerCmd, jobCmd, pipelineCmd}
 }

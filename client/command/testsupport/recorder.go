@@ -377,6 +377,10 @@ func (r *RecorderRPC) ListForwardListeners(ctx context.Context, in *clientpb.Emp
 	return &clientpb.ForwardListenerStatuses{}, nil
 }
 
+func (r *RecorderRPC) RetireListener(ctx context.Context, in *clientpb.ListenerRetire, opts ...grpc.CallOption) (*clientpb.ForwardListenerStatus, error) {
+	return r.forwardListenerStatusResponse(ctx, "RetireListener", in)
+}
+
 func (r *RecorderRPC) ListJobs(ctx context.Context, in *clientpb.Empty, opts ...grpc.CallOption) (*clientpb.Pipelines, error) {
 	r.recordPrimary(ctx, "ListJobs", in)
 	if responder, ok := r.pipelinesResponders["ListJobs"]; ok {
@@ -814,6 +818,10 @@ func (r *RecorderRPC) forwardListenerStatusResponse(ctx context.Context, method 
 	case *clientpb.Listener:
 		return &clientpb.ForwardListenerStatus{
 			ListenerId: in.GetId(),
+		}, nil
+	case *clientpb.ListenerRetire:
+		return &clientpb.ForwardListenerStatus{
+			ListenerId: in.GetListenerId(),
 		}, nil
 	default:
 		return &clientpb.ForwardListenerStatus{}, nil

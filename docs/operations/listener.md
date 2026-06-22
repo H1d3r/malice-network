@@ -100,6 +100,25 @@ listener forward disconnect listener-a
 动态连接要求 Server DB 中已经存在同名 Listener Operator 记录。Server 会用该记录里的证书 fingerprint 校验 Listener forward server cert，防止 Client 把 Server 引到同 CA 下的其他证书。forward mTLS 不把拨号 host 当作 Listener 身份来源；证书身份由 Root CA、`serverAuth` EKU 和 Operator fingerprint 决定。forward 管理命令需要 admin 权限，普通 operator 不能发起或断开 forward Listener 连接。
 
 
+### 远程关闭 Listener
+
+如果需要让 Server 主动关闭一个已连接 Listener，可以使用 retire 命令：
+
+```bash
+listener retire listener-a --yes
+```
+
+默认行为会让 Listener 停止本地运行时，并在 Server 侧清理连接状态，同时 revoke 同名 Listener Operator，防止同一份 `listener.auth` 再次连回 Server。
+
+配置文件和 auth 文件不会默认删除；需要删除时显式加 flag：
+
+```bash
+listener retire listener-a --purge-config --purge-auth --yes
+```
+
+`--purge-config` 删除 Listener 启动时 `-c` 指向的配置文件，`--purge-auth` 删除该配置里 `listeners.auth` 指向的 auth 文件。`--no-revoke` 可以保留 Server DB 中的 Listener Operator，但只建议在临时重启或测试时使用。`--timeout` 可以调整等待 Listener 确认 retire 的秒数。
+
+
 ### autobuild 配置
 目前启动一个listener时，可以通过autobuild的配置，来控制是否编译与当前listener通信的implant。
 

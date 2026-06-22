@@ -62,7 +62,19 @@ listener forward disconnect listener-a
 
 动态连接只负责建立 Server 到 Listener 的控制/任务通道，不会生成或分发证书。被连接的 `listener_id` 必须已经在 Server DB 中有 Listener Operator 记录，通常由 `listener add` / `listener reset` 或服务端初始化流程生成。Server 会读取该记录里的 Listener 证书 fingerprint，并在 mTLS 握手中要求 Listener forward server cert 与该 fingerprint 匹配。
 
-forward 管理 RPC 是 admin-only。普通 operator 即使默认可访问 MaliceRPC，也不能触发 `ConnectForwardListener` / `DisconnectForwardListener` / `GetForwardListenerStatus` / `ListForwardListeners`。DB 不新增 transport 字段；正向/反向是运行时连接方向和配置含义，身份校验仍由证书链、EKU 和 Operator fingerprint 决定。forward client 会用 CA、`serverAuth` EKU 和 DB fingerprint 校验 Listener 证书，不要求 Listener 证书的 DNS/IP SAN 必须等于当前拨号 host。
+forward 管理 RPC 是 admin-only。普通 operator 即使默认可访问 MaliceRPC，也不能触发 `ConnectForwardListener` / `DisconnectForwardListener` / `GetForwardListenerStatus` / `ListForwardListeners` / `RetireListener`。DB 不新增 transport 字段；正向/反向是运行时连接方向和配置含义，身份校验仍由证书链、EKU 和 Operator fingerprint 决定。forward client 会用 CA、`serverAuth` EKU 和 DB fingerprint 校验 Listener 证书，不要求 Listener 证书的 DNS/IP SAN 必须等于当前拨号 host。
+
+### Listener retire
+
+Server 可以对已连接 Listener 下发 retire 控制命令。retire 会先等待 Listener 返回确认，再清理 Server 侧运行时记录，并默认 revoke 同名 Listener Operator：
+
+```bash
+listener retire listener-a --yes
+listener retire listener-a --purge-config --purge-auth --yes
+listener retire listener-a --no-revoke --yes
+```
+
+`--purge-config` 只删除 Listener 进程当前 `-c` 使用的配置文件；`--purge-auth` 只删除 Listener 配置中的 `auth` 文件。两个删除行为都是显式 opt-in，默认不删除本地文件。`--no-revoke` 会保留 Server DB 中同名 Listener Operator 的有效性，默认不建议使用。`--timeout` 控制 Server 等待 Listener retire 确认的秒数。
 
 !!! warning "forward 模式当前限制"
     旧的 client-only `listener.auth` 仍可用于 `reverse`，但用于 `forward` 时需要重新生成双用途 Listener auth。forward transport 解决的是 Server 主动拨入 Listener 的方向问题；如果 Server 也无法访问 Listener，需要额外 relay/中继。
@@ -218,12 +230,14 @@ Listener 可以独立部署在与 Server 不同的服务器上：
 |------|------|
 | `server/listener/listener.go` | Listener 生命周期管理 |
 | `server/listener/forward.go` | forward transport Listener 端服务 |
+| `server/listener/retire.go` | Listener retire 本地文件清理与关闭调度 |
 | `server/listener/tcp.go` | TCP Pipeline 实现 |
 | `server/listener/http.go` | HTTP Pipeline 实现 |
 | `server/listener/rem.go` | REM Pipeline 实现 |
 | `server/listener/custom.go` | Custom Pipeline 接入 |
 | `server/rpc/rpc-forward-listener.go` | forward transport Server 端拨号与 stream 适配 |
 | `server/rpc/rpc-forward-listener-manage.go` | Client 触发的 forward Listener 连接管理 RPC |
+| `server/rpc/rpc-listener-retire.go` | Server 端 Listener retire RPC |
 | `server/forwardrpc/forwardrpc.go` | forward transport 手写 gRPC service descriptor |
 | `server/internal/core/pipeline.go` | Pipeline 运行时状态 |
 
