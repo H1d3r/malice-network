@@ -61,9 +61,7 @@ func ToolCall(rpc clientrpc.MaliceRPCClient, sess *client.Session,
 func RegisterToolCallFunc(con *core.Console) {
 	con.RegisterImplantFunc(
 		ModuleToolInject,
-		func(rpc clientrpc.MaliceRPCClient, sess *client.Session) (*clientpb.Task, error) {
-			return nil, fmt.Errorf("tool_call requires tool name and arguments")
-		},
+		ToolCall,
 		"",
 		nil,
 		output.ParseResponse,

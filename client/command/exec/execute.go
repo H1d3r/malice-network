@@ -99,6 +99,10 @@ func Shell(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, outp
 	return task, nil
 }
 
+func ShellLua(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string, output bool) (*clientpb.Task, error) {
+	return Shell(rpc, sess, cmd, output, true, "")
+}
+
 func RegisterExecuteFunc(con *core.Console) {
 	con.RegisterImplantFunc(
 		consts.ModuleExecute,
@@ -158,7 +162,7 @@ func RegisterExecuteFunc(con *core.Console) {
 
 	con.RegisterImplantFunc(
 		consts.ModuleAliasShell,
-		Shell,
+		ShellLua,
 		"bshell",
 		func(rpc clientrpc.MaliceRPCClient, sess *client.Session, cmd string) (*clientpb.Task, error) {
 			return Shell(rpc, sess, cmd, true, true, "")
