@@ -286,7 +286,6 @@ func (m *MCPServer) registerCustomTools() {
 	m.registerExecuteCommandTool()
 	m.registerLuaScriptTool()
 	m.registerGetHistoryTool()
-	m.registerSearchCommandsTool()
 	m.registerSearchTool()
 }
 
@@ -358,66 +357,6 @@ func (m *MCPServer) registerLuaScriptTool() {
 	})
 }
 
-// registerSearchCommandsTool 注册命令搜索工具，支持按名称和描述模糊搜索
-func (m *MCPServer) registerSearchCommandsTool() {
-	tool := mcp.NewTool(
-		"search_commands",
-		mcp.WithDescription(`Search for available commands by name or description with fuzzy matching.
-Returns lightweight command summaries (name, group, description, OPSEC rating, subcommands).
-Use this for progressive discovery: search first, then use "execute_command('<cmd> --help')" to get detailed usage for specific commands.
-
-Examples:
-- Search "uac" to find UAC bypass commands
-- Search "cred" to find credential harvesting commands
-- Search "lateral" to find lateral movement commands
-- Search "persist" to find persistence commands`),
-		mcp.WithString("query", mcp.Required(), mcp.Description("Search keyword for fuzzy matching against command name and description")),
-		mcp.WithString("group", mcp.Description("Optional group filter to narrow search scope (e.g., 'execute', 'sys', 'file', 'implant', 'pivot')")),
-		mcp.WithString("session_id", mcp.Description("Optional session ID to scope search to commands available for that session")),
-	)
-
-	m.server.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		query, err := request.RequireString("query")
-		if err != nil || query == "" {
-			return mcp.NewToolResultError("query is required"), nil
-		}
-
-		group, _ := request.GetArguments()["group"].(string)
-		sessionID, _ := request.GetArguments()["session_id"].(string)
-
-		commands, err := searchCommands(m.console, query, group, sessionID)
-		if err != nil {
-			logs.Log.Errorf("Error searching commands: %v", err)
-			return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
-		}
-
-		if len(commands) == 0 {
-			return mcp.NewToolResultText("No commands found matching: " + query), nil
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Found %d commands matching \"%s\":\n\n", len(commands), query))
-		for _, cmd := range commands {
-			sb.WriteString(fmt.Sprintf("- **%s** [%s]: %s\n", cmd.Name, cmd.Group, cmd.Description))
-			if cmd.Ttp != "" {
-				sb.WriteString(fmt.Sprintf("  ATT&CK: %s", cmd.Ttp))
-				if cmd.Opsec > 0 {
-					sb.WriteString(fmt.Sprintf(" | OPSEC: %d/10", cmd.Opsec))
-				}
-				sb.WriteString("\n")
-			}
-			if len(cmd.Subcommands) > 0 {
-				sb.WriteString(fmt.Sprintf("  Subcommands: %s\n", strings.Join(cmd.Subcommands, ", ")))
-			}
-			sb.WriteString(fmt.Sprintf("  Usage: %s\n", cmd.Usage))
-			sb.WriteString("\n")
-		}
-		sb.WriteString("Tip: Use execute_command(\"<command> --help\") to get detailed usage for a specific command.")
-
-		return mcp.NewToolResultText(sb.String()), nil
-	})
-}
-
 // registerGetHistoryTool 注册获取历史记录工具
 func (m *MCPServer) registerGetHistoryTool() {
 	tool := mcp.NewTool(
@@ -448,29 +387,26 @@ func (m *MCPServer) registerGetHistoryTool() {
 	})
 }
 
-// registerSearchTool registers FTS5 full-text search across commands, plugins, and documentation
+// registerSearchTool registers the unified search tool (semantic + keyword).
 func (m *MCPServer) registerSearchTool() {
 	tool := mcp.NewTool(
-		"search",
-		mcp.WithDescription(`Full-text search across all commands and plugins using FTS5.
-Returns ranked results with highlighted snippets. Supports Chinese text and FTS5 query syntax (AND, OR, NOT, "exact phrases").
+		"search_commands",
+		mcp.WithDescription(`Search for commands and plugins using semantic search and keyword matching.
+Supports natural language queries in Chinese and English.
+Returns ranked results with descriptions, ATT&CK TTPs, and OPSEC ratings.
 
 Examples:
-- Search "lateral movement" to find pivot and proxy commands
-- Search "文件操作" to find file operation commands
-- Search "cred" to find credential-related commands
-- Search "persist" to find persistence commands`),
-		mcp.WithString("query", mcp.Required(), mcp.Description("Search query (supports FTS5 syntax)")),
+- "credential dump" → credman, hashdump, logonpasswords
+- "提权" → getsystem, elevate
+- "lateral movement" → move, pivot, psexec
+- "persist" → persistence, scheduled task`),
+		mcp.WithString("query", mcp.Required(), mcp.Description("Search query (natural language or keywords)")),
 		mcp.WithString("type", mcp.Description("Filter: command, plugin")),
-		mcp.WithString("group", mcp.Description("Filter by command group (e.g., 'execute', 'sys', 'file')")),
+		mcp.WithString("group", mcp.Description("Filter by command group (e.g., 'execute', 'sys', 'file', 'pivot')")),
 		mcp.WithNumber("limit", mcp.Description("Max results (default 20)")),
 	)
 
 	m.server.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		if m.console.SearchIndex == nil {
-			return mcp.NewToolResultError("search index not initialized"), nil
-		}
-
 		query, err := request.RequireString("query")
 		if err != nil || query == "" {
 			return mcp.NewToolResultError("query is required"), nil
@@ -485,18 +421,18 @@ Examples:
 
 		results, err := HybridSearch(ctx, m.console.SearchIndex, m.console.VectorIndex, query, typeFilter, group, limit)
 		if err != nil {
-			logs.Log.Errorf("Error in search: %v", err)
+			logs.Log.Errorf("search error: %v", err)
 			return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 		}
 
 		if len(results) == 0 {
-			return mcp.NewToolResultText("No results found matching: " + query), nil
+			return mcp.NewToolResultText("No commands found matching: " + query), nil
 		}
 
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Found %d results matching \"%s\":\n\n", len(results), query))
+		sb.WriteString(fmt.Sprintf("Found %d commands matching \"%s\":\n\n", len(results), query))
 		for _, r := range results {
-			sb.WriteString(fmt.Sprintf("- **%s** [%s/%s]: %s\n", r.Name, r.Type, r.Category, r.Description))
+			sb.WriteString(fmt.Sprintf("- **%s** [%s]: %s\n", r.Name, r.Category, r.Description))
 			if r.TTP != "" {
 				sb.WriteString(fmt.Sprintf("  ATT&CK: %s", r.TTP))
 				if r.Opsec != "" && r.Opsec != "0" {
@@ -504,15 +440,12 @@ Examples:
 				}
 				sb.WriteString("\n")
 			}
-			if r.Snippet != "" && r.Snippet != r.Description {
-				sb.WriteString(fmt.Sprintf("  Snippet: %s\n", r.Snippet))
-			}
 			if r.Usage != "" {
 				sb.WriteString(fmt.Sprintf("  Usage: %s\n", r.Usage))
 			}
 			sb.WriteString("\n")
 		}
-		sb.WriteString("Tip: Use execute_command(\"<command> --help\") to get detailed usage.")
+		sb.WriteString("Tip: Use execute_command(\"<command> --help\") for detailed usage.")
 
 		return mcp.NewToolResultText(sb.String()), nil
 	})
