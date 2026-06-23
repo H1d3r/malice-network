@@ -474,6 +474,41 @@ func TestSession_NewTask_IncrementsSeq(t *testing.T) {
 	}
 }
 
+func TestSession_NewTask_ConcurrentIDsUnique(t *testing.T) {
+	cleanup := installTestDBMocks()
+	defer cleanup()
+	taskCleanup := installTaskDBMocks()
+	defer taskCleanup()
+
+	broker := newTestBroker()
+	oldBroker := EventBroker
+	EventBroker = broker
+	defer func() { EventBroker = oldBroker }()
+
+	sess := newTestSession("task-race")
+
+	const goroutines = 20
+	ids := make([]uint32, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			task := sess.NewTask("concurrent", 1)
+			ids[idx] = task.Id
+		}(i)
+	}
+	wg.Wait()
+
+	seen := make(map[uint32]bool, goroutines)
+	for _, id := range ids {
+		if seen[id] {
+			t.Fatalf("duplicate task ID %d from concurrent NewTask calls", id)
+		}
+		seen[id] = true
+	}
+}
+
 func TestSession_StoreGetRemoveResp(t *testing.T) {
 	sess := newTestSession("resp-1")
 

@@ -155,7 +155,7 @@ func (rpc *Server) GetSessionHistory(ctx context.Context, req *clientpb.Int) (*c
 		}
 		tid = int(taskId)
 	} else {
-		tid = int(session.Taskseq)
+		tid = int(session.Taskseq.Load())
 	}
 
 	startTaskID := tid - int(req.Limit) + 1

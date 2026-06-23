@@ -245,7 +245,7 @@ func (f *Forward) Handler() error {
 					logs.Log.Debugf("listener.%s - receive_spite session=%s name=%s bytes=%d", msg.SessionID, msg.SessionID, spite.Name, size)
 				}
 				if err := f.Stream.Send(&clientpb.SpiteResponse{
-					ListenerId: f.ID(),
+					ListenerId: f.ListenerId,
 					SessionId:  msg.SessionID,
 					TaskId:     spite.TaskId,
 					Spite:      spite,

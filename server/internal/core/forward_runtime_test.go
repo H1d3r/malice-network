@@ -93,6 +93,63 @@ func TestForwardersRemoveDeletesOnCloseError(t *testing.T) {
 	}
 }
 
+type capturingForwardStream struct {
+	mu       sync.Mutex
+	captured []*clientpb.SpiteResponse
+}
+
+func (s *capturingForwardStream) Send(resp *clientpb.SpiteResponse) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.captured = append(s.captured, resp)
+	return nil
+}
+
+func (s *capturingForwardStream) Recv() (*clientpb.SpiteRequest, error) {
+	return nil, errors.New("not used")
+}
+
+func (s *capturingForwardStream) responses() []*clientpb.SpiteResponse {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cp := make([]*clientpb.SpiteResponse, len(s.captured))
+	copy(cp, s.captured)
+	return cp
+}
+
+func TestForwardHandlerSetsListenerIdNotPipelineId(t *testing.T) {
+	stream := &capturingForwardStream{}
+	forward := &Forward{
+		ctx:         context.Background(),
+		Pipeline:    testPipeline{id: "pipeline-x"},
+		ListenerId:  "listener-y",
+		ListenerRpc: testForwardRPC{},
+		Stream:      stream,
+		implantC:    make(chan *Message, 1),
+		done:        make(chan struct{}),
+	}
+	forward.alive.Store(true)
+
+	forward.implantC <- &Message{
+		SessionID:  "sess-1",
+		Spites:     &implantpb.Spites{Spites: []*implantpb.Spite{{Name: "exec", TaskId: 1}}},
+		RemoteAddr: "10.0.0.1:8000",
+	}
+	close(forward.implantC)
+
+	if err := forward.Handler(); err != nil {
+		t.Fatalf("Handler returned error: %v", err)
+	}
+
+	responses := stream.responses()
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+	if responses[0].ListenerId != "listener-y" {
+		t.Fatalf("SpiteResponse.ListenerId = %q, want %q", responses[0].ListenerId, "listener-y")
+	}
+}
+
 func TestForwardersScopeDuplicatePipelineNamesByListener(t *testing.T) {
 	store := &forwarders{forwarders: &sync.Map{}}
 	forwardA := &Forward{

@@ -17,7 +17,7 @@ func TestGenericHandlerRollsBackTaskWhenAddTaskFails(t *testing.T) {
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "rpc-task-add-fail", "rpc-task-add-fail-pipe", true)
 
-	startSeq := sess.Taskseq
+	startSeq := sess.Taskseq.Load()
 	wantErr := errors.New("add task failed")
 	oldAddTask := genericAddTask
 	genericAddTask = func(task *clientpb.Task) error {
@@ -39,7 +39,7 @@ func TestGenericHandlerRollsBackTaskWhenRequestCachingFails(t *testing.T) {
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "rpc-task-request-cache-fail", "rpc-task-request-cache-fail-pipe", true)
 
-	startSeq := sess.Taskseq
+	startSeq := sess.Taskseq.Load()
 	wantErr := errors.New("write request failed")
 	oldWriteTaskRequest := genericWriteTaskRequest
 	genericWriteTaskRequest = func(task *core.Task, spite *implantpb.Spite) error {
@@ -61,7 +61,7 @@ func TestGenericHandlerRollsBackTaskWhenPipelineIsUnavailable(t *testing.T) {
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "rpc-task-missing-pipeline", "rpc-task-missing-pipeline-pipe", true)
 
-	startSeq := sess.Taskseq
+	startSeq := sess.Taskseq.Load()
 	pipelinesCh.Delete(sess.PipelineID)
 
 	_, err := (&Server{}).Ping(incomingSessionContext(sess.ID), &implantpb.Ping{Nonce: 9})
@@ -76,7 +76,7 @@ func TestGenericHandlerRollsBackTaskWhenRequestDispatchFails(t *testing.T) {
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "rpc-task-dispatch-fail", "rpc-task-dispatch-fail-pipe", true)
 
-	startSeq := sess.Taskseq
+	startSeq := sess.Taskseq.Load()
 	wantErr := errors.New("send failed")
 	pipelinesCh.Store(sess.PipelineID, &testRPCServerStream{
 		sendMsg: func(interface{}) error {
@@ -99,7 +99,7 @@ func TestStreamGenericHandlerRollsBackTaskWhenPipelineIsUnavailable(t *testing.T
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "rpc-stream-missing-pipeline", "rpc-stream-missing-pipeline-pipe", true)
 
-	startSeq := sess.Taskseq
+	startSeq := sess.Taskseq.Load()
 	pipelinesCh.Delete(sess.PipelineID)
 
 	greq, err := newGenericRequest(incomingSessionContext(sess.ID), &implantpb.Request{Name: consts.ModulePwd})
@@ -118,7 +118,7 @@ func TestStreamGenericHandlerRollsBackTaskWhenRequestDispatchFails(t *testing.T)
 	env := newRPCTestEnv(t)
 	sess := env.seedSession(t, "rpc-stream-dispatch-fail", "rpc-stream-dispatch-fail-pipe", true)
 
-	startSeq := sess.Taskseq
+	startSeq := sess.Taskseq.Load()
 	wantErr := errors.New("stream send failed")
 	pipelinesCh.Store(sess.PipelineID, &testRPCServerStream{
 		sendMsg: func(interface{}) error {

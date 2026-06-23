@@ -22,6 +22,9 @@ import (
 )
 
 func (rpc *Server) AddClient(ctx context.Context, req *rootpb.Operator) (*rootpb.Response, error) {
+	if len(req.GetArgs()) < 1 {
+		return nil, status.Error(codes.InvalidArgument, "usage: args=[name]")
+	}
 	name := req.Args[0]
 
 	// Check if operator with this name already exists
@@ -86,6 +89,9 @@ func (rpc *Server) AddClient(ctx context.Context, req *rootpb.Operator) (*rootpb
 }
 
 func (rpc *Server) RemoveClient(ctx context.Context, req *rootpb.Operator) (*rootpb.Response, error) {
+	if len(req.GetArgs()) < 1 {
+		return nil, status.Error(codes.InvalidArgument, "usage: args=[name]")
+	}
 	opCache.InvalidateByName(req.Args[0])
 	err := db.RemoveOperator(req.Args[0])
 	if err != nil {
@@ -118,6 +124,9 @@ func (rpc *Server) ListClients(ctx context.Context, req *rootpb.Operator) (*clie
 }
 
 func (rpc *Server) AddListener(ctx context.Context, req *rootpb.Operator) (*rootpb.Response, error) {
+	if len(req.GetArgs()) < 1 {
+		return nil, status.Error(codes.InvalidArgument, "usage: args=[name]")
+	}
 	name := req.Args[0]
 
 	// Check if operator with this name already exists

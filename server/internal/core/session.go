@@ -113,10 +113,10 @@ func RegisterSession(req *clientpb.RegisterSession) (*Session, error) {
 		Tasks:          NewTasks(),
 		CreatedAt:      time.Unix(current_time, 0),
 		SessionContext: client.NewSessionContext(req),
-		Taskseq:        1,
 		Cache:          cache,
 		responses:      &sync.Map{},
 	}
+	sess.Taskseq.Store(1)
 
 	// 从pipeline获取预分发的密钥对
 	err = sess.initializeSecureManager(req)
@@ -187,10 +187,10 @@ func RecoverSession(sess *models.Session) (*Session, error) {
 		CreatedAt:      sess.CreatedAt,
 		Tasks:          NewTasks(),
 		SessionContext: sessionContext,
-		Taskseq:        1,
 		Cache:          cache,
 		responses:      &sync.Map{},
 	}
+	s.Taskseq.Store(1)
 
 	// 无论如何都初始化 SecureManager，使用SessionContext中的KeyPair
 	err = s.initializeSecureManager(&clientpb.RegisterSession{
@@ -217,7 +217,7 @@ func RecoverSession(sess *models.Session) (*Session, error) {
 			tid = uint32(logID)
 		}
 	}
-	s.Taskseq = tid
+	s.Taskseq.Store(tid)
 	for _, task := range tasks {
 		taskPb := task.ToProtobuf()
 		recoverTask := FromTaskProtobuf(taskPb)
@@ -258,7 +258,7 @@ type Session struct {
 	SecureManager *SecureManager
 
 	*Cache
-	Taskseq   uint32
+	Taskseq   atomic.Uint32
 	responses *sync.Map
 	rpcLog    *logs.Logger
 
@@ -898,12 +898,12 @@ func (s *Session) Publish(Op string, msg string, notify bool, important bool) {
 }
 
 func (s *Session) NewTask(name string, total int) *Task {
-	s.Taskseq++
+	seq := s.Taskseq.Add(1)
 	now := time.Now()
 	task := &Task{
 		Type:      name,
 		Total:     total,
-		Id:        s.Taskseq,
+		Id:        seq,
 		SessionId: s.ID,
 		Session:   s,
 		DoneCh:    make(chan bool, 1),
