@@ -177,6 +177,48 @@ func (s *identityServerStream) Context() context.Context {
 	return ctx
 }
 
+func (s *identityServerStream) RecvMsg(m interface{}) error {
+	if err := s.ensureIdentityActive(); err != nil {
+		return err
+	}
+	return s.ServerStream.RecvMsg(m)
+}
+
+func (s *identityServerStream) SendMsg(m interface{}) error {
+	if err := s.ensureIdentityActive(); err != nil {
+		return err
+	}
+	return s.ServerStream.SendMsg(m)
+}
+
+func (s *identityServerStream) ensureIdentityActive() error {
+	if s == nil || s.identity == nil || s.identity.Fingerprint == "" {
+		return status.Error(codes.Unauthenticated, "missing peer identity")
+	}
+	if s.identity.IsLoopback {
+		if fp := getCAFingerprint(); fp != "" && s.identity.Fingerprint == fp {
+			return nil
+		}
+	}
+	op, ok := opCache.LookupByFingerprint(s.identity.Fingerprint)
+	if !ok {
+		return status.Errorf(codes.Unauthenticated,
+			"certificate fingerprint not registered: %s", shortFingerprint(s.identity.Fingerprint))
+	}
+	if op.Revoked {
+		return status.Errorf(codes.Unauthenticated,
+			"operator %s has been revoked", op.Name)
+	}
+	return nil
+}
+
+func shortFingerprint(fp string) string {
+	if len(fp) <= 16 {
+		return fp
+	}
+	return fp[:16]
+}
+
 // authenticateByFingerprint looks up the operator by cert fingerprint and checks permissions.
 func authenticateByFingerprint(identity *PeerIdentity, method string) error {
 	op, ok := opCache.LookupByFingerprint(identity.Fingerprint)
