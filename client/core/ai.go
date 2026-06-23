@@ -329,6 +329,131 @@ func (c *AIClient) askClaudeWith(ctx context.Context, systemPrompt, question str
 	return result.String(), nil
 }
 
+// OpenAI embedding API structures
+type OpenAIEmbeddingRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
+type OpenAIEmbeddingResponse struct {
+	Data []struct {
+		Embedding []float32 `json:"embedding"`
+		Index     int       `json:"index"`
+	} `json:"data"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	} `json:"error,omitempty"`
+}
+
+// GetEmbedding calls the embedding API to vectorize a text string.
+// Uses the OpenAI-compatible /v1/embeddings endpoint.
+func (c *AIClient) GetEmbedding(ctx context.Context, text string) ([]float32, error) {
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
+
+	model := c.settings.EmbeddingModel
+	if model == "" {
+		model = "text-embedding-3-small"
+	}
+
+	req := OpenAIEmbeddingRequest{
+		Model: model,
+		Input: text,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal embedding request: %w", err)
+	}
+
+	endpoint, err := c.buildEndpoint("/embeddings")
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, statusCode, err := c.doRequest(ctx, endpoint, map[string]string{
+		"Authorization": "Bearer " + c.settings.APIKey,
+	}, body)
+	if err != nil {
+		return nil, err
+	}
+
+	var embResp OpenAIEmbeddingResponse
+	if err := json.Unmarshal(respBody, &embResp); err != nil {
+		return nil, fmt.Errorf("parse embedding response (%d): %w", statusCode, err)
+	}
+
+	if statusCode < 200 || statusCode >= 300 {
+		if embResp.Error != nil {
+			return nil, fmt.Errorf("embedding API error (%d): %s", statusCode, embResp.Error.Message)
+		}
+		return nil, fmt.Errorf("embedding API error (%d): %s", statusCode, string(respBody))
+	}
+
+	if len(embResp.Data) == 0 {
+		return nil, fmt.Errorf("no embedding returned")
+	}
+
+	return embResp.Data[0].Embedding, nil
+}
+
+// GetEmbeddingBatch calls the embedding API for multiple texts in one request.
+func (c *AIClient) GetEmbeddingBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
+
+	model := c.settings.EmbeddingModel
+	if model == "" {
+		model = "text-embedding-3-small"
+	}
+
+	reqBody := map[string]interface{}{
+		"model": model,
+		"input": texts,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal batch embedding request: %w", err)
+	}
+
+	endpoint, err := c.buildEndpoint("/embeddings")
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, statusCode, err := c.doRequest(ctx, endpoint, map[string]string{
+		"Authorization": "Bearer " + c.settings.APIKey,
+	}, body)
+	if err != nil {
+		return nil, err
+	}
+
+	var embResp OpenAIEmbeddingResponse
+	if err := json.Unmarshal(respBody, &embResp); err != nil {
+		return nil, fmt.Errorf("parse batch embedding response (%d): %w", statusCode, err)
+	}
+
+	if statusCode < 200 || statusCode >= 300 {
+		if embResp.Error != nil {
+			return nil, fmt.Errorf("embedding API error (%d): %s", statusCode, embResp.Error.Message)
+		}
+		return nil, fmt.Errorf("embedding API error (%d)", statusCode)
+	}
+
+	result := make([][]float32, len(embResp.Data))
+	for _, d := range embResp.Data {
+		if d.Index < len(result) {
+			result[d.Index] = d.Embedding
+		}
+	}
+
+	return result, nil
+}
+
 // ParseCommandSuggestions extracts command suggestions from AI response
 // Commands are expected to be wrapped in backticks like `command`
 func ParseCommandSuggestions(response string) []CommandSuggestion {

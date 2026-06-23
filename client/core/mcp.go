@@ -287,6 +287,7 @@ func (m *MCPServer) registerCustomTools() {
 	m.registerLuaScriptTool()
 	m.registerGetHistoryTool()
 	m.registerSearchCommandsTool()
+	m.registerSearchTool()
 }
 
 // registerExecuteCommandTool 注册通用命令执行工具
@@ -444,5 +445,75 @@ func (m *MCPServer) registerGetHistoryTool() {
 		}
 
 		return mcp.NewToolResultText(output), nil
+	})
+}
+
+// registerSearchTool registers FTS5 full-text search across commands, plugins, and documentation
+func (m *MCPServer) registerSearchTool() {
+	tool := mcp.NewTool(
+		"search",
+		mcp.WithDescription(`Full-text search across all commands and plugins using FTS5.
+Returns ranked results with highlighted snippets. Supports Chinese text and FTS5 query syntax (AND, OR, NOT, "exact phrases").
+
+Examples:
+- Search "lateral movement" to find pivot and proxy commands
+- Search "文件操作" to find file operation commands
+- Search "cred" to find credential-related commands
+- Search "persist" to find persistence commands`),
+		mcp.WithString("query", mcp.Required(), mcp.Description("Search query (supports FTS5 syntax)")),
+		mcp.WithString("type", mcp.Description("Filter: command, plugin")),
+		mcp.WithString("group", mcp.Description("Filter by command group (e.g., 'execute', 'sys', 'file')")),
+		mcp.WithNumber("limit", mcp.Description("Max results (default 20)")),
+	)
+
+	m.server.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if m.console.SearchIndex == nil {
+			return mcp.NewToolResultError("search index not initialized"), nil
+		}
+
+		query, err := request.RequireString("query")
+		if err != nil || query == "" {
+			return mcp.NewToolResultError("query is required"), nil
+		}
+
+		typeFilter, _ := request.GetArguments()["type"].(string)
+		group, _ := request.GetArguments()["group"].(string)
+		limit := 20
+		if l, ok := request.GetArguments()["limit"].(float64); ok && l > 0 {
+			limit = int(l)
+		}
+
+		results, err := HybridSearch(ctx, m.console.SearchIndex, m.console.VectorIndex, query, typeFilter, group, limit)
+		if err != nil {
+			logs.Log.Errorf("Error in search: %v", err)
+			return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+		}
+
+		if len(results) == 0 {
+			return mcp.NewToolResultText("No results found matching: " + query), nil
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Found %d results matching \"%s\":\n\n", len(results), query))
+		for _, r := range results {
+			sb.WriteString(fmt.Sprintf("- **%s** [%s/%s]: %s\n", r.Name, r.Type, r.Category, r.Description))
+			if r.TTP != "" {
+				sb.WriteString(fmt.Sprintf("  ATT&CK: %s", r.TTP))
+				if r.Opsec != "" && r.Opsec != "0" {
+					sb.WriteString(fmt.Sprintf(" | OPSEC: %s/10", r.Opsec))
+				}
+				sb.WriteString("\n")
+			}
+			if r.Snippet != "" && r.Snippet != r.Description {
+				sb.WriteString(fmt.Sprintf("  Snippet: %s\n", r.Snippet))
+			}
+			if r.Usage != "" {
+				sb.WriteString(fmt.Sprintf("  Usage: %s\n", r.Usage))
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("Tip: Use execute_command(\"<command> --help\") to get detailed usage.")
+
+		return mcp.NewToolResultText(sb.String()), nil
 	})
 }

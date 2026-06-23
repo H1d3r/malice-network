@@ -101,6 +101,9 @@ type Console struct {
 	CMDs    map[string]*cobra.Command
 	Helpers map[string]*cobra.Command
 
+	SearchIndex  *SearchIndex
+	VectorIndex  *VectorIndex
+
 	MalManager *plugin.MalManager
 
 	// ConfigPath is the auth config file path used for the current login.
@@ -173,6 +176,22 @@ func (c *Console) Start(bindCmds ...BindCmds) error {
 
 	c.App.Menu(consts.ClientMenu).Command = bindCmds[0](c)()
 	c.App.Menu(consts.ImplantMenu).Command = bindCmds[1](c)()
+
+	// Build FTS5 search index from registered commands
+	si, err := NewSearchIndex(filepath.Join(assets.GetRootAppDir(), "search.db"))
+	if err != nil {
+		client.Log.Warnf("search index init failed: %v\n", err)
+	} else {
+		c.SearchIndex = si
+		clientMenu := c.App.Menu(consts.ClientMenu)
+		implantMenu := c.App.Menu(consts.ImplantMenu)
+		if rebuildErr := si.Rebuild(clientMenu.Commands, implantMenu.Commands); rebuildErr != nil {
+			client.Log.Warnf("search index build failed: %v\n", rebuildErr)
+		}
+	}
+
+	// Load precomputed embedding vectors for semantic search
+	c.VectorIndex = NewVectorIndex()
 
 	// After all commands are registered, safely start MCP server and Local RPC server.
 	// In quiet mode (non-index mux pane), skip these to avoid resource waste.
