@@ -423,6 +423,20 @@ func TestMCPServerStartStopSupportsStreamableHTTPAndLegacySSE(t *testing.T) {
 	assertEventStreamEndpoint(t, fmt.Sprintf("http://%s/mcp/sse", addr))
 }
 
+func TestMCPServerStartReturnsListenError(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	mcpServer := NewMCP(nil)
+	if err := mcpServer.Start("127.0.0.1", port); err == nil {
+		t.Fatal("Start returned nil error for an occupied port")
+	}
+}
+
 func assertEventStreamEndpoint(t *testing.T, url string) {
 	t.Helper()
 

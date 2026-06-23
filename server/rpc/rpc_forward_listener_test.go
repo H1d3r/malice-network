@@ -2,10 +2,12 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -187,6 +189,97 @@ func TestStartForwardListenerClientDeliversCtrlAndReceivesStatus(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for forwarded task")
 	}
+}
+
+func TestEnsureForwardTaskStreamDoesNotOpenDuplicateConcurrentStreams(t *testing.T) {
+	withIsolatedPipelinesCh(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client := &blockingForwardTaskClient{
+		started: make(chan int32, 2),
+		release: make(chan struct{}),
+	}
+	released := false
+	release := func() {
+		if !released {
+			close(client.release)
+			released = true
+		}
+	}
+	defer release()
+
+	firstErr := make(chan error, 1)
+	go func() {
+		firstErr <- ensureForwardTaskStream(ctx, client, "listener-concurrent", "pipeline-concurrent")
+	}()
+
+	select {
+	case <-client.started:
+	case <-time.After(time.Second):
+		t.Fatal("first TaskStream call did not start")
+	}
+
+	secondErr := make(chan error, 1)
+	go func() {
+		secondErr <- ensureForwardTaskStream(ctx, client, "listener-concurrent", "pipeline-concurrent")
+	}()
+
+	select {
+	case call := <-client.started:
+		release()
+		<-firstErr
+		<-secondErr
+		t.Fatalf("opened duplicate TaskStream call %d while the first stream was still starting", call)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	release()
+	if err := <-firstErr; err != nil {
+		t.Fatalf("first ensureForwardTaskStream returned error: %v", err)
+	}
+	if err := <-secondErr; err != nil {
+		t.Fatalf("second ensureForwardTaskStream returned error: %v", err)
+	}
+	if got := client.calls.Load(); got != 1 {
+		t.Fatalf("TaskStream opened %d times, want 1", got)
+	}
+	cancel()
+}
+
+type blockingForwardTaskClient struct {
+	calls   atomic.Int32
+	started chan int32
+	release chan struct{}
+}
+
+func (c *blockingForwardTaskClient) ControlStream(context.Context, ...grpc.CallOption) (forwardrpc.ForwardListener_ControlStreamClient, error) {
+	return nil, errors.New("not used")
+}
+
+func (c *blockingForwardTaskClient) TaskStream(ctx context.Context, _ ...grpc.CallOption) (forwardrpc.ForwardListener_TaskStreamClient, error) {
+	call := c.calls.Add(1)
+	c.started <- call
+	select {
+	case <-c.release:
+		return &blockingForwardTaskStream{ctx: ctx}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+type blockingForwardTaskStream struct {
+	grpc.ClientStream
+	ctx context.Context
+}
+
+func (s *blockingForwardTaskStream) Send(*clientpb.SpiteRequest) error {
+	return nil
+}
+
+func (s *blockingForwardTaskStream) Recv() (*clientpb.SpiteRequest, error) {
+	<-s.ctx.Done()
+	return nil, s.ctx.Err()
 }
 
 func TestRetireListenerThroughForwardControlStream(t *testing.T) {

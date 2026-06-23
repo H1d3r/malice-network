@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/chainreactors/malice-network/client/repl"
+	"net"
 	"net/http"
 	"strings"
 
@@ -242,9 +243,13 @@ func (m *MCPServer) Start(host string, port int) error {
 		Handler: mux,
 	}
 
-	// 在后台启动服务器
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
 	go func() {
-		if err := m.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := m.httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 			logs.Log.Errorf("Failed to start MCP server: %v\n", err)
 		}
 	}()

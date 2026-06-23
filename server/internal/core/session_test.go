@@ -12,6 +12,7 @@ import (
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
+	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
 	"github.com/gookit/config/v2"
 	"google.golang.org/grpc"
@@ -506,6 +507,51 @@ func TestSession_NewTask_ConcurrentIDsUnique(t *testing.T) {
 			t.Fatalf("duplicate task ID %d from concurrent NewTask calls", id)
 		}
 		seen[id] = true
+	}
+}
+
+func TestSessionRpcLoggerConcurrentInitialization(t *testing.T) {
+	oldAuditPath := configs.AuditPath
+	configs.AuditPath = t.TempDir()
+	t.Cleanup(func() {
+		configs.AuditPath = oldAuditPath
+		config.Set(consts.ConfigAuditLevel, 0)
+	})
+	config.Set(consts.ConfigAuditLevel, 1)
+
+	sess := newTestSession("rpc-log-concurrent")
+	const workers = 32
+	start := make(chan struct{})
+	loggers := make(chan any, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			loggers <- sess.RpcLogger()
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(loggers)
+
+	var first any
+	for logger := range loggers {
+		if logger == nil {
+			t.Fatal("RpcLogger returned nil with audit enabled")
+		}
+		if first == nil {
+			first = logger
+			continue
+		}
+		if logger != first {
+			t.Fatal("RpcLogger returned different logger instances")
+		}
+	}
+	if sess.rpcLog != nil {
+		sess.rpcLog.Close(false)
 	}
 }
 

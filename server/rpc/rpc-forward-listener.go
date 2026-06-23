@@ -30,6 +30,7 @@ var (
 	errForwardListenerAlreadyConnected = errors.New("forward listener already connected")
 	forwardListenerRuntimeMu           sync.Mutex
 	forwardListenerRuntimes            sync.Map
+	forwardTaskStreamMu                sync.Mutex
 )
 
 type forwardListenerRuntime struct {
@@ -351,6 +352,11 @@ func ensureForwardTaskStream(ctx context.Context, client forwardrpc.ForwardListe
 		return nil
 	}
 	key := core.PipelineRuntimeKey(listenerID, pipelineID)
+	if _, ok := pipelinesCh.Load(key); ok {
+		return nil
+	}
+	forwardTaskStreamMu.Lock()
+	defer forwardTaskStreamMu.Unlock()
 	if _, ok := pipelinesCh.Load(key); ok {
 		return nil
 	}

@@ -2,12 +2,12 @@ package core
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	implantpb "github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/IoM-go/proto/services/listenerrpc"
@@ -19,6 +19,12 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
+
+func forwardRawIDBytes(rawID uint32) []byte {
+	data := make([]byte, 4)
+	binary.LittleEndian.PutUint32(data, rawID)
+	return data
+}
 
 var (
 	Forwarders = &forwarders{
@@ -213,7 +219,7 @@ func (f *Forward) Handler() error {
 				&implantpb.Spite{
 					Name: types.MsgInit.String(),
 				},
-				&implantpb.Init{Data: (*[4]byte)(unsafe.Pointer(&msg.RawID))[:]})
+				&implantpb.Init{Data: forwardRawIDBytes(msg.RawID)})
 			if pushErr := Connections.Push(msg.SessionID, &clientpb.SpiteRequest{
 				Spite: initSpite,
 			}); pushErr != nil {

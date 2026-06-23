@@ -132,6 +132,14 @@ func TestForwardHandlerCheckinCalledOncePerMessage(t *testing.T) {
 	}
 }
 
+func TestForwardRawIDBytesUsesLittleEndian(t *testing.T) {
+	got := forwardRawIDBytes(0x01020304)
+	want := []byte{0x04, 0x03, 0x02, 0x01}
+	if string(got) != string(want) {
+		t.Fatalf("forwardRawIDBytes() = %v, want %v", got, want)
+	}
+}
+
 type capturingForwardStream struct {
 	mu       sync.Mutex
 	captured []*clientpb.SpiteResponse

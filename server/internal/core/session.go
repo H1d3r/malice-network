@@ -261,6 +261,7 @@ type Session struct {
 	Taskseq   atomic.Uint32
 	responses *sync.Map
 	rpcLog    *logs.Logger
+	rpcLogMu  sync.Mutex
 
 	lastCheckin atomic.Int64
 	deadState   atomic.Bool
@@ -362,6 +363,8 @@ func (s *Session) Abstract() string {
 
 func (s *Session) RpcLogger() *logs.Logger {
 	var err error
+	s.rpcLogMu.Lock()
+	defer s.rpcLogMu.Unlock()
 	if s.rpcLog == nil {
 		if auditLevel := config.Int(consts.ConfigAuditLevel); auditLevel > 0 {
 			s.rpcLog, err = logs.NewFileLogger(filepath.Join(configs.AuditPath, s.ID+".log"))
