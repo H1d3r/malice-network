@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/IoM-go/proto/implant/implantpb"
 	"github.com/chainreactors/IoM-go/types"
 	"github.com/chainreactors/malice-network/server/internal/core"
@@ -73,6 +74,16 @@ func (m *ImplantPTYManager) List() []pty.Info {
 	return out
 }
 
+func (m *ImplantPTYManager) GetTaskProto(sessionID string) (*clientpb.Task, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.sessions[sessionID]
+	if !ok || s.greq == nil || s.greq.Task == nil {
+		return nil, false
+	}
+	return s.greq.Task.ToProtobuf(), true
+}
+
 func (m *ImplantPTYManager) SendCommand(sessionID string, req *implantpb.PtyRequest) bool {
 	m.mu.Lock()
 	s, ok := m.sessions[sessionID]
@@ -97,7 +108,6 @@ func (m *ImplantPTYManager) PumpOutput(sessionID string, greq *GenericRequest, r
 
 		ptyResp := resp.GetPtyResponse()
 		_ = greq.HandlerSpite(resp)
-		greq.Task.Finish(resp, "")
 
 		if ptyResp != nil {
 			if len(ptyResp.OutputData) > 0 {

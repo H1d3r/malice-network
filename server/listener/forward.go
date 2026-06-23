@@ -254,6 +254,9 @@ func (s *forwardLocalStream) Recv() (*clientpb.SpiteRequest, error) {
 func (s *forwardLocalStream) attach(_ forwardrpc.ForwardListener_TaskStreamServer) {}
 
 func (s *forwardLocalStream) serve(stream forwardrpc.ForwardListener_TaskStreamServer) error {
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
 	errCh := make(chan error, 2)
 	go func() {
 		for {
@@ -262,13 +265,25 @@ func (s *forwardLocalStream) serve(stream forwardrpc.ForwardListener_TaskStreamS
 				errCh <- err
 				return
 			}
-			s.requests <- req
+			select {
+			case s.requests <- req:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	go func() {
-		for event := range s.events {
-			if err := stream.Send(event); err != nil {
-				errCh <- err
+		for {
+			select {
+			case event, ok := <-s.events:
+				if !ok {
+					return
+				}
+				if err := stream.Send(event); err != nil {
+					errCh <- err
+					return
+				}
+			case <-ctx.Done():
 				return
 			}
 		}

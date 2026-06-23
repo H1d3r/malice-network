@@ -206,22 +206,21 @@ func (f *Forward) Context(sid string) context.Context {
 // Handler is a loop that handles messages from implant
 func (f *Forward) Handler() error {
 	for msg := range f.implantC {
-		for _, spite := range msg.Spites.Spites {
-			_, err := f.ListenerRpc.Checkin(f.Context(msg.SessionID), &implantpb.Ping{})
-			if err != nil {
-				logs.Log.Warnf("forward %s checkin failed for session %s: %v", f.ID(), msg.SessionID, err)
-				spite, _ := types.BuildSpite(
-					&implantpb.Spite{
-						Name: types.MsgInit.String(),
-					},
-					&implantpb.Init{Data: (*[4]byte)(unsafe.Pointer(&msg.RawID))[:]})
-				err = Connections.Push(msg.SessionID, &clientpb.SpiteRequest{
-					Spite: spite,
-				})
-				if err != nil {
-					logs.Log.Errorf("forward %s init spite push failed for session %s: %v", f.ID(), msg.SessionID, err)
-				}
+		_, err := f.ListenerRpc.Checkin(f.Context(msg.SessionID), &implantpb.Ping{})
+		if err != nil {
+			logs.Log.Warnf("forward %s checkin failed for session %s: %v", f.ID(), msg.SessionID, err)
+			initSpite, _ := types.BuildSpite(
+				&implantpb.Spite{
+					Name: types.MsgInit.String(),
+				},
+				&implantpb.Init{Data: (*[4]byte)(unsafe.Pointer(&msg.RawID))[:]})
+			if pushErr := Connections.Push(msg.SessionID, &clientpb.SpiteRequest{
+				Spite: initSpite,
+			}); pushErr != nil {
+				logs.Log.Errorf("forward %s init spite push failed for session %s: %v", f.ID(), msg.SessionID, pushErr)
 			}
+		}
+		for _, spite := range msg.Spites.Spites {
 			switch spite.Body.(type) {
 			case *implantpb.Spite_Register:
 				_, err := f.ListenerRpc.Register(f.Context(msg.SessionID), &clientpb.RegisterSession{

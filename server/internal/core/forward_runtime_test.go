@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -11,13 +12,16 @@ import (
 	"google.golang.org/grpc"
 )
 
-type testForwardRPC struct{}
+type testForwardRPC struct {
+	checkinCount atomic.Int32
+}
 
-func (testForwardRPC) Checkin(context.Context, *implantpb.Ping, ...grpc.CallOption) (*clientpb.Empty, error) {
+func (r *testForwardRPC) Checkin(context.Context, *implantpb.Ping, ...grpc.CallOption) (*clientpb.Empty, error) {
+	r.checkinCount.Add(1)
 	return &clientpb.Empty{}, nil
 }
 
-func (testForwardRPC) Register(context.Context, *clientpb.RegisterSession, ...grpc.CallOption) (*clientpb.Empty, error) {
+func (*testForwardRPC) Register(context.Context, *clientpb.RegisterSession, ...grpc.CallOption) (*clientpb.Empty, error) {
 	return &clientpb.Empty{}, nil
 }
 
@@ -53,7 +57,7 @@ func TestForwardHandlerReturnsStreamSendError(t *testing.T) {
 	forward := &Forward{
 		ctx:         context.Background(),
 		Pipeline:    testPipeline{id: "pipe-a"},
-		ListenerRpc: testForwardRPC{},
+		ListenerRpc: &testForwardRPC{},
 		Stream:      testForwardStream{sendErr: want},
 		implantC:    make(chan *Message, 1),
 		done:        make(chan struct{}),
@@ -93,6 +97,41 @@ func TestForwardersRemoveDeletesOnCloseError(t *testing.T) {
 	}
 }
 
+func TestForwardHandlerCheckinCalledOncePerMessage(t *testing.T) {
+	rpc := &testForwardRPC{}
+	stream := &capturingForwardStream{}
+	forward := &Forward{
+		ctx:         context.Background(),
+		Pipeline:    testPipeline{id: "pipe-checkin"},
+		ListenerId:  "lns-checkin",
+		ListenerRpc: rpc,
+		Stream:      stream,
+		implantC:    make(chan *Message, 1),
+		done:        make(chan struct{}),
+	}
+	forward.alive.Store(true)
+
+	forward.implantC <- &Message{
+		SessionID: "sess-checkin",
+		Spites: &implantpb.Spites{Spites: []*implantpb.Spite{
+			{Name: "exec", TaskId: 1},
+			{Name: "upload", TaskId: 2},
+			{Name: "download", TaskId: 3},
+		}},
+		RemoteAddr: "10.0.0.1:9000",
+	}
+	close(forward.implantC)
+
+	if err := forward.Handler(); err != nil {
+		t.Fatalf("Handler returned error: %v", err)
+	}
+
+	got := rpc.checkinCount.Load()
+	if got != 1 {
+		t.Fatalf("Checkin called %d times for 1 message with 3 spites, want exactly 1", got)
+	}
+}
+
 type capturingForwardStream struct {
 	mu       sync.Mutex
 	captured []*clientpb.SpiteResponse
@@ -123,7 +162,7 @@ func TestForwardHandlerSetsListenerIdNotPipelineId(t *testing.T) {
 		ctx:         context.Background(),
 		Pipeline:    testPipeline{id: "pipeline-x"},
 		ListenerId:  "listener-y",
-		ListenerRpc: testForwardRPC{},
+		ListenerRpc: &testForwardRPC{},
 		Stream:      stream,
 		implantC:    make(chan *Message, 1),
 		done:        make(chan struct{}),

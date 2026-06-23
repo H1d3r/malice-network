@@ -71,15 +71,9 @@ func (rpc *Server) handlePtyStop(ctx context.Context, req *implantpb.PtyRequest)
 	}
 
 	mgr := getImplantPTYManager(session.ID)
-	if mgr.SendCommand(req.SessionId, req) {
-		info, _ := mgr.Get(req.SessionId)
+	if taskPb, ok := mgr.GetTaskProto(req.SessionId); ok && mgr.SendCommand(req.SessionId, req) {
 		mgr.Remove(req.SessionId)
-		_ = info
-		greq, err := newGenericRequest(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return greq.Task.ToProtobuf(), nil
+		return taskPb, nil
 	}
 
 	greq, err := newGenericRequest(ctx, req)
