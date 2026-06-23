@@ -45,6 +45,29 @@ func TestAppendTaskMessageIgnoresEmptyInputs(t *testing.T) {
 	}
 }
 
+func TestEventHandlerClaimPreventsDuplicateLoops(t *testing.T) {
+	s := &Server{ServerState: &iomclient.ServerState{}}
+
+	if !s.claimEventHandler() {
+		t.Fatal("first event handler claim should succeed")
+	}
+	if !s.EventStatus {
+		t.Fatal("claim should mark event status active")
+	}
+	if s.claimEventHandler() {
+		t.Fatal("second event handler claim should be rejected")
+	}
+
+	s.releaseEventHandler()
+	if s.EventStatus {
+		t.Fatal("release should mark event status inactive")
+	}
+	if !s.claimEventHandler() {
+		t.Fatal("claim should be allowed after release")
+	}
+	s.releaseEventHandler()
+}
+
 func TestRenderEventAppliesColoringForSessionRegister(t *testing.T) {
 	event := &clientpb.Event{
 		Type:      consts.EventSession,

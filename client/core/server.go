@@ -31,12 +31,38 @@ func wrapToTaskContext(event *clientpb.Event) *clientpb.TaskContext {
 
 type Server struct {
 	*client.ServerState
-	taskMessageMu sync.Mutex
-	taskMessages  map[string]string
-	eventHookMu   sync.RWMutex
+	taskMessageMu      sync.Mutex
+	taskMessages       map[string]string
+	eventHookMu        sync.RWMutex
+	eventHandlerMu     sync.Mutex
+	eventHandlerActive bool
 
 	// Quiet suppresses console event output while still updating internal state.
 	Quiet bool
+}
+
+func (s *Server) claimEventHandler() bool {
+	if s == nil {
+		return false
+	}
+	s.eventHandlerMu.Lock()
+	defer s.eventHandlerMu.Unlock()
+	if s.eventHandlerActive {
+		return false
+	}
+	s.eventHandlerActive = true
+	s.EventStatus = true
+	return true
+}
+
+func (s *Server) releaseEventHandler() {
+	if s == nil {
+		return
+	}
+	s.eventHandlerMu.Lock()
+	defer s.eventHandlerMu.Unlock()
+	s.eventHandlerActive = false
+	s.EventStatus = false
 }
 
 func taskMessageKey(sessionID string, taskID uint32) string {
@@ -336,6 +362,11 @@ func (s *Server) dispatchEventHooks(event *clientpb.Event) {
 }
 
 func (s *Server) EventHandler() {
+	if !s.claimEventHandler() {
+		return
+	}
+	defer s.releaseEventHandler()
+
 	eventStream, err := s.Rpc.Events(context.Background(), &clientpb.Empty{})
 	if err != nil {
 		return
@@ -344,11 +375,9 @@ func (s *Server) EventHandler() {
 	if s.Session != nil {
 		s.UpdateSession(s.GetInteractive().SessionId)
 	}
-	s.EventStatus = true
 	client.Log.Info("starting event loop\n")
 	defer func() {
 		client.Log.Warnf("event stream broken\n")
-		s.EventStatus = false
 	}()
 	for {
 		event, err := eventStream.Recv()

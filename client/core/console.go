@@ -44,22 +44,22 @@ var (
 	}
 )
 
-// promptSafeWriter routes logger output through Console.TransientPrintf
+// promptSafeWriter routes logger output through Console.Printf
 // so that async log messages don't corrupt the readline prompt.
 // It strips the \x1b[1E cursor-next-line escape that log format strings
-// prepend, since TransientPrintf handles cursor positioning itself.
+// prepend, since readline handles cursor positioning itself.
 type promptSafeWriter struct {
 	con *Console
 }
 
 func (w *promptSafeWriter) Write(p []byte) (n int, err error) {
 	msg := string(p)
-	// Strip cursor-next-line escape; TransientPrintf handles positioning.
+	// Strip cursor-next-line escape; readline handles positioning.
 	msg = strings.ReplaceAll(msg, "\x1b[1E", "")
 	if msg == "" {
 		return len(p), nil
 	}
-	_, err = w.con.App.TransientPrintf("%s", msg)
+	_, err = w.con.App.Printf("%s", msg)
 	return len(p), err
 }
 
@@ -225,12 +225,12 @@ func (c *Console) Start(bindCmds ...BindCmds) error {
 		return nil
 	}
 
-	// Wire asyncPrint so HandlerTask uses TransientPrintf for async output.
+	// Wire asyncPrint so HandlerTask uses prompt-safe readline output.
 	asyncPrint = func(format string, args ...any) {
-		c.App.TransientPrintf(format, args...)
+		c.App.Printf(format, args...)
 	}
 
-	// Route all logger output through TransientPrintf for prompt-safe async display.
+	// Route all logger output through readline for prompt-safe async display.
 	// This ensures background events (session register, task callbacks, etc.)
 	// don't corrupt the readline prompt.
 	safeWriter := &promptSafeWriter{con: c}
