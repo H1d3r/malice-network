@@ -165,10 +165,6 @@ func WrapImplantFunc(con *Console, fun interface{}, callback ImplantFuncCallback
 		} else {
 			sess.Console(task, out)
 		}
-		if !con.IsNonInteractiveExecution() {
-			return task, nil
-		}
-
 		content, err := con.Rpc.WaitTaskFinish(context.Background(), task)
 		if err != nil {
 			return nil, err
