@@ -194,6 +194,10 @@ func (c *forwardPipelineRPC) GetArtifact(context.Context, *clientpb.Artifact, ..
 	return nil, status.Error(codes.Unimplemented, "artifact fetch is not supported by forward listener transport")
 }
 
+func (c *forwardPipelineRPC) removeStream(listenerID, pipelineID string) {
+	c.registry.remove(listenerID, pipelineID)
+}
+
 type forwardStreamRegistry struct {
 	mu      sync.Mutex
 	streams map[string]*forwardLocalStream
@@ -215,9 +219,21 @@ func (r *forwardStreamRegistry) get(listenerID, pipelineID string) *forwardLocal
 		pipelineID: pipelineID,
 		requests:   make(chan *clientpb.SpiteRequest, 255),
 		events:     make(chan *clientpb.SpiteRequest, 255),
+		done:       make(chan struct{}),
 	}
 	r.streams[key] = stream
 	return stream
+}
+
+func (r *forwardStreamRegistry) remove(listenerID, pipelineID string) {
+	key := core.PipelineRuntimeKey(listenerID, pipelineID)
+	r.mu.Lock()
+	stream := r.streams[key]
+	delete(r.streams, key)
+	r.mu.Unlock()
+	if stream != nil {
+		stream.close()
+	}
 }
 
 type forwardLocalStream struct {
@@ -225,6 +241,8 @@ type forwardLocalStream struct {
 	pipelineID string
 	requests   chan *clientpb.SpiteRequest
 	events     chan *clientpb.SpiteRequest
+	done       chan struct{}
+	closeOnce  sync.Once
 }
 
 func (s *forwardLocalStream) Send(resp *clientpb.SpiteResponse) error {
@@ -244,11 +262,15 @@ func (s *forwardLocalStream) Send(resp *clientpb.SpiteResponse) error {
 }
 
 func (s *forwardLocalStream) Recv() (*clientpb.SpiteRequest, error) {
-	req, ok := <-s.requests
-	if !ok {
+	select {
+	case req, ok := <-s.requests:
+		if !ok {
+			return nil, io.EOF
+		}
+		return req, nil
+	case <-s.done:
 		return nil, io.EOF
 	}
-	return req, nil
 }
 
 func (s *forwardLocalStream) attach(_ forwardrpc.ForwardListener_TaskStreamServer) {}
@@ -269,6 +291,8 @@ func (s *forwardLocalStream) serve(stream forwardrpc.ForwardListener_TaskStreamS
 			case s.requests <- req:
 			case <-ctx.Done():
 				return
+			case <-s.done:
+				return
 			}
 		}
 	}()
@@ -285,14 +309,29 @@ func (s *forwardLocalStream) serve(stream forwardrpc.ForwardListener_TaskStreamS
 				}
 			case <-ctx.Done():
 				return
+			case <-s.done:
+				return
 			}
 		}
 	}()
-	err := <-errCh
+	var err error
+	select {
+	case err = <-errCh:
+	case <-s.done:
+		return nil
+	}
 	if err == io.EOF {
 		return nil
 	}
 	return err
+}
+
+func (s *forwardLocalStream) close() {
+	s.closeOnce.Do(func() {
+		if s.done != nil {
+			close(s.done)
+		}
+	})
 }
 
 func (s *forwardLocalStream) sendEvent(event *clientpb.SpiteRequest) error {
@@ -302,6 +341,8 @@ func (s *forwardLocalStream) sendEvent(event *clientpb.SpiteRequest) error {
 	select {
 	case s.events <- event:
 		return nil
+	case <-s.done:
+		return io.ErrClosedPipe
 	case <-time.After(10 * time.Second):
 		return fmt.Errorf("forward stream %s:%s event queue full", s.listenerID, s.pipelineID)
 	}

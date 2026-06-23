@@ -237,6 +237,9 @@ func (lns *listener) Close() error {
 		if err := runtime.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := lns.cleanupForwardPipelineRuntime(runtime.ID()); err != nil {
+			errs = append(errs, err)
+		}
 		lns.pipelines.Delete(pipeline.Name)
 	}
 
@@ -555,8 +558,19 @@ func (lns *listener) handlerStop(job *clientpb.Job) error {
 	if err := p.Close(); err != nil {
 		return err
 	}
+	cleanupErr := lns.cleanupForwardPipelineRuntime(p.ID())
 	lns.pipelines.Delete(p.ID())
-	return nil
+	return cleanupErr
+}
+
+func (lns *listener) cleanupForwardPipelineRuntime(pipelineID string) error {
+	if pipelineID == "" {
+		return nil
+	}
+	if rpc, ok := lns.pipelineRPC.(*forwardPipelineRPC); ok {
+		rpc.removeStream(lns.ID(), pipelineID)
+	}
+	return core.Forwarders.Remove(core.PipelineRuntimeKey(lns.ID(), pipelineID))
 }
 
 func (lns *listener) handleStartWebsite(job *clientpb.Job) error {
