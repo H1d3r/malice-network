@@ -60,6 +60,56 @@ func TestRetireListenerPushesCtrlAndRevokesOperator(t *testing.T) {
 	}
 }
 
+func TestRetireListenerRevokesBeforeSendingCtrl(t *testing.T) {
+	initForwardRPCTestDB(t)
+	withIsolatedListenersAndJobs(t)
+	withIsolatedPipelinesCh(t)
+	seedForwardAdminOperator(t, "admin-client", "admin-retire-order-fp")
+
+	lns := core.NewListener("listener-retire-order", "10.0.0.8")
+	core.Listeners.Add(lns)
+
+	events := make(chan string, 2)
+	originalRevoke := revokeRetiredListenerOperator
+	revokeRetiredListenerOperator = func(name string) error {
+		if name != "listener-retire-order" {
+			t.Errorf("revoke name = %q, want listener-retire-order", name)
+		}
+		events <- "revoke"
+		return nil
+	}
+	t.Cleanup(func() { revokeRetiredListenerOperator = originalRevoke })
+
+	go func() {
+		ctrl := <-lns.Ctrl
+		if ctrl.GetCtrl() != consts.CtrlListenerRetire {
+			t.Errorf("ctrl = %q, want %q", ctrl.GetCtrl(), consts.CtrlListenerRetire)
+		}
+		events <- "ctrl"
+		lns.CtrlJob.Store(ctrl.GetId(), &clientpb.JobStatus{
+			ListenerId: "listener-retire-order",
+			Ctrl:       ctrl.GetCtrl(),
+			CtrlId:     ctrl.GetId(),
+			Status:     consts.CtrlStatusSuccess,
+		})
+	}()
+
+	ctx := contextWithIdentity(context.Background(), &PeerIdentity{Fingerprint: "admin-retire-order-fp"})
+	_, err := (&Server{}).RetireListener(ctx, &clientpb.ListenerRetire{
+		ListenerId:     "listener-retire-order",
+		TimeoutSeconds: 1,
+	})
+	if err != nil {
+		t.Fatalf("RetireListener failed: %v", err)
+	}
+
+	first := <-events
+	second := <-events
+	if first != "revoke" || second != "ctrl" {
+		t.Fatalf("event order = [%s %s], want [revoke ctrl]", first, second)
+	}
+}
+
 func TestRetireListenerRequiresAdmin(t *testing.T) {
 	initForwardRPCTestDB(t)
 	seedForwardListenerOperator(t, "listener-retire-noadmin", "listener-retire-noadmin-fp")

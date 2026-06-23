@@ -13,6 +13,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var revokeRetiredListenerOperator = db.RevokeOperator
+
 func (rpc *Server) RetireListener(ctx context.Context, req *clientpb.ListenerRetire) (*clientpb.ForwardListenerStatus, error) {
 	if err := requireAdminRole(ctx); err != nil {
 		return nil, err
@@ -27,6 +29,13 @@ func (rpc *Server) RetireListener(ctx context.Context, req *clientpb.ListenerRet
 	lns, err := core.Listeners.Get(listenerID)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "listener %s is not active", listenerID)
+	}
+
+	if !req.GetNoRevoke() {
+		if err := revokeRetiredListenerOperator(listenerID); err != nil {
+			return nil, status.Errorf(codes.Internal, "revoke listener %s failed: %v", listenerID, err)
+		}
+		opCache.InvalidateByName(listenerID)
 	}
 
 	retireReq := &clientpb.ListenerRetire{
@@ -49,12 +58,6 @@ func (rpc *Server) RetireListener(ctx context.Context, req *clientpb.ListenerRet
 		return nil, status.Error(codes.Unavailable, err.Error())
 	}
 
-	if !req.GetNoRevoke() {
-		if err := db.RevokeOperator(listenerID); err != nil {
-			return nil, status.Errorf(codes.Internal, "revoke listener %s failed: %v", listenerID, err)
-		}
-		opCache.InvalidateByName(listenerID)
-	}
 	cleanupRetiredListener(listenerID)
 	return inactiveForwardListenerStatus(listenerID), nil
 }
