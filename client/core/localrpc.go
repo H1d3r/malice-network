@@ -152,7 +152,11 @@ func (s *LocalRPCServer) SearchCommands(ctx context.Context, req *localrpc.Searc
 	client.Log.Debugf("LocalRPC: SearchCommands called with query: %s, group: %s, session: %s\n", req.Query, req.Group, req.SessionId)
 
 	if s.console.SearchIndex != nil {
-		results, err := HybridSearch(ctx, s.console.SearchIndex, s.console.VectorIndex, req.Query, "", req.Group, 20)
+		limit := int(req.Limit)
+		if limit <= 0 {
+			limit = 20
+		}
+		results, err := HybridSearch(ctx, s.console.SearchIndex, s.console.VectorIndex, req.Query, req.TypeFilter, req.Group, limit)
 		if err != nil {
 			client.Log.Warnf("LocalRPC: hybrid search failed, falling back: %v\n", err)
 		} else {
@@ -167,11 +171,15 @@ func (s *LocalRPCServer) SearchCommands(ctx context.Context, req *localrpc.Searc
 					Ttp:         r.TTP,
 					Opsec:       opsec,
 					Usage:       r.Usage,
+					Snippet:     r.Snippet,
+					Source:      r.Source,
+					Rank:        r.Rank,
 				})
 			}
 			return &localrpc.SearchCommandsResponse{
-				Commands: commands,
-				Success:  true,
+				Commands:   commands,
+				Success:    true,
+				TotalCount: int32(len(commands)),
 			}, nil
 		}
 	}
@@ -185,8 +193,9 @@ func (s *LocalRPCServer) SearchCommands(ctx context.Context, req *localrpc.Searc
 	}
 
 	return &localrpc.SearchCommandsResponse{
-		Commands: commands,
-		Success:  true,
+		Commands:   commands,
+		Success:    true,
+		TotalCount: int32(len(commands)),
 	}, nil
 }
 
