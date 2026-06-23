@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/chainreactors/malice-network/server/internal/configs"
+	"github.com/jessevdk/go-flags"
 )
 
 func TestValidateAllowsListenerOnlyWithoutServerConfig(t *testing.T) {
@@ -67,5 +68,31 @@ func TestPrepareConfigAllowsListenerOnlyFileWithoutServerSection(t *testing.T) {
 	}
 	if opt.Server != nil {
 		t.Fatalf("PrepareConfig() server config = %#v, want nil", opt.Server)
+	}
+}
+
+func TestExecuteReturnsErrorWithoutServerConfig(t *testing.T) {
+	opt := &Options{
+		ListenerOnly: true,
+		Listeners: &configs.ListenerConfig{
+			Enable: true,
+		},
+	}
+	parser := flags.NewParser(opt, flags.Default)
+	parser.Command.Active = &flags.Command{
+		Name: opt.UserCmd.Name(),
+		Active: &flags.Command{
+			Name: "list",
+		},
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Execute() panicked with nil server config: %v", r)
+		}
+	}()
+
+	if err := opt.Execute(nil, parser); err == nil {
+		t.Fatal("Execute() error = nil, want missing server config error")
 	}
 }

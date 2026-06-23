@@ -83,6 +83,9 @@ func (opt *Options) Execute(args []string, parser *flags.Parser) error {
 	if parser.Active == nil {
 		return nil
 	}
+	if opt.Server == nil {
+		return errors.New("config section 'server' is missing or invalid, cannot execute root command")
+	}
 	var err error
 	opt.localRpc, err = root.NewRootClient(fmt.Sprintf("127.0.0.1:%d", opt.Server.GRPCPort))
 	if err != nil {
