@@ -147,27 +147,19 @@ func (s *LocalRPCServer) GetGroups(ctx context.Context, req *localrpc.GetGroupsR
 }
 
 // SearchCommands implements the CommandService.SearchCommands RPC method.
-// Uses FTS5 full-text search when the search index is available, falls back
-// to substring matching otherwise.
+// Uses hybrid search (semantic + FTS5) when available, falls back to substring matching.
 func (s *LocalRPCServer) SearchCommands(ctx context.Context, req *localrpc.SearchCommandsRequest) (*localrpc.SearchCommandsResponse, error) {
 	client.Log.Debugf("LocalRPC: SearchCommands called with query: %s, group: %s, session: %s\n", req.Query, req.Group, req.SessionId)
 
-	// Try hybrid search (FTS5 + vector semantic) first
 	if s.console.SearchIndex != nil {
-		limit := int(req.Limit)
-		if limit <= 0 {
-			limit = 20
-		}
-		results, err := HybridSearch(ctx, s.console.SearchIndex, s.console.VectorIndex, req.Query, req.TypeFilter, req.Group, limit)
+		results, err := HybridSearch(ctx, s.console.SearchIndex, s.console.VectorIndex, req.Query, "", req.Group, 20)
 		if err != nil {
 			client.Log.Warnf("LocalRPC: hybrid search failed, falling back: %v\n", err)
 		} else {
 			commands := make([]*localrpc.CommandInfo, 0, len(results))
 			for _, r := range results {
 				var opsec int32
-				if _, err := fmt.Sscanf(r.Opsec, "%d", &opsec); err != nil {
-					opsec = 0
-				}
+				fmt.Sscanf(r.Opsec, "%d", &opsec)
 				commands = append(commands, &localrpc.CommandInfo{
 					Name:        r.Name,
 					Group:       r.Category,
@@ -175,36 +167,26 @@ func (s *LocalRPCServer) SearchCommands(ctx context.Context, req *localrpc.Searc
 					Ttp:         r.TTP,
 					Opsec:       opsec,
 					Usage:       r.Usage,
-					Snippet:     r.Snippet,
-					Source:      r.Source,
-					Rank:        r.Rank,
 				})
 			}
-			client.Log.Debugf("LocalRPC: SearchCommands (FTS5) found %d results\n", len(commands))
 			return &localrpc.SearchCommandsResponse{
-				Commands:   commands,
-				Success:    true,
-				TotalCount: int32(len(commands)),
+				Commands: commands,
+				Success:  true,
 			}, nil
 		}
 	}
 
-	// Fallback to substring matching
 	commands, err := searchCommands(s.console, req.Query, req.Group, req.SessionId)
 	if err != nil {
-		client.Log.Errorf("LocalRPC: Error searching commands: %v\n", err)
 		return &localrpc.SearchCommandsResponse{
-			Commands: nil,
-			Error:    err.Error(),
-			Success:  false,
+			Error:   err.Error(),
+			Success: false,
 		}, nil
 	}
 
-	client.Log.Debugf("LocalRPC: SearchCommands found %d results\n", len(commands))
 	return &localrpc.SearchCommandsResponse{
-		Commands:   commands,
-		Success:    true,
-		TotalCount: int32(len(commands)),
+		Commands: commands,
+		Success:  true,
 	}, nil
 }
 
