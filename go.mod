@@ -13,7 +13,7 @@ require (
 	github.com/chainreactors/rem v0.3.0
 	github.com/chainreactors/tui v0.1.1
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
-	github.com/chainreactors/utils/cert v0.0.0
+	github.com/chainreactors/utils/cert v0.0.0-20260624181253-2b3d0b35862f
 	github.com/chainreactors/utils/pty v0.0.0-20260620140628-4a3715583ae7
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v0.8.0
@@ -80,7 +80,6 @@ require (
 	github.com/alibabacloud-go/tea v1.4.0 // indirect
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.7 // indirect
 	github.com/aliyun/credentials-go v1.4.7 // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.1 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.8 // indirect
@@ -246,7 +245,6 @@ replace (
 	github.com/chainreactors/proxyclient => github.com/chainreactors/proxyclient v1.0.3
 	github.com/chainreactors/rem => ./external/rem
 	github.com/chainreactors/tui => ./external/tui
-	github.com/chainreactors/utils/cert => ../utils/cert
 	github.com/reeflective/console => ./external/console
 	github.com/reeflective/readline => ./external/readline
 	github.com/wabzsy/gonut => ./external/gonut
