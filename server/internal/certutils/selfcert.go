@@ -1,37 +1,30 @@
 package certutils
 
 import (
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/hex"
 	"encoding/pem"
-	"fmt"
+	"os"
+	"path"
+
 	"github.com/chainreactors/IoM-go/mtls"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/helper/certs"
 	"github.com/chainreactors/malice-network/helper/utils/fileutils"
 	"github.com/chainreactors/malice-network/server/internal/configs"
-	"os"
-	"path"
+	ucert "github.com/chainreactors/utils/cert"
 )
 
 var certsLog = logs.Log
 
-// CertFingerprint computes SHA-256 hex fingerprint from PEM-encoded certificate.
 func CertFingerprint(certPEM []byte) (string, error) {
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		return "", fmt.Errorf("failed to decode certificate PEM")
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
+	cert, err := ucert.ParseCertificatePEM(certPEM)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse certificate: %w", err)
+		return "", err
 	}
-	hash := sha256.Sum256(cert.Raw)
-	return hex.EncodeToString(hash[:]), nil
+	return ucert.Fingerprint(cert), nil
 }
 
 // --------------------------------
