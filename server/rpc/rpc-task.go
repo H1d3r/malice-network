@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/chainreactors/IoM-go/consts"
@@ -13,6 +15,9 @@ import (
 	"github.com/chainreactors/malice-network/server/internal/configs"
 	"github.com/chainreactors/malice-network/server/internal/core"
 	"github.com/chainreactors/malice-network/server/internal/db"
+	dbmodels "github.com/chainreactors/malice-network/server/internal/db/models"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"os"
 	"path/filepath"
@@ -30,6 +35,12 @@ type taskSpiteEntry struct {
 }
 
 var bindWaitPingInterval = time.Second
+
+const (
+	defaultTaskQueryPageSize = 100
+	maxTaskQueryPageSize     = 500
+	maxExpandedTaskPageSize  = 10
+)
 
 func readTaskSpitesFromDisk(sessionID string, taskID uint32) ([]taskSpiteEntry, error) {
 	taskDir, err := fileutils.SafeJoin(configs.ContextPath, filepath.Join(sessionID, consts.TaskPath))
@@ -87,6 +98,127 @@ func readTaskSpitesFromDisk(sessionID string, taskID uint32) ([]taskSpiteEntry, 
 	})
 
 	return entries, nil
+}
+
+func readTaskRequestFromDisk(sessionID string, taskID uint32) (*implantpb.Spite, int64, string, bool, error) {
+	requestPath, err := taskRequestPathFor(sessionID, taskID)
+	if err != nil {
+		return nil, 0, "", false, err
+	}
+	content, err := os.ReadFile(requestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, 0, "", false, nil
+		}
+		return nil, 0, "", false, err
+	}
+	spite := &implantpb.Spite{}
+	if err := proto.Unmarshal(content, spite); err != nil {
+		return nil, 0, "", false, err
+	}
+	sum := sha256.Sum256(content)
+	return spite, int64(len(content)), hex.EncodeToString(sum[:]), true, nil
+}
+
+func taskQueryPageSize(req *clientpb.TaskQuery) (int, error) {
+	expanded := req.GetIncludeRawRequest() || req.GetIncludeResults()
+	if req.GetPageSize() == 0 {
+		if expanded && len(req.GetTaskIds()) == 0 {
+			return maxExpandedTaskPageSize, nil
+		}
+		return defaultTaskQueryPageSize, nil
+	}
+
+	pageSize := int(req.GetPageSize())
+	if pageSize > maxTaskQueryPageSize {
+		return 0, status.Errorf(codes.InvalidArgument, "page_size must be <= %d", maxTaskQueryPageSize)
+	}
+	if expanded && len(req.GetTaskIds()) == 0 && pageSize > maxExpandedTaskPageSize {
+		return 0, status.Errorf(codes.InvalidArgument, "page_size must be <= %d when include_raw_request or include_results is set without task_ids", maxExpandedTaskPageSize)
+	}
+	return pageSize, nil
+}
+
+func taskQueryOffset(pageToken string) (int, error) {
+	if pageToken == "" {
+		return 0, nil
+	}
+	offset, err := strconv.Atoi(pageToken)
+	if err != nil || offset < 0 {
+		return 0, status.Error(codes.InvalidArgument, "invalid page_token")
+	}
+	return offset, nil
+}
+
+func buildTaskQuery(req *clientpb.TaskQuery) *db.TaskQuery {
+	query := db.NewTaskQuery().WhereSessionID(req.GetSessionId())
+	if len(req.GetTaskIds()) > 0 {
+		query = query.WhereSeqs(req.GetTaskIds())
+	}
+	return query
+}
+
+func queryTaskModels(req *clientpb.TaskQuery, pageSize, offset int) (db.Tasks, bool, error) {
+	modelTasks, err := buildTaskQuery(req).
+		OrderBy("created DESC").
+		OrderBy("seq DESC").
+		Limit(pageSize + 1).
+		Offset(offset).
+		Find()
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(modelTasks) > pageSize
+	if hasMore {
+		modelTasks = modelTasks[:pageSize]
+	}
+	return modelTasks, hasMore, nil
+}
+
+func buildTaskDetail(req *clientpb.TaskQuery, modelTask *dbmodels.Task) (*clientpb.TaskDetail, error) {
+	task := modelTask.ToProtobuf()
+	detail := &clientpb.TaskDetail{Task: task}
+
+	var rawRequest *implantpb.Spite
+	needRequest := req.GetIncludeRawRequest() || (req.GetIncludeRequestSummary() && task.GetRequestSummary() == "")
+	if needRequest {
+		spite, size, sha256Hex, hasRequest, err := readTaskRequestFromDisk(modelTask.SessionID, modelTask.Seq)
+		if err != nil {
+			return nil, err
+		}
+		if hasRequest {
+			rawRequest = spite
+			task.HasRequest = true
+			task.RequestSize = size
+			task.RequestSha256 = sha256Hex
+			if req.GetIncludeRequestSummary() && task.RequestSummary == "" {
+				summary, err := core.BuildTaskRequestSummaryJSON(spite)
+				if err != nil {
+					return nil, err
+				}
+				task.CommandSummary = core.BuildTaskCommandSummary(spite)
+				task.RequestSummary = summary
+			}
+		}
+	}
+
+	if !req.GetIncludeRequestSummary() {
+		task.RequestSummary = ""
+	}
+	if req.GetIncludeRawRequest() {
+		detail.RawRequest = rawRequest
+	}
+	if req.GetIncludeResults() {
+		entries, err := readTaskSpitesFromDisk(modelTask.SessionID, modelTask.Seq)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			detail.Results = append(detail.Results, entry.Spite)
+		}
+	}
+
+	return detail, nil
 }
 
 func getTaskContextFromDisk(sess *core.Session, task *core.Task, index int32) (*clientpb.TaskContext, error) {
@@ -246,6 +378,54 @@ func (rpc *Server) GetTasks(ctx context.Context, req *clientpb.TaskRequest) (*cl
 		}
 		return sess.Tasks.ToProtobuf(), nil
 	}
+}
+
+func (rpc *Server) QueryTasks(ctx context.Context, req *clientpb.TaskQuery) (*clientpb.TaskDetails, error) {
+	if req == nil {
+		return nil, types.ErrMissingSessionRequestField
+	}
+	if req.SessionId == "" {
+		return nil, types.ErrInvalidSessionID
+	}
+
+	pageSize, err := taskQueryPageSize(req)
+	if err != nil {
+		return nil, err
+	}
+	offset, err := taskQueryOffset(req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+
+	modelTasks, hasMore, err := queryTaskModels(req, pageSize, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &clientpb.TaskDetails{
+		Tasks: make([]*clientpb.TaskDetail, 0, len(modelTasks)),
+	}
+	for _, modelTask := range modelTasks {
+		if modelTask == nil {
+			continue
+		}
+		detail, err := buildTaskDetail(req, modelTask)
+		if err != nil {
+			return nil, err
+		}
+		resp.Tasks = append(resp.Tasks, detail)
+	}
+	if hasMore {
+		resp.NextPageToken = strconv.Itoa(offset + len(resp.Tasks))
+	}
+	if req.GetIncludeTotalCount() {
+		total, err := buildTaskQuery(req).Count()
+		if err != nil {
+			return nil, err
+		}
+		resp.TotalCount = total
+	}
+	return resp, nil
 }
 
 // tryGetContent tries to find task content from cache first, then from disk.

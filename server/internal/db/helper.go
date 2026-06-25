@@ -1034,6 +1034,18 @@ func (q *TaskQuery) WhereSeq(seq uint32) *TaskQuery {
 	return q
 }
 
+// WhereSeqs filters by task sequence numbers.
+func (q *TaskQuery) WhereSeqs(seqs []uint32) *TaskQuery {
+	q.db = q.db.Where("seq IN ?", seqs)
+	return q
+}
+
+// Offset sets the offset for task results.
+func (q *TaskQuery) Offset(offset int) *TaskQuery {
+	q.db = q.db.Offset(offset)
+	return q
+}
+
 // Delete deletes matching tasks
 func (q *TaskQuery) Delete() error {
 	return q.db.Delete(&models.Task{}).Error

@@ -364,6 +364,50 @@ func TestAddAndGetTask(t *testing.T) {
 	}
 }
 
+func TestAddTaskUpsertPreservesRequestMetadata(t *testing.T) {
+	initTestDB(t)
+
+	Session().Create(&models.Session{SessionID: "task-summary-sess"})
+	if err := AddTask(&clientpb.Task{
+		SessionId:      "task-summary-sess",
+		TaskId:         1,
+		Type:           "exec",
+		CommandSummary: "exec whoami",
+		RequestSummary: `{"command":"exec whoami"}`,
+		RequestSize:    12,
+		RequestSha256:  "abc123",
+		HasRequest:     true,
+	}); err != nil {
+		t.Fatalf("initial AddTask failed: %v", err)
+	}
+	if err := AddTask(&clientpb.Task{
+		SessionId: "task-summary-sess",
+		TaskId:    1,
+		Type:      "exec",
+		Cur:       1,
+		Total:     1,
+	}); err != nil {
+		t.Fatalf("upsert AddTask failed: %v", err)
+	}
+
+	found, err := GetTask("task-summary-sess-1")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if found.CommandSummary != "exec whoami" {
+		t.Fatalf("CommandSummary = %q, want preserved metadata", found.CommandSummary)
+	}
+	if found.RequestSummary != `{"command":"exec whoami"}` {
+		t.Fatalf("RequestSummary = %q, want preserved metadata", found.RequestSummary)
+	}
+	if found.RequestSize != 12 || found.RequestSHA256 != "abc123" || !found.HasRequest {
+		t.Fatalf("request metadata = size=%d sha256=%q has=%t, want preserved", found.RequestSize, found.RequestSHA256, found.HasRequest)
+	}
+	if found.Cur != 1 || found.Total != 1 {
+		t.Fatalf("progress = %d/%d, want updated 1/1", found.Cur, found.Total)
+	}
+}
+
 func TestGetTaskBySessionAndSeq(t *testing.T) {
 	initTestDB(t)
 

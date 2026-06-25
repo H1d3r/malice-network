@@ -29,6 +29,20 @@ func Commands(con *core.Console) []*cobra.Command {
 		f.BoolP("all", "a", false, "show all tasks")
 	})
 
+	taskInfoCmd := &cobra.Command{
+		Use:   "info [task_id]",
+		Short: "Show task request metadata",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return TaskInfoCmd(cmd, con)
+		},
+	}
+	taskInfoCmd.Flags().Bool("raw", false, "include raw task request")
+	taskInfoCmd.Flags().Bool("results", false, "include task results")
+	taskInfoCmd.Flags().Bool("json", false, "output as JSON")
+	common.BindArgCompletions(taskInfoCmd, nil, common.SessionTaskCompleter(con))
+	taskCmd.AddCommand(taskInfoCmd)
+
 	fetchTaskCmd := &cobra.Command{
 		Use:   consts.CommandTaskFetch,
 		Short: "Fetch the details of a task",

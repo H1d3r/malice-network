@@ -7,20 +7,25 @@ import (
 )
 
 type Task struct {
-	ID          string    `gorm:"primaryKey;->;<-:create;"`
-	Created     time.Time `gorm:"->;<-:create;"`
-	Deadline    time.Time
-	CallBy      string
-	Seq         uint32
-	Type        string
-	SessionID   string
-	Session     Session `gorm:"foreignKey:SessionID;references:SessionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
-	Cur         int
-	Total       int
-	Description string
-	ClientName  string
-	FinishTime  time.Time
-	LastTime    time.Time
+	ID             string    `gorm:"primaryKey;->;<-:create;"`
+	Created        time.Time `gorm:"->;<-:create;"`
+	Deadline       time.Time
+	CallBy         string
+	Seq            uint32
+	Type           string
+	SessionID      string
+	Session        Session `gorm:"foreignKey:SessionID;references:SessionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+	Cur            int
+	Total          int
+	Description    string
+	ClientName     string
+	FinishTime     time.Time
+	LastTime       time.Time
+	CommandSummary string
+	RequestSummary string `gorm:"type:text"`
+	RequestSize    int64
+	RequestSHA256  string `gorm:"column:request_sha256"`
+	HasRequest     bool
 }
 
 func (t *Task) BeforeCreate(tx *gorm.DB) (err error) {
@@ -53,16 +58,21 @@ func (t *Task) ToProtobuf() *clientpb.Task {
 		return nil
 	}
 	return &clientpb.Task{
-		TaskId:      uint32(t.Seq),
-		Type:        t.Type,
-		SessionId:   t.SessionID,
-		Cur:         int32(t.Cur),
-		Total:       int32(t.Total),
-		Description: t.Description,
-		Callby:      t.ClientName,
-		Timeout:     time.Now().After(t.Deadline),
-		Finished:    !t.FinishTime.IsZero() || t.Cur == t.Total,
-		CreatedAt:   t.Created.Unix(),
-		FinishedAt:  t.FinishTime.Unix(),
+		TaskId:         uint32(t.Seq),
+		Type:           t.Type,
+		SessionId:      t.SessionID,
+		Cur:            int32(t.Cur),
+		Total:          int32(t.Total),
+		Description:    t.Description,
+		Callby:         t.ClientName,
+		Timeout:        time.Now().After(t.Deadline),
+		Finished:       !t.FinishTime.IsZero() || t.Cur == t.Total,
+		CreatedAt:      t.Created.Unix(),
+		FinishedAt:     t.FinishTime.Unix(),
+		CommandSummary: t.CommandSummary,
+		RequestSummary: t.RequestSummary,
+		RequestSize:    t.RequestSize,
+		RequestSha256:  t.RequestSHA256,
+		HasRequest:     t.HasRequest,
 	}
 }

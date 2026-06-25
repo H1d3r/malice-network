@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/chainreactors/IoM-go/consts"
@@ -59,7 +61,52 @@ var genericWriteTaskRequest = func(task *core.Task, spite *implantpb.Spite) erro
 
 // taskRequestPath returns the filesystem path where a task's request spite is cached.
 func taskRequestPath(task *core.Task) (string, error) {
-	return fileutils.SafeJoin(configs.ContextPath, filepath.Join(task.SessionId, consts.RequestPath, strconv.Itoa(int(task.Id))))
+	return taskRequestPathFor(task.SessionId, task.Id)
+}
+
+func taskRequestPathFor(sessionID string, taskID uint32) (string, error) {
+	return fileutils.SafeJoin(configs.ContextPath, filepath.Join(sessionID, consts.RequestPath, strconv.Itoa(int(taskID))))
+}
+
+type taskRequestMetadata struct {
+	commandSummary string
+	requestSummary string
+	requestSize    int64
+	requestSHA256  string
+	hasRequest     bool
+}
+
+func buildTaskRequestMetadata(spite *implantpb.Spite) (*taskRequestMetadata, error) {
+	if spite == nil {
+		return &taskRequestMetadata{}, nil
+	}
+	spiteBytes, err := proto.Marshal(spite)
+	if err != nil {
+		return nil, err
+	}
+	summary, err := core.BuildTaskRequestSummaryJSON(spite)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(spiteBytes)
+	return &taskRequestMetadata{
+		commandSummary: core.BuildTaskCommandSummary(spite),
+		requestSummary: summary,
+		requestSize:    int64(len(spiteBytes)),
+		requestSHA256:  hex.EncodeToString(sum[:]),
+		hasRequest:     true,
+	}, nil
+}
+
+func (m *taskRequestMetadata) apply(task *clientpb.Task) {
+	if m == nil || task == nil {
+		return
+	}
+	task.CommandSummary = m.commandSummary
+	task.RequestSummary = m.requestSummary
+	task.RequestSize = m.requestSize
+	task.RequestSha256 = m.requestSHA256
+	task.HasRequest = m.hasRequest
 }
 
 func newGenericRequest(ctx context.Context, msg proto.Message, opts ...int) (*GenericRequest, error) {
@@ -112,7 +159,14 @@ func (r *GenericRequest) InitSpite(ctx context.Context) (*implantpb.Spite, error
 	spite.TaskId = r.Task.Id
 	clientName := getClientName(ctx)
 	r.Task.CallBy = clientName
-	if err = genericAddTask(r.Task.ToProtobuf()); err != nil {
+	metadata, err := buildTaskRequestMetadata(spite)
+	if err != nil {
+		r.Session.Tasks.Remove(r.Task.Id)
+		return nil, err
+	}
+	taskPB := r.Task.ToProtobuf()
+	metadata.apply(taskPB)
+	if err = genericAddTask(taskPB); err != nil {
 		r.Session.Tasks.Remove(r.Task.Id)
 		return nil, err
 	}

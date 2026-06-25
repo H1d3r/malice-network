@@ -1,9 +1,12 @@
 package tasks
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -13,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func GetTasksCmd(cmd *cobra.Command, con *core.Console) error {
@@ -174,6 +179,122 @@ func findTaskInList(con *core.Console, taskId uint32) *clientpb.Task {
 		}
 	}
 	return nil
+}
+
+func TaskInfoCmd(cmd *cobra.Command, con *core.Console) error {
+	session := con.GetInteractive()
+	if session == nil {
+		return fmt.Errorf("session is nil")
+	}
+
+	taskID, err := strconv.ParseUint(cmd.Flags().Arg(0), 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid task ID %q: %w", cmd.Flags().Arg(0), err)
+	}
+	includeRaw, _ := cmd.Flags().GetBool("raw")
+	includeResults, _ := cmd.Flags().GetBool("results")
+	jsonOutput, _ := cmd.Flags().GetBool("json")
+
+	details, err := con.Rpc.QueryTasks(session.Context(), &clientpb.TaskQuery{
+		SessionId:             session.SessionId,
+		TaskIds:               []uint32{uint32(taskID)},
+		PageSize:              1,
+		IncludeRequestSummary: true,
+		IncludeRawRequest:     includeRaw,
+		IncludeResults:        includeResults,
+	})
+	if err != nil {
+		return err
+	}
+	if len(details.GetTasks()) == 0 {
+		return fmt.Errorf("task %d not found", taskID)
+	}
+
+	detail := details.GetTasks()[0]
+	if jsonOutput {
+		rendered, err := renderTaskDetailJSON(detail)
+		if err != nil {
+			return err
+		}
+		con.Log.Console(rendered + "\n")
+		return nil
+	}
+
+	return printTaskDetailInfo(detail, con, includeRaw, includeResults)
+}
+
+func printTaskDetailInfo(detail *clientpb.TaskDetail, con *core.Console, includeRaw, includeResults bool) error {
+	task := detail.GetTask()
+	if task == nil {
+		return fmt.Errorf("task detail is missing task metadata")
+	}
+
+	lines := []string{
+		fmt.Sprintf("Task: %s/%d", task.GetSessionId(), task.GetTaskId()),
+		fmt.Sprintf("Type: %s", task.GetType()),
+		fmt.Sprintf("Command: %s", task.GetCommandSummary()),
+		fmt.Sprintf("Request: size=%d sha256=%s has=%t", task.GetRequestSize(), task.GetRequestSha256(), task.GetHasRequest()),
+	}
+	if task.GetRequestSummary() != "" {
+		lines = append(lines, "Request Summary:")
+		lines = append(lines, indentText(formatJSONString(task.GetRequestSummary()), "  "))
+	}
+	if includeRaw && detail.GetRawRequest() != nil {
+		rawJSON, err := renderProtoJSON(detail.GetRawRequest())
+		if err != nil {
+			return err
+		}
+		lines = append(lines, "Raw Request:")
+		lines = append(lines, indentText(rawJSON, "  "))
+	}
+	if includeResults {
+		lines = append(lines, fmt.Sprintf("Results: %d", len(detail.GetResults())))
+		for i, result := range detail.GetResults() {
+			resultJSON, err := renderProtoJSON(result)
+			if err != nil {
+				return err
+			}
+			lines = append(lines, fmt.Sprintf("Result %d:", i))
+			lines = append(lines, indentText(resultJSON, "  "))
+		}
+	}
+
+	con.Log.Console(strings.Join(lines, "\n") + "\n")
+	return nil
+}
+
+func renderTaskDetailJSON(detail *clientpb.TaskDetail) (string, error) {
+	return renderProtoJSON(detail)
+}
+
+func renderProtoJSON(message proto.Message) (string, error) {
+	data, err := protojson.MarshalOptions{
+		Multiline: true,
+		Indent:    "  ",
+	}.Marshal(message)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func formatJSONString(value string) string {
+	var formatted bytes.Buffer
+	if err := json.Indent(&formatted, []byte(value), "", "  "); err != nil {
+		return value
+	}
+	return formatted.String()
+}
+
+func indentText(value, prefix string) string {
+	if value == "" {
+		return ""
+	}
+	lines := strings.Split(value, "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 //func TasksCmd(ctx *grumble.Context, con *console.Console) {

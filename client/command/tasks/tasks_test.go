@@ -38,6 +38,45 @@ func TestTaskCommandConformance(t *testing.T) {
 			},
 		},
 		{
+			Name: "tasks info queries task detail summary",
+			Argv: []string{consts.CommandTasks, "info", "7", "--raw", "--results", "--json"},
+			Setup: func(t testing.TB, h *testsupport.Harness) {
+				h.Recorder.OnTaskDetails("QueryTasks", func(ctx context.Context, request any) (*clientpb.TaskDetails, error) {
+					return &clientpb.TaskDetails{
+						Tasks: []*clientpb.TaskDetail{
+							{Task: &clientpb.Task{TaskId: 7, SessionId: h.Session.SessionId, Type: consts.ModuleSleep}},
+						},
+					}, nil
+				})
+			},
+			Assert: func(t testing.TB, h *testsupport.Harness, err error) {
+				req, md := testsupport.MustSingleCall[*clientpb.TaskQuery](t, h, "QueryTasks")
+				if req.SessionId != h.Session.SessionId {
+					t.Fatalf("tasks info session id = %q, want %q", req.SessionId, h.Session.SessionId)
+				}
+				if len(req.TaskIds) != 1 || req.TaskIds[0] != 7 {
+					t.Fatalf("tasks info ids = %#v, want [7]", req.TaskIds)
+				}
+				if !req.IncludeRequestSummary || !req.IncludeRawRequest || !req.IncludeResults {
+					t.Fatalf("tasks info query flags = %#v, want summary/raw/results", req)
+				}
+				if req.PageSize != 1 {
+					t.Fatalf("tasks info page size = %d, want 1", req.PageSize)
+				}
+				testsupport.RequireNoSessionEvents(t, h)
+				testsupport.RequireCallee(t, md, consts.CalleeCMD)
+			},
+		},
+		{
+			Name:    "tasks info rejects invalid ids before rpc",
+			Argv:    []string{consts.CommandTasks, "info", "not-a-number"},
+			WantErr: "invalid task ID",
+			Assert: func(t testing.TB, h *testsupport.Harness, err error) {
+				testsupport.RequireNoPrimaryCalls(t, h)
+				testsupport.RequireNoSessionEvents(t, h)
+			},
+		},
+		{
 			Name: "list_task sends implant task list request",
 			Argv: []string{consts.ModuleListTask},
 			Assert: func(t testing.TB, h *testsupport.Harness, err error) {

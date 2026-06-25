@@ -213,6 +213,22 @@ tasks
   -a, --all   show all tasks
 ```
 
+#### tasks info
+
+Show task request metadata.
+
+```
+tasks info [task_id] [flags]
+```
+
+**Options**
+
+```
+      --json      output as JSON
+      --raw       include raw task request
+      --results   include task results
+```
+
 ### module
 
 Module management

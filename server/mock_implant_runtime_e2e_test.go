@@ -404,6 +404,36 @@ func TestMockImplantSingleResponseTaskStateE2E(t *testing.T) {
 	if !dbTask.FinishTime.IsZero() {
 		t.Fatalf("db task finish time before response = %v, want zero", dbTask.FinishTime)
 	}
+	if dbTask.CommandSummary != consts.ModulePing {
+		t.Fatalf("db task command summary = %q, want %q", dbTask.CommandSummary, consts.ModulePing)
+	}
+	if dbTask.RequestSummary == "" {
+		t.Fatal("db task request summary should be stored")
+	}
+	if dbTask.RequestSize == 0 || dbTask.RequestSHA256 == "" || !dbTask.HasRequest {
+		t.Fatalf("db task request metadata = size=%d sha256=%q has=%t, want populated", dbTask.RequestSize, dbTask.RequestSHA256, dbTask.HasRequest)
+	}
+
+	taskDetails, err := f.rpc.QueryTasks(context.Background(), &clientpb.TaskQuery{
+		SessionId:             f.mock.SessionID,
+		TaskIds:               []uint32{task.TaskId},
+		PageSize:              1,
+		IncludeRequestSummary: true,
+		IncludeRawRequest:     true,
+	})
+	if err != nil {
+		t.Fatalf("QueryTasks failed: %v", err)
+	}
+	if len(taskDetails.GetTasks()) != 1 {
+		t.Fatalf("QueryTasks returned %d tasks, want 1", len(taskDetails.GetTasks()))
+	}
+	taskDetail := taskDetails.GetTasks()[0]
+	if taskDetail.GetTask().GetRequestSummary() == "" {
+		t.Fatal("QueryTasks task should include request summary")
+	}
+	if taskDetail.GetRawRequest().GetPing().GetNonce() != 101 {
+		t.Fatalf("QueryTasks raw request ping nonce = %d, want 101", taskDetail.GetRawRequest().GetPing().GetNonce())
+	}
 
 	tasksBeforeFinish, err := f.rpc.GetTasks(context.Background(), &clientpb.TaskRequest{SessionId: f.mock.SessionID})
 	if err != nil {

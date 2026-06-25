@@ -246,13 +246,18 @@ func GetTaskBySessionAndSeq(sessionID string, seq uint32) (*models.Task, error) 
 
 func AddTask(task *clientpb.Task) error {
 	taskModel := &models.Task{
-		ID:         task.SessionId + "-" + utils.ToString(task.TaskId),
-		Seq:        task.TaskId,
-		Type:       task.Type,
-		SessionID:  task.SessionId,
-		Cur:        int(task.Cur),
-		Total:      int(task.Total),
-		ClientName: task.Callby,
+		ID:             task.SessionId + "-" + utils.ToString(task.TaskId),
+		Seq:            task.TaskId,
+		Type:           task.Type,
+		SessionID:      task.SessionId,
+		Cur:            int(task.Cur),
+		Total:          int(task.Total),
+		ClientName:     task.Callby,
+		CommandSummary: task.CommandSummary,
+		RequestSummary: task.RequestSummary,
+		RequestSize:    task.RequestSize,
+		RequestSHA256:  task.RequestSha256,
+		HasRequest:     task.HasRequest,
 	}
 	return Session().Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},

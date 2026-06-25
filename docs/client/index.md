@@ -8,6 +8,7 @@
 
 - [快速开始](quickstart.md) - 下载、登录、首次操作
 - [命令行系统](console.md) - 上下文架构、TUI 多窗口、MCP/LocalRPC 集成
+- [任务查询](tasks.md) - 任务列表、请求摘要、raw request 与结果导出
 - [插件体系](plugin.md) - MAL / Alias / Extension / Addon / Armory 架构设计
 - [Agent 集成](agent.md) - MCP、chat、tapping、skill、schema、tool_call 机制
 
@@ -62,6 +63,7 @@ Client 的命令树通过 `BindFunc` 机制统一注册：
 - 使用 `-f/--file` 保存输出时，Client 会等待任务完成后将所有输出分片汇总写入文件
 - `-f` 适合保存完整结果，不需要额外 `--wait`
 - 命令启用静默模式或目标侧无输出时，文件可能为空
+- 使用 `tasks info <task_id>` 查看任务请求摘要；需要完整 request 或结果时显式加 `--raw`、`--results`，脚本导出可加 `--json`
 
 ### 实现位置
 

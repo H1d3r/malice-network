@@ -101,6 +101,13 @@ tasks, _ := server.Rpc.GetTasks(context.Background(), &clientpb.TaskRequest{
     SessionId: session.SessionId,
 })
 
+// 查询任务摘要；按需打开 IncludeRawRequest / IncludeResults
+details, _ := server.Rpc.QueryTasks(context.Background(), &clientpb.TaskQuery{
+    SessionId:             session.SessionId,
+    TaskIds:               []uint32{task.TaskId},
+    IncludeRequestSummary: true,
+})
+
 // 注册任务完成回调
 server.DoneCallbacks.Store(
     fmt.Sprintf("%s-%d", task.SessionId, task.TaskId),
