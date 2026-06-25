@@ -155,6 +155,14 @@ func (rpc *Server) ListArtifact(ctx context.Context, req *clientpb.Empty) (*clie
 	return modelArtifacts.ToProtobuf(), nil
 }
 
+func (rpc *Server) UpdateArtifact(ctx context.Context, req *clientpb.Artifact) (*clientpb.Artifact, error) {
+	artifact, err := db.UpdateArtifactComment(req)
+	if err != nil {
+		return nil, err
+	}
+	return artifact.ToProtobuf([]byte{}), nil
+}
+
 func (rpc *Server) FindArtifact(ctx context.Context, req *clientpb.Artifact) (*clientpb.Artifact, error) {
 	artifact, err := db.FindArtifact(req, req.Format != "null")
 	if err != nil {

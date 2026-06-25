@@ -343,6 +343,18 @@ artifact download artifact-name --format raw
     在gui上，您需要在artifact页面上点击对应的artifact行上的download按钮，即可下载artifact源文件到指定路径。
     ![image-20250817190327224752](../assets/usage/build/artifact_download.png)
 
+如果需要在 artifact 创建后修改备注，可以使用 `artifact comment`：
+
+```bash
+artifact comment artifact-name "production build"
+```
+
+传入空字符串可以清空备注：
+
+```bash
+artifact comment artifact-name ""
+```
+
 当artifact编译失败时，可以通过以下命令来查看log(目前支持查看docker，后续会加上saas）：
 
 ```bash

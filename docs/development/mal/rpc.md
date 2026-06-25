@@ -956,6 +956,13 @@ title: MAL RPC API
 - `$1` [context] 
 - `$2` [Artifact] 
 
+### UpdateArtifact
+
+**Arguments**
+
+- `$1` [context]
+- `$2` [Artifact]
+
 ### WaitTaskContent
 
 **Arguments**
@@ -990,4 +997,3 @@ title: MAL RPC API
 
 - `$1` [context] 
 - `$2` [WmiQueryRequest] 
-

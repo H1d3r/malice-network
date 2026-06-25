@@ -799,6 +799,10 @@ func (r *RecorderRPC) DownloadArtifact(ctx context.Context, in *clientpb.Artifac
 	return r.artifactResponse(ctx, "DownloadArtifact", in)
 }
 
+func (r *RecorderRPC) UpdateArtifact(ctx context.Context, in *clientpb.Artifact, opts ...grpc.CallOption) (*clientpb.Artifact, error) {
+	return r.artifactResponse(ctx, "UpdateArtifact", in)
+}
+
 func (r *RecorderRPC) taskResponse(ctx context.Context, method string, request any) (*clientpb.Task, error) {
 	r.recordPrimary(ctx, method, request)
 	if responder, ok := r.taskResponders[method]; ok {
@@ -858,8 +862,9 @@ func (r *RecorderRPC) artifactResponse(ctx context.Context, method string, reque
 	}
 	if in, ok := request.(*clientpb.Artifact); ok && in != nil {
 		return &clientpb.Artifact{
-			Name: in.Name,
-			Bin:  []byte("artifact-bin"),
+			Name:    in.Name,
+			Comment: in.Comment,
+			Bin:     []byte("artifact-bin"),
 		}, nil
 	}
 	return &clientpb.Artifact{Name: method, Bin: []byte("artifact-bin")}, nil

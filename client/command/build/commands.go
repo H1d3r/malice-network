@@ -517,7 +517,25 @@ artifact delete artifact_name
 	common.BindArgCompletions(deleteCommand, nil,
 		common.ArtifactCompleter(con))
 
-	artifactCmd.AddCommand(listArtifactCmd, showArtifactCmd, downloadCmd, uploadCmd, deleteCommand)
+	commentCommand := &cobra.Command{
+		Use:   "comment [artifact_name] [comment]",
+		Short: "Update an artifact comment",
+		Long:  "Update the comment stored with an existing artifact. Pass an empty quoted string to clear the comment.",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return UpdateArtifactCommentCmd(cmd, con)
+		},
+		Example: `~~~
+artifact comment artifact_name "production build"
+
+artifact comment artifact_name ""
+~~~`,
+	}
+	common.BindArgCompletions(commentCommand, nil,
+		common.ArtifactCompleter(con),
+		carapace.ActionValues().Usage("artifact comment"))
+
+	artifactCmd.AddCommand(listArtifactCmd, showArtifactCmd, downloadCmd, uploadCmd, commentCommand, deleteCommand)
 
 	return []*cobra.Command{profileCmd, buildCmd, artifactCmd}
 }

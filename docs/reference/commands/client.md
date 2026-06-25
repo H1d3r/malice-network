@@ -2218,11 +2218,36 @@ Manage build output files on the server. Use the **list** command to view all av
 
 **SEE ALSO**
 
+* [artifact comment](#artifact-comment)	 - Update an artifact comment
 * [artifact delete](#artifact-delete)	 - Delete an artifact from the server
 * [artifact download](#artifact-download)	 - Download a build output file from the server
 * [artifact list](#artifact-list)	 - List build artifacts on the server
 * [artifact show](#artifact-show)	 - Show artifact metadata and profile
 * [artifact upload](#artifact-upload)	 - Upload a build output file to the server
+
+#### artifact comment
+
+Update an artifact comment
+
+**Description**
+
+Update the comment stored with an existing artifact. Pass an empty quoted string to clear the comment.
+
+```
+artifact comment [artifact_name] [comment]
+```
+
+**Examples**
+
+~~~
+artifact comment artifact_name "production build"
+
+artifact comment artifact_name ""
+~~~
+
+**SEE ALSO**
+
+* [artifact](#artifact)	 - Manage build artifacts
 
 #### artifact delete
 

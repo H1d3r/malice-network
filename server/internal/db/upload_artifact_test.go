@@ -131,3 +131,75 @@ func TestSaveUploadedArtifact_FindableByStatus(t *testing.T) {
 		t.Fatal("uploaded artifact not found with status=completed filter")
 	}
 }
+
+func TestUpdateArtifactCommentByName(t *testing.T) {
+	initTestDB(t)
+
+	artifact, err := SaveUploadedArtifact(&clientpb.Artifact{
+		Name:    "comment-by-name",
+		Type:    "beacon",
+		Comment: "old",
+	})
+	if err != nil {
+		t.Fatalf("SaveUploadedArtifact: %v", err)
+	}
+
+	updated, err := UpdateArtifactComment(&clientpb.Artifact{
+		Name:    artifact.Name,
+		Comment: "new comment",
+	})
+	if err != nil {
+		t.Fatalf("UpdateArtifactComment: %v", err)
+	}
+	if updated.Comment != "new comment" {
+		t.Fatalf("updated comment = %q, want %q", updated.Comment, "new comment")
+	}
+
+	found, err := GetArtifactByName(artifact.Name)
+	if err != nil {
+		t.Fatalf("GetArtifactByName: %v", err)
+	}
+	if found.Comment != "new comment" {
+		t.Fatalf("stored comment = %q, want %q", found.Comment, "new comment")
+	}
+}
+
+func TestUpdateArtifactCommentByIDAllowsEmpty(t *testing.T) {
+	initTestDB(t)
+
+	artifact, err := SaveUploadedArtifact(&clientpb.Artifact{
+		Name:    "comment-by-id",
+		Type:    "beacon",
+		Comment: "old",
+	})
+	if err != nil {
+		t.Fatalf("SaveUploadedArtifact: %v", err)
+	}
+
+	updated, err := UpdateArtifactComment(&clientpb.Artifact{
+		Id:      artifact.ID,
+		Comment: "",
+	})
+	if err != nil {
+		t.Fatalf("UpdateArtifactComment: %v", err)
+	}
+	if updated.Comment != "" {
+		t.Fatalf("updated comment = %q, want empty", updated.Comment)
+	}
+
+	found, err := GetArtifactByName(artifact.Name)
+	if err != nil {
+		t.Fatalf("GetArtifactByName: %v", err)
+	}
+	if found.Comment != "" {
+		t.Fatalf("stored comment = %q, want empty", found.Comment)
+	}
+}
+
+func TestUpdateArtifactCommentRejectsMissingSelector(t *testing.T) {
+	initTestDB(t)
+
+	if _, err := UpdateArtifactComment(&clientpb.Artifact{Comment: "new"}); err == nil {
+		t.Fatal("expected missing selector error, got nil")
+	}
+}

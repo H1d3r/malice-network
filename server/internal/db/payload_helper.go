@@ -722,6 +722,34 @@ func SaveUploadedArtifact(req *clientpb.Artifact) (*models.Artifact, error) {
 	return artifact, nil
 }
 
+func UpdateArtifactComment(req *clientpb.Artifact) (*models.Artifact, error) {
+	if req == nil {
+		return nil, fmt.Errorf("artifact request is nil")
+	}
+	name := strings.TrimSpace(req.Name)
+	var query *ArtifactQuery
+	switch {
+	case req.Id != 0:
+		query = NewArtifactQuery().WhereID(req.Id)
+	case name != "":
+		query = NewArtifactQuery().WhereName(name)
+	default:
+		return nil, fmt.Errorf("artifact id or name is required")
+	}
+
+	artifact, err := query.First()
+	if err != nil {
+		return nil, err
+	}
+	if err := Session().Model(artifact).Select("comment").Updates(&models.Artifact{
+		Comment: req.Comment,
+	}).Error; err != nil {
+		return nil, err
+	}
+	artifact.Comment = req.Comment
+	return artifact, nil
+}
+
 // DeleteArtifactRow removes an artifact row by primary key. Used by upload
 // rollback when the on-disk write fails after the DB record was created.
 func DeleteArtifactRow(id uint32) error {

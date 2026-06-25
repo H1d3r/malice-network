@@ -287,6 +287,17 @@ func DeleteArtifactCmd(cmd *cobra.Command, con *core.Console) error {
 	return nil
 }
 
+func UpdateArtifactCommentCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	comment := cmd.Flags().Arg(1)
+	artifact, err := UpdateArtifactComment(con, name, comment)
+	if err != nil {
+		return err
+	}
+	con.Log.Infof("update artifact %s comment success\n", artifact.Name)
+	return nil
+}
+
 // MaxArtifactUploadSize mirrors the server-side cap. Stat'ing first lets us
 // reject huge files (e.g. wrong-path uploads of an ISO) before slurping them
 // into memory and shipping them over the wire.
@@ -342,4 +353,11 @@ func DeleteArtifact(con *core.Console, name string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func UpdateArtifactComment(con *core.Console, name, comment string) (*clientpb.Artifact, error) {
+	return con.Rpc.UpdateArtifact(con.Context(), &clientpb.Artifact{
+		Name:    name,
+		Comment: comment,
+	})
 }

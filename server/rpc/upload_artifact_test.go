@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
+	"github.com/chainreactors/malice-network/server/internal/db"
 )
 
 func TestUploadArtifact_RejectsEmptyBin(t *testing.T) {
@@ -54,5 +55,50 @@ func TestUploadArtifact_RejectsOversizedBin(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exceeds limit") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestUpdateArtifact_UpdatesComment(t *testing.T) {
+	newRPCTestEnv(t)
+	srv := &Server{}
+
+	artifact, err := db.SaveUploadedArtifact(&clientpb.Artifact{
+		Name:    "rpc-comment",
+		Type:    "beacon",
+		Comment: "old",
+	})
+	if err != nil {
+		t.Fatalf("SaveUploadedArtifact: %v", err)
+	}
+
+	updated, err := srv.UpdateArtifact(context.Background(), &clientpb.Artifact{
+		Id:      artifact.ID,
+		Comment: "new rpc comment",
+	})
+	if err != nil {
+		t.Fatalf("UpdateArtifact: %v", err)
+	}
+	if updated.Comment != "new rpc comment" {
+		t.Fatalf("updated comment = %q, want %q", updated.Comment, "new rpc comment")
+	}
+
+	found, err := db.GetArtifactByName(artifact.Name)
+	if err != nil {
+		t.Fatalf("GetArtifactByName: %v", err)
+	}
+	if found.Comment != "new rpc comment" {
+		t.Fatalf("stored comment = %q, want %q", found.Comment, "new rpc comment")
+	}
+}
+
+func TestUpdateArtifact_RejectsMissingSelector(t *testing.T) {
+	newRPCTestEnv(t)
+	srv := &Server{}
+
+	_, err := srv.UpdateArtifact(context.Background(), &clientpb.Artifact{
+		Comment: "new",
+	})
+	if err == nil {
+		t.Fatal("expected missing selector error, got nil")
 	}
 }

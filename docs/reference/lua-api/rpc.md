@@ -1012,6 +1012,13 @@ title: RPC
 - `$1` [context] 
 - `$2` [Artifact] 
 
+### UpdateArtifact
+
+**Arguments**
+
+- `$1` [context]
+- `$2` [Artifact]
+
 ### WaitTaskContent
 
 **Arguments**
@@ -1046,4 +1053,3 @@ title: RPC
 
 - `$1` [context] 
 - `$2` [WmiQueryRequest] 
-
