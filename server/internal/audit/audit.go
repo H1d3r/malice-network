@@ -13,7 +13,15 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 )
+
+type taskLogFile struct {
+	Name        string
+	TaskID      string
+	ResultIndex int
+}
 
 func AuditTaskLog(sessionID string) (*clientpb.Audits, error) {
 	taskDir, err := fileutils.SafeJoin(configs.ContextPath, filepath.Join(sessionID, consts.TaskPath))
@@ -35,6 +43,7 @@ func AuditTaskLog(sessionID string) (*clientpb.Audits, error) {
 	if err != nil {
 		return nil, err
 	}
+	taskFiles := make([]taskLogFile, 0, len(files))
 	for _, file := range files {
 		if file.IsDir() {
 			continue
@@ -43,13 +52,35 @@ func AuditTaskLog(sessionID string) (*clientpb.Audits, error) {
 		if matches == nil {
 			continue
 		}
-		taskID := matches[1]
+		resultIndex, err := strconv.Atoi(matches[2])
+		if err != nil {
+			continue
+		}
+		taskFiles = append(taskFiles, taskLogFile{
+			Name:        file.Name(),
+			TaskID:      matches[1],
+			ResultIndex: resultIndex,
+		})
+	}
+	sort.Slice(taskFiles, func(i, j int) bool {
+		left, errLeft := strconv.Atoi(taskFiles[i].TaskID)
+		right, errRight := strconv.Atoi(taskFiles[j].TaskID)
+		if errLeft == nil && errRight == nil && left != right {
+			return left < right
+		}
+		if taskFiles[i].TaskID != taskFiles[j].TaskID {
+			return taskFiles[i].TaskID < taskFiles[j].TaskID
+		}
+		return taskFiles[i].ResultIndex < taskFiles[j].ResultIndex
+	})
+	for _, file := range taskFiles {
+		taskID := file.TaskID
 		taskKey := sessionID + "-" + taskID
 		task, err := db.GetTask(taskKey)
 		if err != nil || task == nil {
 			continue
 		}
-		content, err := os.ReadFile(filepath.Join(taskDir, file.Name()))
+		content, err := os.ReadFile(filepath.Join(taskDir, file.Name))
 		if err != nil {
 			logs.Log.Errorf("Error reading file: %s", err)
 			continue
@@ -66,23 +97,25 @@ func AuditTaskLog(sessionID string) (*clientpb.Audits, error) {
 				Session: session.ToProtobuf(),
 				Spite:   spite,
 			},
-			Command:  task.Description,
-			Created:  task.Created.Format("2006-01-02 15:04:05"),
-			Finished: task.FinishTime.Format("2006-01-02 15:04:05"),
-			Lasted:   task.LastTime.Format("2006-01-02 15:04:05"),
+			Command:     task.Description,
+			Created:     task.Created.Format("2006-01-02 15:04:05"),
+			Finished:    task.FinishTime.Format("2006-01-02 15:04:05"),
+			Lasted:      task.LastTime.Format("2006-01-02 15:04:05"),
+			ResultIndex: int32(file.ResultIndex),
 		}
 		if auditLevel := config.Int(consts.ConfigAuditLevel); auditLevel > 1 {
 			requestData, err := os.ReadFile(filepath.Join(requestDir, taskID))
 			if err != nil {
 				logs.Log.Errorf("Error reading request file: %s", err)
+			} else {
+				request := &implantpb.Spite{}
+				err = proto.Unmarshal(requestData, request)
+				if err != nil {
+					logs.Log.Errorf("Error unmarshalling protobuf: %s", err)
+				} else {
+					audit.Request = request
+				}
 			}
-			request := &implantpb.Spite{}
-			err = proto.Unmarshal(requestData, request)
-			if err != nil {
-				logs.Log.Errorf("Error unmarshalling protobuf: %s", err)
-				continue
-			}
-			audit.Request = request
 		}
 
 		audits.Audit = append(audits.Audit, audit)

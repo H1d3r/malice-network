@@ -117,14 +117,14 @@ Server 重启时自动恢复运行时状态：
 
 | 级别 | 记录内容 |
 |------|---------|
-| 1 | 任务执行结果（Task + Spite） |
-| > 1 | 额外记录原始请求（requests 目录） |
+| 1 | Task 元数据和任务执行结果 `Spite` |
+| > 1 | 额外导出原始 request `Spite` |
 
 ### 审计数据来源
 
-- **数据库** ：Task 元数据（ID、时间、描述）
-- **文件系统** ：`contexts/<sessionID>/tasks/` 下的 protobuf 文件
-- **格式** ：每个审计条目包含 Task 上下文、命令内容、请求/响应、时间戳
+- **数据库** ：Task 元数据（ID、类型、时间、描述、request 摘要、request hash）
+- **文件系统** ：`context/<sessionID>/task/` 下的 response protobuf 文件，以及 `context/<sessionID>/request/` 下的 request cache
+- **格式** ：每个审计条目包含 Task 上下文、命令内容、请求/响应、时间戳、结果索引和渲染后的 task result
 
 ### 日志轮转
 

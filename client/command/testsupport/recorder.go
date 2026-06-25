@@ -40,6 +40,7 @@ type RecorderRPC struct {
 	taskContextsResponders    map[string]func(context.Context, any) (*clientpb.TaskContexts, error)
 	tasksResponders           map[string]func(context.Context, any) (*clientpb.Tasks, error)
 	taskDetailsResponders     map[string]func(context.Context, any) (*clientpb.TaskDetails, error)
+	auditsResponders          map[string]func(context.Context, any) (*clientpb.Audits, error)
 	sessionResponders         map[string]func(context.Context, any) (*clientpb.Session, error)
 	basicResponders           map[string]func(context.Context, any) (*clientpb.Basic, error)
 	listenersResponders       map[string]func(context.Context, any) (*clientpb.Listeners, error)
@@ -67,6 +68,7 @@ func NewRecorderRPC() *RecorderRPC {
 		taskContextsResponders:    map[string]func(context.Context, any) (*clientpb.TaskContexts, error){},
 		tasksResponders:           map[string]func(context.Context, any) (*clientpb.Tasks, error){},
 		taskDetailsResponders:     map[string]func(context.Context, any) (*clientpb.TaskDetails, error){},
+		auditsResponders:          map[string]func(context.Context, any) (*clientpb.Audits, error){},
 		sessionResponders:         map[string]func(context.Context, any) (*clientpb.Session, error){},
 		basicResponders:           map[string]func(context.Context, any) (*clientpb.Basic, error){},
 		listenersResponders:       map[string]func(context.Context, any) (*clientpb.Listeners, error){},
@@ -148,6 +150,10 @@ func (r *RecorderRPC) OnTasks(method string, fn func(context.Context, any) (*cli
 
 func (r *RecorderRPC) OnTaskDetails(method string, fn func(context.Context, any) (*clientpb.TaskDetails, error)) {
 	r.taskDetailsResponders[method] = fn
+}
+
+func (r *RecorderRPC) OnAudits(method string, fn func(context.Context, any) (*clientpb.Audits, error)) {
+	r.auditsResponders[method] = fn
 }
 
 func (r *RecorderRPC) OnSession(method string, fn func(context.Context, any) (*clientpb.Session, error)) {
@@ -361,6 +367,14 @@ func (r *RecorderRPC) QueryTasks(ctx context.Context, in *clientpb.TaskQuery, op
 		return responder(ctx, in)
 	}
 	return &clientpb.TaskDetails{}, nil
+}
+
+func (r *RecorderRPC) GetAudit(ctx context.Context, in *clientpb.SessionRequest, opts ...grpc.CallOption) (*clientpb.Audits, error) {
+	r.recordPrimary(ctx, "GetAudit", in)
+	if responder, ok := r.auditsResponders["GetAudit"]; ok {
+		return responder(ctx, in)
+	}
+	return &clientpb.Audits{}, nil
 }
 
 func (r *RecorderRPC) GetListeners(ctx context.Context, in *clientpb.Empty, opts ...grpc.CallOption) (*clientpb.Listeners, error) {
