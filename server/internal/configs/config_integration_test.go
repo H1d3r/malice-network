@@ -235,6 +235,9 @@ func TestFullConfigFixtureParsesAndDrivesMechanisms(t *testing.T) {
 	if contentPB.Type != "raw" || contentPB.File != webContentPath || string(contentPB.Content) != "<html>ok</html>" || contentPB.Path != "/index.html" {
 		t.Fatalf("unexpected web content protobuf: %#v", contentPB)
 	}
+	if contentPB.Name != "home" || contentPB.Comment != "fixture content" || contentPB.Auth != "none" {
+		t.Fatalf("unexpected web content metadata protobuf: %#v", contentPB)
+	}
 }
 
 func assertPipelineSlices(t *testing.T, listenerCfg *ListenerConfig) {
@@ -499,5 +502,8 @@ func fullConfigYAML(certPath, keyPath, caPath, errorPagePath, webContentPath str
 		"    content:\n" +
 		"    - file: " + webContentPath + "\n" +
 		"      path: /index.html\n" +
+		"      name: home\n" +
+		"      comment: fixture content\n" +
+		"      auth: none\n" +
 		"      type: raw\n"
 }

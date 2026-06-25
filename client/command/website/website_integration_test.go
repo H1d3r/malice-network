@@ -115,12 +115,16 @@ func TestWebContentLifecycleIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteTempFile failed: %v", err)
 	}
-	content, err := AddWebContent(clientHarness.Console, indexPath, "/index.html", "site-content", "raw", "")
+	content, err := AddWebContentWithMetadata(clientHarness.Console, indexPath, "/index.html", "site-content", "raw", "", "home", "initial page")
 	if err != nil {
 		t.Fatalf("AddWebContent failed: %v", err)
 	}
-	if _, err := h.GetWebContent(content.Id); err != nil {
+	stored, err := h.GetWebContent(content.Id)
+	if err != nil {
 		t.Fatalf("GetWebContent after add failed: %v", err)
+	}
+	if stored.Name != "home" || stored.Comment != "initial page" {
+		t.Fatalf("stored metadata = name %q comment %q, want home/initial page", stored.Name, stored.Comment)
 	}
 	testsupport.WaitForCondition(t, 5*time.Second, func() bool {
 		pipeline, ok := clientHarness.Console.Pipelines["site-content"]
@@ -145,6 +149,9 @@ func TestWebContentLifecycleIntegration(t *testing.T) {
 	if updated.Size != uint64(len("<h1>updated</h1>")) {
 		t.Fatalf("updated content size = %d, want %d", updated.Size, len("<h1>updated</h1>"))
 	}
+	if updated.Name != "home" || updated.Comment != "initial page" {
+		t.Fatalf("updated metadata = name %q comment %q, want preserved metadata", updated.Name, updated.Comment)
+	}
 
 	body, err := h.ReadWebsiteContent("site-content", updated.Id)
 	if err != nil {
@@ -152,6 +159,19 @@ func TestWebContentLifecycleIntegration(t *testing.T) {
 	}
 	if string(body) != "<h1>updated</h1>" {
 		t.Fatalf("updated website content = %q", string(body))
+	}
+
+	updateMetaCmd := mustWebsiteSubcommand(t, mustWebsiteRoot(t, Commands(clientHarness.Console)), "update")
+	parseWebsiteArgs(t, updateMetaCmd, content.Id, "--name", "renamed-home", "--comment", "served by website")
+	if err := UpdateWebContentCmd(updateMetaCmd, clientHarness.Console); err != nil {
+		t.Fatalf("UpdateWebContentCmd metadata-only failed: %v", err)
+	}
+	metadata, err := h.GetWebContent(content.Id)
+	if err != nil {
+		t.Fatalf("GetWebContent after metadata update failed: %v", err)
+	}
+	if metadata.Name != "renamed-home" || metadata.Comment != "served by website" {
+		t.Fatalf("metadata update = name %q comment %q, want renamed-home/served by website", metadata.Name, metadata.Comment)
 	}
 
 	listContentCmd := mustWebsiteSubcommand(t, mustWebsiteRoot(t, Commands(clientHarness.Console)), "list-content")
@@ -164,6 +184,9 @@ func TestWebContentLifecycleIntegration(t *testing.T) {
 	}
 	if !strings.Contains(output, "site-content") || !strings.Contains(output, "/index.html") {
 		t.Fatalf("website content output missing expected values:\n%s", output)
+	}
+	if !strings.Contains(output, "renamed-home") || !strings.Contains(output, "served by website") {
+		t.Fatalf("website content output missing metadata:\n%s", output)
 	}
 
 	if _, err := RemoveWebContent(clientHarness.Console, content.Id); err != nil {
@@ -184,6 +207,37 @@ func TestWebContentLifecycleIntegration(t *testing.T) {
 		_, ok = pipeline.GetWeb().Contents["/index.html"]
 		return !ok
 	}, "website content remove event to update client cache")
+}
+
+func TestWebsiteAddArtifactContentIntegration(t *testing.T) {
+	h := testsupport.NewControlPlaneHarness(t)
+	site := h.NewWebsitePipeline("site-artifact", 18091, "/artifact")
+	h.SeedWebsite(t, site, true)
+	clientHarness := testsupport.NewClientHarness(t, h)
+
+	if _, err := clientHarness.Console.Rpc.UploadArtifact(clientHarness.Console.Context(), &clientpb.Artifact{
+		Name:   "artifact-payload",
+		Bin:    []byte("artifact-data"),
+		Format: ".bin",
+	}); err != nil {
+		t.Fatalf("UploadArtifact failed: %v", err)
+	}
+
+	content, err := AddArtifactContent(clientHarness.Console, "artifact-payload", "site-artifact", "", "", "/payload.bin", "application/octet-stream", "payload", "artifact note", "none")
+	if err != nil {
+		t.Fatalf("AddArtifactContent failed: %v", err)
+	}
+	if content.Path != "/payload.bin" || content.Name != "payload" || content.Comment != "artifact note" {
+		t.Fatalf("content metadata = path %q name %q comment %q, want payload metadata", content.Path, content.Name, content.Comment)
+	}
+
+	body, err := h.ReadWebsiteContent("site-artifact", content.Id)
+	if err != nil {
+		t.Fatalf("ReadWebsiteContent failed: %v", err)
+	}
+	if string(body) != "artifact-data" {
+		t.Fatalf("artifact website content = %q, want artifact-data", string(body))
+	}
 }
 
 func TestWebsiteAddCommandSmokeIntegration(t *testing.T) {

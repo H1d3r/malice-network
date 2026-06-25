@@ -35,8 +35,10 @@ func TestAddContentUpdateReturnsLatestMetadataAndWritesFile(t *testing.T) {
 	created, err := AddContent(&clientpb.WebContent{
 		WebsiteId:   "site-update",
 		Path:        "/index.html",
+		Name:        "home",
 		Type:        "raw",
 		ContentType: "text/plain",
+		Comment:     "initial landing page",
 		Content:     []byte("old"),
 	})
 	if err != nil {
@@ -62,6 +64,22 @@ func TestAddContentUpdateReturnsLatestMetadataAndWritesFile(t *testing.T) {
 	}
 	if updated.Size != uint64(len(updatedBody)) {
 		t.Fatalf("updated size = %d, want %d", updated.Size, len(updatedBody))
+	}
+	if updated.Name != "home" || updated.Comment != "initial landing page" {
+		t.Fatalf("updated metadata = name %q comment %q, want preserved metadata", updated.Name, updated.Comment)
+	}
+
+	metadata, err := UpdateWebContentMetadata(&clientpb.WebContent{
+		Id:           updated.ID.String(),
+		Name:         "renamed-home",
+		Comment:      "",
+		UpdateFields: []string{"name", "comment"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateWebContentMetadata failed: %v", err)
+	}
+	if metadata.Name != "renamed-home" || metadata.Comment != "" {
+		t.Fatalf("metadata = name %q comment %q, want renamed-home and empty comment", metadata.Name, metadata.Comment)
 	}
 
 	body, err := os.ReadFile(filepath.Join(configs.WebsitePath, "listener-a", "site-update", updated.ID.String()))

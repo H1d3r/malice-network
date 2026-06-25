@@ -1,6 +1,8 @@
 package website
 
 import (
+	"fmt"
+
 	"github.com/carapace-sh/carapace"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -8,6 +10,7 @@ import (
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/chainreactors/malice-network/client/wizard"
 	"github.com/chainreactors/malice-network/helper/intermediate"
+	"github.com/chainreactors/malice-network/helper/utils/output"
 	"github.com/chainreactors/mals"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -120,7 +123,7 @@ website stop web_test --listener tcp_default
 	websiteAddContentCmd := &cobra.Command{
 		Use:   "add [file_path]",
 		Short: "Add content to a website",
-		Args:  cobra.ExactArgs(1),
+		Args:  validateWebsiteAddArgs,
 		Long:  "Add new content to an existing website",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return AddWebContentCmd(cmd, con)
@@ -131,6 +134,9 @@ website add /path/to/content.html --website web_test
 
 // Add content to a website with custom web path and type
 website add /path/to/content.html --website web_test --path /custom/path --type text/html
+
+// Add an artifact to a website
+website add --artifact beacon --website web_test --format shellcode --path /payload.bin
 ~~~`,
 	}
 
@@ -139,6 +145,11 @@ website add /path/to/content.html --website web_test --path /custom/path --type 
 		f.String("path", "", "web path for the content (defaults to filename)")
 		f.String("type", "raw", "content type of the file")
 		f.String("auth", "", "HTTP Basic Auth for this path (user:pass), \"none\" to skip website default")
+		f.String("name", "", "display name for the content")
+		f.String("comment", "", "comment for the content")
+		f.String("artifact", "", "artifact name to add instead of a local file")
+		f.String("format", "", "artifact download format; shellcode is an alias for raw")
+		f.String("RDI", "", "RDI conversion method")
 	})
 	websiteAddContentCmd.MarkFlagRequired("website")
 
@@ -146,12 +157,55 @@ website add /path/to/content.html --website web_test --path /custom/path --type 
 		carapace.ActionFiles().Usage("content file path"))
 	common.BindFlagCompletions(websiteAddContentCmd, func(comp carapace.ActionMap) {
 		comp["website"] = common.WebsiteCompleter(con)
+		comp["path"] = carapace.ActionValues().Usage("web path for the content")
+		comp["type"] = carapace.ActionValues().Usage("content type")
+		comp["artifact"] = common.ArtifactCompleter(con)
+		comp["format"] = artifactContentFormatCompleter()
+	})
+
+	websiteAddArtifactCmd := &cobra.Command{
+		Use:    "add-artifact [artifact_name]",
+		Short:  "Add an artifact to a website",
+		Args:   cobra.ExactArgs(1),
+		Hidden: true,
+		Long:   "Download an artifact from the server and add it as website content",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return AddArtifactContentCmd(cmd, con)
+		},
+		Example: `~~~
+// Add the native artifact binary to a website
+website add-artifact beacon --website web_test --path /beacon.exe
+
+// Add formatted shellcode bytes to a website
+website add-artifact beacon --website web_test --format shellcode --path /payload.bin
+~~~`,
+	}
+
+	common.BindFlag(websiteAddArtifactCmd, func(f *pflag.FlagSet) {
+		f.String("website", "", "website name (required)")
+		f.String("path", "", "web path for the content (defaults to artifact name and format)")
+		f.String("format", "", "artifact download format; shellcode is an alias for raw")
+		f.String("RDI", "", "RDI conversion method")
+		f.String("type", "application/octet-stream", "content type of the artifact")
+		f.String("auth", "", "HTTP Basic Auth for this path (user:pass), \"none\" to skip website default")
+		f.String("name", "", "display name for the content")
+		f.String("comment", "", "comment for the content")
+	})
+	websiteAddArtifactCmd.MarkFlagRequired("website")
+
+	common.BindArgCompletions(websiteAddArtifactCmd, nil,
+		common.ArtifactCompleter(con))
+	common.BindFlagCompletions(websiteAddArtifactCmd, func(comp carapace.ActionMap) {
+		comp["website"] = common.WebsiteCompleter(con)
+		comp["format"] = artifactContentFormatCompleter()
+		comp["path"] = carapace.ActionValues().Usage("web path for the content")
+		comp["type"] = carapace.ActionValues().Usage("content type")
 	})
 
 	websiteUpdateContentCmd := &cobra.Command{
 		Use:   "update [content_id] [file_path]",
 		Short: "Update content in a website",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.RangeArgs(1, 2),
 		Long:  "Update existing content in a website using content ID",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return UpdateWebContentCmd(cmd, con)
@@ -159,12 +213,17 @@ website add /path/to/content.html --website web_test --path /custom/path --type 
 		Example: `~~~
 // Update content in a website with content ID
 website update 123e4567-e89b-12d3-a456-426614174000 /path/to/new_content.html --website web_test
+
+// Update only content metadata
+website update 123e4567-e89b-12d3-a456-426614174000 --name payload --comment "initial payload"
 ~~~`,
 	}
 
 	common.BindFlag(websiteUpdateContentCmd, func(f *pflag.FlagSet) {
 		f.String("website", "", "website name (required)")
 		f.String("type", "raw", "content type of the file")
+		f.String("name", "", "display name for the content")
+		f.String("comment", "", "comment for the content")
 	})
 
 	common.BindFlagCompletions(websiteUpdateContentCmd, func(comp carapace.ActionMap) {
@@ -174,6 +233,29 @@ website update 123e4567-e89b-12d3-a456-426614174000 /path/to/new_content.html --
 	common.BindArgCompletions(websiteUpdateContentCmd, nil,
 		common.WebContentCompleter(con),
 		carapace.ActionFiles().Usage("content file path"))
+
+	websiteUpdateContentMetadataCmd := &cobra.Command{
+		Use:    "update-meta [content_id]",
+		Short:  "Update website content metadata",
+		Args:   cobra.ExactArgs(1),
+		Hidden: true,
+		Long:   "Update the display name and comment for an existing website content entry",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return UpdateWebContentMetadataCmd(cmd, con)
+		},
+		Example: `~~~
+// Update content display name and comment
+website update-meta 123e4567-e89b-12d3-a456-426614174000 --name beacon.exe --comment "initial payload"
+~~~`,
+	}
+
+	common.BindFlag(websiteUpdateContentMetadataCmd, func(f *pflag.FlagSet) {
+		f.String("name", "", "display name for the content")
+		f.String("comment", "", "comment for the content")
+	})
+
+	common.BindArgCompletions(websiteUpdateContentMetadataCmd, nil,
+		common.WebContentCompleter(con))
 
 	websiteRemoveContentCmd := &cobra.Command{
 		Use:   "remove [content_id]",
@@ -209,15 +291,37 @@ website list-content web_test
 		common.WebsiteCompleter(con))
 
 	// Enable wizard for website commands that need configuration
-	common.EnableWizardForCommands(websiteCmd, websiteAddContentCmd, websiteUpdateContentCmd)
+	common.EnableWizardForCommands(websiteCmd, websiteAddContentCmd, websiteAddArtifactCmd, websiteUpdateContentCmd, websiteUpdateContentMetadataCmd)
 
 	// Register wizard providers for dynamic options
 	registerWizardProviders(websiteCmd, con)
 
 	websiteCmd.AddCommand(websiteListCmd, websiteStartCmd, websiteStopCmd,
-		websiteAddContentCmd, websiteUpdateContentCmd, websiteRemoveContentCmd, websiteListContentCmd)
+		websiteAddContentCmd, websiteAddArtifactCmd, websiteUpdateContentCmd,
+		websiteUpdateContentMetadataCmd, websiteRemoveContentCmd, websiteListContentCmd)
 
 	return []*cobra.Command{websiteCmd}
+}
+
+func validateWebsiteAddArgs(cmd *cobra.Command, args []string) error {
+	artifactName, _ := cmd.Flags().GetString("artifact")
+	if artifactName != "" {
+		if len(args) != 0 {
+			return fmt.Errorf("website add with --artifact does not accept file_path")
+		}
+		return nil
+	}
+	return cobra.ExactArgs(1)(cmd, args)
+}
+
+func artifactContentFormatCompleter() carapace.Action {
+	formats := output.GetFormatsWithDescriptions()
+	descriptions := make([]string, 0, len(formats)*2+2)
+	for format, desc := range formats {
+		descriptions = append(descriptions, format, desc)
+	}
+	descriptions = append(descriptions, "shellcode", "alias for raw artifact format")
+	return carapace.ActionValuesDescribed(descriptions...).Tag("artifact format")
 }
 
 // registerWizardProviders registers dynamic option providers for wizard.
@@ -258,6 +362,8 @@ func Register(con *core.Console) {
 	con.RegisterServerFunc("website_start", StartWebsite, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("website_stop", StopWebsite, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("webcontent_add", AddWebContent, &mals.Helper{Group: intermediate.ListenerGroup})
+	con.RegisterServerFunc("webcontent_add_artifact", AddArtifactContent, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("webcontent_update", UpdateWebContent, &mals.Helper{Group: intermediate.ListenerGroup})
+	con.RegisterServerFunc("webcontent_update_metadata", UpdateWebContentMetadata, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("webcontent_remove", RemoveWebContent, &mals.Helper{Group: intermediate.ListenerGroup})
 }

@@ -309,10 +309,12 @@ type WebsiteConfig struct {
 }
 
 type WebContent struct {
-	File string `config:"file" yaml:"file"`
-	Path string `config:"path" yaml:"path"`
-	Type string `config:"type" default:"raw" yaml:"type"`
-	Auth string `config:"auth" default:"" yaml:"auth"` // per-path auth "user:pass", "none" = skip
+	File    string `config:"file" yaml:"file"`
+	Path    string `config:"path" yaml:"path"`
+	Name    string `config:"name" yaml:"name"`
+	Type    string `config:"type" default:"raw" yaml:"type"`
+	Comment string `config:"comment" default:"" yaml:"comment"`
+	Auth    string `config:"auth" default:"" yaml:"auth"` // per-path auth "user:pass", "none" = skip
 }
 
 func (content *WebContent) ToProtobuf() (*clientpb.WebContent, error) {
@@ -328,8 +330,11 @@ func (content *WebContent) ToProtobuf() (*clientpb.WebContent, error) {
 	return &clientpb.WebContent{
 		File:    content.File,
 		Path:    content.Path,
+		Name:    content.Name,
 		Size:    uint64(len(data)),
 		Type:    content.Type,
+		Comment: content.Comment,
+		Auth:    content.Auth,
 		Content: data,
 		//Encryption: content.EncryptionConfig.ToProtobuf(),
 	}, nil

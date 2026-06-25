@@ -286,6 +286,9 @@ func TestPipelineMechanismsUseConfiguredValues(t *testing.T) {
 	if websitePB.Size != uint64(len("<html>ok</html>")) || string(websitePB.Content) != "<html>ok</html>" {
 		t.Fatalf("unexpected website content protobuf: %#v", websitePB)
 	}
+	if websitePB.Name != "home" || websitePB.Comment != "fixture content" || websitePB.Auth != "none" {
+		t.Fatalf("unexpected website content metadata protobuf: %#v", websitePB)
+	}
 }
 
 func withTestServerPaths(t *testing.T, root string) {

@@ -228,6 +228,9 @@ http --listener listener --host 127.0.0.1 --port 8083
       content:			             # website 映射内容
         - path: '\images\1.png'      # 文件在website的映射路径
           file: 'path\to\file'       # 文件的实际路径
+          name: image-1              # 展示名
+          comment: landing image     # 备注
+          auth: none                 # 跳过website默认Basic Auth
           type: raw                  # 文件类型
         - path: '\images\2.png'
           file: 'path\to\file'
@@ -243,7 +246,9 @@ website web-test --listener listener --port 5080 --root /web
 
 然后再在对应website上传文件
 ```bash
-website add /path/to/file --website web-test --path /path
+website add /path/to/file --website web-test --path /path --name payload --comment "first payload"
+website update <content_id> --name payload-v2 --comment "rotated payload"
+website add --artifact artifact-name --website web-test --format shellcode --path /payload.bin
 ```
 
 ![image-20250712015526853](../assets/web-content-add.png)

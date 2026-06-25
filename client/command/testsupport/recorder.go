@@ -508,6 +508,10 @@ func (r *RecorderRPC) UpdateWebsiteContent(ctx context.Context, in *clientpb.Web
 	return r.webContentResponse(ctx, "UpdateWebsiteContent", in)
 }
 
+func (r *RecorderRPC) UpdateWebsiteContentMetadata(ctx context.Context, in *clientpb.WebContent, opts ...grpc.CallOption) (*clientpb.WebContent, error) {
+	return r.webContentResponse(ctx, "UpdateWebsiteContentMetadata", in)
+}
+
 func (r *RecorderRPC) RemoveWebsiteContent(ctx context.Context, in *clientpb.WebContent, opts ...grpc.CallOption) (*clientpb.Empty, error) {
 	return r.emptyResponse(ctx, "RemoveWebsiteContent", in)
 }

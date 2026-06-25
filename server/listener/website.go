@@ -284,9 +284,11 @@ func (w *Website) AddContent(content *clientpb.WebContent) error {
 	}
 	w.mu.Lock()
 	w.Content[strings.Trim(content.Path, "/")] = &clientpb.WebContent{
+		Name:        content.Name,
 		Path:        content.Path,
 		File:        contentPath,
 		ContentType: content.ContentType,
+		Comment:     content.Comment,
 		Auth:        content.Auth,
 	}
 	w.mu.Unlock()

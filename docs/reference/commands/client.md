@@ -1739,13 +1739,21 @@ website add [file_path] [flags]
 website add /path/to/content.html --website web_test
 
 // Add content to a website with custom web path and type
-website add /path/to/content.html --website web_test --path /custom/path --type text/html
+website add /path/to/content.html --website web_test --path /custom/path --type text/html --name home --comment "landing page"
+
+// Add an artifact to a website
+website add --artifact beacon --website web_test --format shellcode --path /payload.bin
 ~~~
 
 **Options**
 
 ```
+      --RDI string       RDI conversion method
+      --artifact string  artifact name to add instead of a local file
       --auth string      HTTP Basic Auth for this path (user:pass), "none" to skip website default
+      --comment string   comment for the content
+      --format string    artifact download format; shellcode is an alias for raw
+      --name string      display name for the content
       --path string      web path for the content (defaults to filename)
       --type string      content type of the file (default "raw")
       --website string   website name (required)
@@ -1899,11 +1907,16 @@ website update [content_id] [file_path] [flags]
 ~~~
 // Update content in a website with content ID
 website update 123e4567-e89b-12d3-a456-426614174000 /path/to/new_content.html --website web_test
+
+// Update only content metadata
+website update 123e4567-e89b-12d3-a456-426614174000 --name beacon.exe --comment "initial payload"
 ~~~
 
 **Options**
 
 ```
+      --comment string   comment for the content
+      --name string      display name for the content
       --type string      content type of the file (default "raw")
       --website string   website name (required)
       --wizard           Start interactive wizard mode

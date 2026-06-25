@@ -21,9 +21,11 @@ type WebsiteContent struct {
 
 	File        string `gorm:""`
 	Path        string `gorm:"index:idx_website_contents_pipeline_path;"`
+	Name        string `gorm:""`
 	Size        uint64 `gorm:""`
 	Type        string `gorm:""`
 	ContentType string `gorm:""`
+	Comment     string `gorm:""`
 	Auth        string `gorm:""` // "user:pass" or empty; "none" = skip website default
 
 	Pipeline   *Pipeline `gorm:"foreignKey:PipelineID,ListenerID;references:Name,ListenerId;-:migration;"`
@@ -60,9 +62,11 @@ func (wc *WebsiteContent) ToProtobuf(read bool) *clientpb.WebContent {
 		Id:          wc.ID.String(),
 		WebsiteId:   wc.PipelineID,
 		Path:        wc.Path,
+		Name:        wc.Name,
 		Size:        wc.Size,
 		Type:        wc.Type,
 		ContentType: wc.ContentType,
+		Comment:     wc.Comment,
 		Content:     data,
 		Url:         wc.URL(),
 		ListenerId:  listenerID,
@@ -99,9 +103,11 @@ func FromWebContentPb(content *clientpb.WebContent) *WebsiteContent {
 		ListenerID:  content.ListenerId,
 		File:        content.File,
 		Path:        content.Path,
+		Name:        content.Name,
 		Size:        content.Size,
 		Type:        content.Type,
 		ContentType: content.ContentType,
+		Comment:     content.Comment,
 		Auth:        content.Auth,
 	}
 }

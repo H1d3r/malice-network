@@ -186,6 +186,9 @@ func TestWebsiteHandlersRejectNilRequest(t *testing.T) {
 	if _, err := server.UpdateWebsiteContent(context.Background(), nil); err == nil || !strings.Contains(err.Error(), types.ErrMissingRequestField.Error()) {
 		t.Fatalf("UpdateWebsiteContent(nil) error = %v, want %v", err, types.ErrMissingRequestField)
 	}
+	if _, err := server.UpdateWebsiteContentMetadata(context.Background(), nil); err == nil || !strings.Contains(err.Error(), types.ErrMissingRequestField.Error()) {
+		t.Fatalf("UpdateWebsiteContentMetadata(nil) error = %v, want %v", err, types.ErrMissingRequestField)
+	}
 	if _, err := server.RemoveWebsiteContent(context.Background(), nil); err == nil || !strings.Contains(err.Error(), types.ErrMissingRequestField.Error()) {
 		t.Fatalf("RemoveWebsiteContent(nil) error = %v, want %v", err, types.ErrMissingRequestField)
 	}
@@ -197,6 +200,76 @@ func TestWebsiteHandlersRejectNilRequest(t *testing.T) {
 	}
 	if _, err := server.StartWebsite(context.Background(), nil); err == nil || !strings.Contains(err.Error(), types.ErrMissingRequestField.Error()) {
 		t.Fatalf("StartWebsite(nil) error = %v, want %v", err, types.ErrMissingRequestField)
+	}
+}
+
+func TestUpdateWebsiteContentMetadataReturnsUpdatedListFields(t *testing.T) {
+	env := newRPCTestEnv(t)
+	_ = env.seedSession(t, "rpc-website-metadata", "rpc-website-metadata-pipe", true)
+	server := &Server{}
+
+	if _, err := db.SavePipeline(models.FromPipelinePb(&clientpb.Pipeline{
+		Name:       "site-metadata",
+		ListenerId: "listener-a",
+		Type:       consts.WebsitePipeline,
+		Body: &clientpb.Pipeline_Web{
+			Web: &clientpb.Website{
+				Name:       "site-metadata",
+				ListenerId: "listener-a",
+				Root:       "/",
+				Port:       8080,
+			},
+		},
+	})); err != nil {
+		t.Fatalf("SavePipeline failed: %v", err)
+	}
+	content, err := db.AddContent(&clientpb.WebContent{
+		WebsiteId:  "site-metadata",
+		ListenerId: "listener-a",
+		Path:       "/payload.bin",
+		Type:       "raw",
+		Content:    []byte("payload"),
+	})
+	if err != nil {
+		t.Fatalf("AddContent failed: %v", err)
+	}
+
+	updated, err := server.UpdateWebsiteContentMetadata(context.Background(), &clientpb.WebContent{
+		Id:      content.ID.String(),
+		Name:    "payload",
+		Comment: "staged content",
+	})
+	if err != nil {
+		t.Fatalf("UpdateWebsiteContentMetadata failed: %v", err)
+	}
+	if updated.Name != "payload" || updated.Comment != "staged content" {
+		t.Fatalf("updated metadata = name %q comment %q, want payload/staged content", updated.Name, updated.Comment)
+	}
+	updated, err = server.UpdateWebsiteContentMetadata(context.Background(), &clientpb.WebContent{
+		Id:           content.ID.String(),
+		Comment:      "",
+		UpdateFields: []string{"comment"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateWebsiteContentMetadata clear comment failed: %v", err)
+	}
+	if updated.Name != "payload" || updated.Comment != "" {
+		t.Fatalf("partial metadata update = name %q comment %q, want payload/empty", updated.Name, updated.Comment)
+	}
+
+	contents, err := server.ListWebContent(context.Background(), &clientpb.Website{
+		Name:       "site-metadata",
+		ListenerId: "listener-a",
+	})
+	if err != nil {
+		t.Fatalf("ListWebContent failed: %v", err)
+	}
+	if len(contents.GetContents()) != 1 {
+		t.Fatalf("content count = %d, want 1", len(contents.GetContents()))
+	}
+	got := contents.GetContents()[0]
+	if got.Name != "payload" || got.Comment != "" {
+		t.Fatalf("listed metadata = name %q comment %q, want payload/empty", got.Name, got.Comment)
 	}
 }
 

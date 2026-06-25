@@ -2126,6 +2126,20 @@ suicide(active())
 - `$4` [string] - 
 - `$5` [string] - 
 
+### webcontent_add_artifact
+
+**Arguments**
+
+- `$1` [string] - artifact name
+- `$2` [string] - website name
+- `$3` [string] - artifact format; `shellcode` maps to `raw`
+- `$4` [string] - RDI conversion method
+- `$5` [string] - website path
+- `$6` [string] - content type
+- `$7` [string] - display name
+- `$8` [string] - comment
+- `$9` [string] - per-path HTTP Basic Auth
+
 ### webcontent_remove
 
 **Arguments**
@@ -2140,6 +2154,14 @@ suicide(active())
 - `$2` [string] - 
 - `$3` [string] - 
 - `$4` [string] - 
+
+### webcontent_update_metadata
+
+**Arguments**
+
+- `$1` [string] - content ID
+- `$2` [string] - display name
+- `$3` [string] - comment
 
 ### website_new
 
@@ -2732,4 +2754,3 @@ Executes a WMI query within the specified namespace to retrieve system informati
 ```
 wmi_query(active(), "root\\cimv2", {"SELECT * FROM Win32_OperatingSystem"})
 ```
-

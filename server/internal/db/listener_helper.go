@@ -393,6 +393,12 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 	err := existingQuery.First(&existingContent).Error
 	if err == nil {
 		webModel.ID = existingContent.ID
+		if webModel.Name == "" {
+			webModel.Name = existingContent.Name
+		}
+		if webModel.Comment == "" {
+			webModel.Comment = existingContent.Comment
+		}
 		query := Session()
 		if webModel.PipelineID == "" {
 			query = query.Omit("pipeline_id", "listener_id")
@@ -439,6 +445,50 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 	return webModel, nil
 }
 
+func UpdateWebContentMetadata(req *clientpb.WebContent) (*models.WebsiteContent, error) {
+	if req == nil {
+		return nil, errors.New("content is nil")
+	}
+	if req.Id == "" {
+		return nil, errors.New("content id is required")
+	}
+
+	content, err := FindWebContent(req.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	updates := map[string]interface{}{}
+	fields := req.GetUpdateFields()
+	if len(fields) == 0 {
+		if req.Name != "" {
+			fields = append(fields, "name")
+		}
+		if req.Comment != "" {
+			fields = append(fields, "comment")
+		}
+	}
+	for _, field := range fields {
+		switch field {
+		case "name":
+			updates["name"] = req.Name
+		case "comment":
+			updates["comment"] = req.Comment
+		default:
+			return nil, fmt.Errorf("unsupported web content metadata field %q", field)
+		}
+	}
+	if len(updates) == 0 {
+		return content, nil
+	}
+
+	if err := Session().Model(&models.WebsiteContent{}).Where("id = ?", content.ID).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	return FindWebContent(req.Id)
+}
+
 func resolveWebsiteContentPipeline(websiteName, listenerID string) (*models.Pipeline, error) {
 	query := NewPipelineQuery().WhereName(websiteName).WhereType(consts.WebsitePipeline)
 	if listenerID != "" {
@@ -470,6 +520,7 @@ func AddAmountWebContent(artifactName, pipelineName, listenerID string) (*client
 		WebsiteId:  pipelineName,
 		ListenerId: listenerID,
 		Path:       output.Encode(artifactName),
+		Name:       artifactName,
 		Type:       consts.ArtifactWebcontent,
 	}
 	_, err := AddContent(content)

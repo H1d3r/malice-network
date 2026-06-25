@@ -216,6 +216,17 @@ func (rpc *Server) UpdateWebsiteContent(ctx context.Context, req *clientpb.WebCo
 	return content.ToProtobuf(false), nil
 }
 
+func (rpc *Server) UpdateWebsiteContentMetadata(ctx context.Context, req *clientpb.WebContent) (*clientpb.WebContent, error) {
+	if req == nil {
+		return nil, types.ErrMissingRequestField
+	}
+	content, err := db.UpdateWebContentMetadata(req)
+	if err != nil {
+		return nil, err
+	}
+	return content.ToProtobuf(false), nil
+}
+
 // WebsiteRemoveContent - Remove specific content from a website
 func (rpc *Server) RemoveWebsiteContent(ctx context.Context, req *clientpb.WebContent) (*clientpb.Empty, error) {
 	if req == nil {
