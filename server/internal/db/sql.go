@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/chainreactors/logs"
@@ -73,12 +74,14 @@ func NewDBClient(dbConfig *configs.DatabaseConfig) (*gorm.DB, error) {
 		cleanupPipelineNameIdentityArtifacts(dbClient, dbConfig.Dialect)
 		addPostgresForeignKeys(dbClient)
 	} else {
+		dbClient.DisableForeignKeyConstraintWhenMigrating = true
 		if err := dbClient.AutoMigrate(allModels...); err != nil {
 			logs.Log.Warnf("Failed to auto-migrate database: %v", err)
 		} else {
 			logs.Log.Infof("database schema check completed (%s)", dbConfig.Dialect)
 		}
 		cleanupPipelineNameIdentityArtifacts(dbClient, dbConfig.Dialect)
+		cleanupSQLiteLegacySchemaArtifacts(dbClient, allModels)
 	}
 
 	sqlDB, err := dbClient.DB()
@@ -116,6 +119,191 @@ func cleanupPipelineNameIdentityArtifacts(db *gorm.DB, dialect string) {
 			logs.Log.Warnf("Failed to clean stale pipeline identity artifact: %v", err)
 		}
 	}
+}
+
+func cleanupSQLiteLegacySchemaArtifacts(db *gorm.DB, allModels []interface{}) {
+	legacyTables := []struct {
+		name    string
+		model   interface{}
+		markers []string
+	}{
+		{
+			name:    "contexts",
+			model:   &models.Context{},
+			markers: []string{"fk_contexts_pipeline"},
+		},
+		{
+			name:    "website_contents",
+			model:   &models.WebsiteContent{},
+			markers: []string{"fk_website_contents_pipeline"},
+		},
+		{
+			name:    "sessions",
+			model:   &models.Session{},
+			markers: []string{"fk_tasks_session", "fk_contexts_session"},
+		},
+		{
+			name:    "pipelines",
+			model:   &models.Pipeline{},
+			markers: []string{"uni_pipelines_name", "UNIQUE (`name`)", "UNIQUE (name)", "UNIQUE (\"name\")"},
+		},
+	}
+
+	rebuilt := false
+	for _, table := range legacyTables {
+		ddl, err := sqliteTableDDL(db, table.name)
+		if err != nil {
+			logs.Log.Warnf("Failed to inspect SQLite table %s: %v", table.name, err)
+			continue
+		}
+		if !containsAny(ddl, table.markers) {
+			continue
+		}
+		if err := rebuildSQLiteTable(db, table.name, table.model); err != nil {
+			logs.Log.Warnf("Failed to rebuild legacy SQLite table %s: %v", table.name, err)
+			continue
+		}
+		rebuilt = true
+	}
+
+	if rebuilt {
+		if err := db.AutoMigrate(allModels...); err != nil {
+			logs.Log.Warnf("Failed to finalize SQLite schema cleanup: %v", err)
+		}
+	}
+}
+
+func sqliteTableDDL(db *gorm.DB, table string) (string, error) {
+	var ddl string
+	err := db.Raw("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", table).Row().Scan(&ddl)
+	return ddl, err
+}
+
+func containsAny(s string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(s, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func rebuildSQLiteTable(db *gorm.DB, table string, model interface{}) error {
+	tempTable := fmt.Sprintf("__legacy_%s_%d", table, time.Now().UnixNano())
+	if err := db.Exec("PRAGMA foreign_keys=OFF").Error; err != nil {
+		return err
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		oldColumns, err := sqliteColumnNames(tx, table)
+		if err != nil {
+			return err
+		}
+		if err := tx.Exec(
+			fmt.Sprintf("ALTER TABLE %s RENAME TO %s", quoteSQLiteIdentifier(table), quoteSQLiteIdentifier(tempTable)),
+		).Error; err != nil {
+			return err
+		}
+		if err := dropSQLiteUserIndexes(tx, tempTable); err != nil {
+			return err
+		}
+		if err := tx.Migrator().CreateTable(model); err != nil {
+			return err
+		}
+		newColumns, err := sqliteColumnNames(tx, table)
+		if err != nil {
+			return err
+		}
+		commonColumns := commonSQLiteColumns(oldColumns, newColumns)
+		if len(commonColumns) > 0 {
+			quotedColumns := quoteSQLiteIdentifiers(commonColumns)
+			if err := tx.Exec(fmt.Sprintf(
+				"INSERT INTO %s (%s) SELECT %s FROM %s",
+				quoteSQLiteIdentifier(table),
+				quotedColumns,
+				quotedColumns,
+				quoteSQLiteIdentifier(tempTable),
+			)).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Exec(fmt.Sprintf("DROP TABLE %s", quoteSQLiteIdentifier(tempTable))).Error
+	})
+}
+
+func sqliteColumnNames(db *gorm.DB, table string) ([]string, error) {
+	rows, err := db.Raw("SELECT name FROM pragma_table_info(?)", table).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var columns []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		columns = append(columns, name)
+	}
+	return columns, rows.Err()
+}
+
+func dropSQLiteUserIndexes(db *gorm.DB, table string) error {
+	rows, err := db.Raw("SELECT name FROM pragma_index_list(?) WHERE origin='c'", table).Rows()
+	if err != nil {
+		return err
+	}
+
+	var indexes []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		indexes = append(indexes, name)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	for _, name := range indexes {
+		if err := db.Exec(fmt.Sprintf("DROP INDEX IF EXISTS %s", quoteSQLiteIdentifier(name))).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func commonSQLiteColumns(oldColumns, newColumns []string) []string {
+	oldSet := make(map[string]struct{}, len(oldColumns))
+	for _, column := range oldColumns {
+		oldSet[column] = struct{}{}
+	}
+	common := make([]string, 0, len(newColumns))
+	for _, column := range newColumns {
+		if _, ok := oldSet[column]; ok {
+			common = append(common, column)
+		}
+	}
+	return common
+}
+
+func quoteSQLiteIdentifiers(names []string) string {
+	quoted := make([]string, 0, len(names))
+	for _, name := range names {
+		quoted = append(quoted, quoteSQLiteIdentifier(name))
+	}
+	return strings.Join(quoted, ", ")
+}
+
+func quoteSQLiteIdentifier(name string) string {
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }
 
 func sqliteClient(dbConfig *configs.DatabaseConfig) (*gorm.DB, error) {
