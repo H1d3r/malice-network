@@ -197,7 +197,7 @@ func (w *Website) websiteContentHandler(resp http.ResponseWriter, req *http.Requ
 		}
 	} else {
 		w.mu.RLock()
-		content, ok := w.Content[strings.Trim(contentPath, "/")]
+		content, ok := w.Content[webContentRouteKey(contentPath)]
 		w.mu.RUnlock()
 		if !ok {
 			http.NotFound(resp, req)
@@ -254,6 +254,10 @@ func parseAuth(auth string) (string, string) {
 	return auth, ""
 }
 
+func webContentRouteKey(path string) string {
+	return strings.Trim(path, "/")
+}
+
 func (w *Website) AddContent(content *clientpb.WebContent) error {
 	if content == nil {
 		return errors.New("content is nil")
@@ -283,7 +287,7 @@ func (w *Website) AddContent(content *clientpb.WebContent) error {
 		}
 	}
 	w.mu.Lock()
-	w.Content[strings.Trim(content.Path, "/")] = &clientpb.WebContent{
+	w.Content[webContentRouteKey(content.Path)] = &clientpb.WebContent{
 		Name:        content.Name,
 		Path:        content.Path,
 		File:        contentPath,

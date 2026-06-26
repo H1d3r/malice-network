@@ -3,6 +3,8 @@ package core
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -140,12 +142,12 @@ func (event *Event) format() string {
 			if event.Op == consts.CtrlWebContentAddArtifact {
 				if cont := event.Job.FirstContent(); cont != nil {
 					return fmt.Sprintf("[%s] %s: artifact %s amount at %s", event.EventType, event.Op,
-						cont.Id, baseURL+cont.Path)
+						cont.Id, joinEventURL(baseURL, cont.Path))
 				}
 			} else if event.Op == consts.CtrlWebContentAdd {
 				if cont := event.Job.FirstContent(); cont != nil {
 					return fmt.Sprintf("[%s] %s: content add success, path: %s",
-						event.EventType, event.Op, baseURL+cont.Path)
+						event.EventType, event.Op, joinEventURL(baseURL, cont.Path))
 				}
 			}
 			return kvView("web")
@@ -154,6 +156,14 @@ func (event *Event) format() string {
 		}
 	}
 	return event.Message
+}
+
+func joinEventURL(baseURL, contentPath string) string {
+	joined, err := url.JoinPath(baseURL, contentPath)
+	if err == nil {
+		return joined
+	}
+	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(contentPath, "/")
 }
 
 type Event struct {

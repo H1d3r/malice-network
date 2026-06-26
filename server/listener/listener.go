@@ -723,7 +723,7 @@ func (lns *listener) handleWebContentRemove(job *clientpb.Job) error {
 	}
 	w.mu.Lock()
 	for path := range web.Contents {
-		delete(w.Content, path)
+		delete(w.Content, webContentRouteKey(path))
 	}
 	w.mu.Unlock()
 	return nil

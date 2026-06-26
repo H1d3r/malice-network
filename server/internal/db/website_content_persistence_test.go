@@ -91,6 +91,170 @@ func TestAddContentUpdateReturnsLatestMetadataAndWritesFile(t *testing.T) {
 	}
 }
 
+func TestAddContentNormalizesPathBeforeLookup(t *testing.T) {
+	configs.InitTestConfigRuntime(t)
+	configs.UseTestPaths(t, filepath.Join(t.TempDir(), ".malice"))
+	initTestDB(t)
+
+	if _, err := SavePipeline(&models.Pipeline{
+		Name:       "site-normalize",
+		ListenerId: "listener-a",
+		Type:       consts.WebsitePipeline,
+		IP:         "127.0.0.1",
+		Port:       8080,
+		PipelineParams: &implanttypes.PipelineParams{
+			WebPath: "/",
+			Tls:     &implanttypes.TlsConfig{},
+		},
+	}); err != nil {
+		t.Fatalf("SavePipeline failed: %v", err)
+	}
+
+	created, err := AddContent(&clientpb.WebContent{
+		WebsiteId:  "site-normalize",
+		ListenerId: "listener-a",
+		Path:       "//payload.bin",
+		Type:       "raw",
+		Content:    []byte("old"),
+	})
+	if err != nil {
+		t.Fatalf("AddContent(create) failed: %v", err)
+	}
+	if created.Path != "/payload.bin" {
+		t.Fatalf("created path = %q, want /payload.bin", created.Path)
+	}
+
+	updated, err := AddContent(&clientpb.WebContent{
+		WebsiteId:  "site-normalize",
+		ListenerId: "listener-a",
+		Path:       "payload.bin",
+		Type:       "raw",
+		Content:    []byte("new"),
+	})
+	if err != nil {
+		t.Fatalf("AddContent(update) failed: %v", err)
+	}
+	if updated.ID != created.ID {
+		t.Fatalf("updated ID = %s, want %s", updated.ID, created.ID)
+	}
+	if updated.Path != "/payload.bin" {
+		t.Fatalf("updated path = %q, want /payload.bin", updated.Path)
+	}
+
+	contents, err := FindWebContentsByWebsiteAndListener("site-normalize", "listener-a")
+	if err != nil {
+		t.Fatalf("FindWebContentsByWebsiteAndListener failed: %v", err)
+	}
+	if len(contents) != 1 {
+		t.Fatalf("content count = %d, want 1", len(contents))
+	}
+	body, err := os.ReadFile(filepath.Join(configs.WebsitePath, "listener-a", "site-normalize", updated.ID.String()))
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(body) != "new" {
+		t.Fatalf("content body = %q, want new", string(body))
+	}
+}
+
+func TestAddContentNormalizesLegacyStoredPath(t *testing.T) {
+	configs.InitTestConfigRuntime(t)
+	configs.UseTestPaths(t, filepath.Join(t.TempDir(), ".malice"))
+	initTestDB(t)
+
+	if _, err := SavePipeline(&models.Pipeline{
+		Name:       "site-legacy-path",
+		ListenerId: "listener-a",
+		Type:       consts.WebsitePipeline,
+		IP:         "127.0.0.1",
+		Port:       8080,
+		PipelineParams: &implanttypes.PipelineParams{
+			WebPath: "/",
+			Tls:     &implanttypes.TlsConfig{},
+		},
+	}); err != nil {
+		t.Fatalf("SavePipeline failed: %v", err)
+	}
+	legacy := &models.WebsiteContent{
+		PipelineID:  "site-legacy-path",
+		ListenerID:  "listener-a",
+		Path:        "payload.bin",
+		Type:        "raw",
+		ContentType: "application/octet-stream",
+	}
+	if err := Session().Create(legacy).Error; err != nil {
+		t.Fatalf("Create legacy content failed: %v", err)
+	}
+
+	updated, err := AddContent(&clientpb.WebContent{
+		WebsiteId:  "site-legacy-path",
+		ListenerId: "listener-a",
+		Path:       "payload.bin",
+		Type:       "raw",
+		Content:    []byte("new"),
+	})
+	if err != nil {
+		t.Fatalf("AddContent failed: %v", err)
+	}
+	if updated.ID != legacy.ID {
+		t.Fatalf("updated ID = %s, want legacy ID %s", updated.ID, legacy.ID)
+	}
+	if updated.Path != "/payload.bin" {
+		t.Fatalf("updated path = %q, want /payload.bin", updated.Path)
+	}
+	contents, err := FindWebContentsByWebsiteAndListener("site-legacy-path", "listener-a")
+	if err != nil {
+		t.Fatalf("FindWebContentsByWebsiteAndListener failed: %v", err)
+	}
+	if len(contents) != 1 {
+		t.Fatalf("content count = %d, want 1", len(contents))
+	}
+}
+
+func TestAddContentRejectsUnsafePath(t *testing.T) {
+	configs.InitTestConfigRuntime(t)
+	configs.UseTestPaths(t, filepath.Join(t.TempDir(), ".malice"))
+	initTestDB(t)
+
+	if _, err := SavePipeline(&models.Pipeline{
+		Name:       "site-unsafe-path",
+		ListenerId: "listener-a",
+		Type:       consts.WebsitePipeline,
+		IP:         "127.0.0.1",
+		Port:       8080,
+		PipelineParams: &implanttypes.PipelineParams{
+			WebPath: "/",
+			Tls:     &implanttypes.TlsConfig{},
+		},
+	}); err != nil {
+		t.Fatalf("SavePipeline failed: %v", err)
+	}
+
+	tests := []string{
+		"",
+		"/",
+		"/a/../payload.bin",
+		"/%2e%2e/payload.bin",
+		"/payload.bin?download=1",
+		"/payload.bin#fragment",
+		"/payload\x00.bin",
+	}
+	for _, path := range tests {
+		t.Run(path, func(t *testing.T) {
+			_, err := AddContent(&clientpb.WebContent{
+				WebsiteId:  "site-unsafe-path",
+				ListenerId: "listener-a",
+				Path:       path,
+				Type:       "raw",
+				Content:    []byte("payload"),
+			})
+			if err == nil {
+				t.Fatal("AddContent succeeded, want error")
+			}
+		})
+	}
+}
+
 func TestRemoveContentDeletesBackingFile(t *testing.T) {
 	configs.InitTestConfigRuntime(t)
 	configs.UseTestPaths(t, filepath.Join(t.TempDir(), ".malice"))

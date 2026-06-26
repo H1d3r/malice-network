@@ -8,7 +8,9 @@ import (
 	"github.com/chainreactors/malice-network/helper/utils/fileutils"
 	"github.com/chainreactors/malice-network/helper/utils/output"
 	"mime"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -410,6 +412,12 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 	if content == nil {
 		return nil, errors.New("content is nil")
 	}
+	rawPath := content.Path
+	normalizedPath, err := normalizeWebContentPath(content.Path)
+	if err != nil {
+		return nil, err
+	}
+	content.Path = normalizedPath
 	if content.Size == 0 && len(content.Content) > 0 {
 		content.Size = uint64(len(content.Content))
 	}
@@ -437,7 +445,7 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 		content.ListenerId = pipeline.ListenerId
 	}
 
-	existingQuery := Session().Preload("Pipeline").Where("pipeline_id = ? AND path = ?", webModel.PipelineID, content.Path)
+	existingQuery := Session().Preload("Pipeline").Where("pipeline_id = ? AND path IN ?", webModel.PipelineID, webContentPathLookupVariants(rawPath, content.Path))
 	if webModel.ListenerID != "" {
 		includeLegacy, err := shouldIncludeLegacyWebsiteContent(webModel.PipelineID, webModel.ListenerID)
 		if err != nil {
@@ -451,7 +459,7 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 	} else {
 		existingQuery = existingQuery.Where("listener_id = ''")
 	}
-	err := existingQuery.First(&existingContent).Error
+	err = existingQuery.First(&existingContent).Error
 	if err == nil {
 		webModel.ID = existingContent.ID
 		if webModel.Name == "" {
@@ -504,6 +512,67 @@ func AddContent(content *clientpb.WebContent) (*models.WebsiteContent, error) {
 
 	content.Id = webModel.ID.String()
 	return webModel, nil
+}
+
+func webContentPathLookupVariants(rawPath, normalizedPath string) []string {
+	variants := []string{normalizedPath}
+	for _, candidate := range []string{strings.TrimSpace(rawPath), strings.Trim(strings.TrimSpace(rawPath), "/")} {
+		if candidate == "" {
+			continue
+		}
+		seen := false
+		for _, existing := range variants {
+			if candidate == existing {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			variants = append(variants, candidate)
+		}
+	}
+	return variants
+}
+
+func normalizeWebContentPath(raw string) (string, error) {
+	p := strings.TrimSpace(raw)
+	if p == "" {
+		return "", errors.New("content path is empty")
+	}
+	if strings.ContainsAny(p, "?#") {
+		return "", errors.New("content path must not contain query or fragment")
+	}
+	if strings.ContainsFunc(p, func(r rune) bool {
+		return r < 0x20 || r == 0x7f
+	}) {
+		return "", errors.New("content path must not contain control characters")
+	}
+
+	decoded, err := url.PathUnescape(p)
+	if err != nil {
+		return "", fmt.Errorf("content path is not valid URL path encoding: %w", err)
+	}
+	if strings.ContainsAny(decoded, "?#") {
+		return "", errors.New("content path must not contain query or fragment")
+	}
+	if strings.ContainsFunc(decoded, func(r rune) bool {
+		return r < 0x20 || r == 0x7f
+	}) {
+		return "", errors.New("content path must not contain control characters")
+	}
+
+	decoded = strings.ReplaceAll(decoded, "\\", "/")
+	for _, part := range strings.Split(decoded, "/") {
+		if part == ".." {
+			return "", errors.New("content path must not contain parent traversal")
+		}
+	}
+
+	normalized := path.Clean("/" + strings.TrimLeft(decoded, "/"))
+	if normalized == "/" {
+		return "", errors.New("content path must not be root")
+	}
+	return normalized, nil
 }
 
 func UpdateWebContentMetadata(req *clientpb.WebContent) (*models.WebsiteContent, error) {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -207,6 +208,45 @@ func TestEventToProtobufWebsiteWithoutTLSDoesNotPanic(t *testing.T) {
 	}
 	if pb.Formatted == "" {
 		t.Fatal("expected formatted event output")
+	}
+}
+
+func TestEventToProtobufWebsiteContentAddNormalizesURL(t *testing.T) {
+	event := Event{
+		EventType: consts.EventJob,
+		Op:        consts.CtrlWebContentAdd,
+		Job: &clientpb.Job{
+			Name: "site-content",
+			Pipeline: &clientpb.Pipeline{
+				Name: "site-content",
+				Type: consts.WebsitePipeline,
+				Ip:   "192.168.239.110",
+				Body: &clientpb.Pipeline_Web{
+					Web: &clientpb.Website{
+						Name: "site-content",
+						Root: "/",
+						Port: 8081,
+					},
+				},
+			},
+			Contents: map[string]*clientpb.WebContent{
+				"/aaa": {
+					Path: "/aaa",
+				},
+			},
+		},
+	}
+
+	pb := event.ToProtobuf()
+	if pb == nil {
+		t.Fatal("Event.ToProtobuf returned nil")
+	}
+	want := "[job] web_content_add: content add success, path: http://192.168.239.110:8081/aaa"
+	if pb.Formatted != want {
+		t.Fatalf("formatted = %q, want %q", pb.Formatted, want)
+	}
+	if strings.Contains(pb.Formatted, ":8081//") {
+		t.Fatalf("formatted contains duplicate slash: %q", pb.Formatted)
 	}
 }
 

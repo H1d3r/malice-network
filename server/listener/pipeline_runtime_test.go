@@ -412,6 +412,42 @@ func TestWebsiteAddContentAndHandlerServeConfiguredPath(t *testing.T) {
 	}
 }
 
+func TestHandleWebContentRemoveNormalizesRouteKey(t *testing.T) {
+	web := &Website{
+		Content: map[string]*clientpb.WebContent{
+			"index.html": {
+				Path: "/index.html",
+			},
+		},
+	}
+	lns := &listener{
+		websites: map[string]*Website{
+			"site-1": web,
+		},
+	}
+
+	err := lns.handleWebContentRemove(&clientpb.Job{
+		Pipeline: &clientpb.Pipeline{
+			Name: "site-1",
+			Body: &clientpb.Pipeline_Web{
+				Web: &clientpb.Website{
+					Contents: map[string]*clientpb.WebContent{
+						"/index.html": {
+							Path: "/index.html",
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("handleWebContentRemove failed: %v", err)
+	}
+	if _, ok := web.Content["index.html"]; ok {
+		t.Fatalf("content map still contains removed route: %#v", web.Content)
+	}
+}
+
 func TestHandleWebContentUpdateReturnsContentErrors(t *testing.T) {
 	lns := &listener{
 		websites: map[string]*Website{
