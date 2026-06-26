@@ -1,6 +1,7 @@
 package listener
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/chainreactors/tui"
 	"github.com/evertras/bubble-table/table"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 )
 
 func ListPipelineCmd(cmd *cobra.Command, con *core.Console) error {
@@ -167,6 +169,137 @@ func DeletePipelineCmd(cmd *cobra.Command, con *core.Console) error {
 		return err
 	}
 	return nil
+}
+
+func InspectPipelineCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	pipeline, err := findPipeline(con, name)
+	if err != nil {
+		return err
+	}
+	printPipelineDetail(pipeline)
+	return nil
+}
+
+func RestartPipelineCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	pipelineName, listenerID, _ := resolvePipelineCtrlTarget(con, name)
+	if _, err := con.Rpc.StopPipeline(con.Context(), &clientpb.CtrlPipeline{Name: pipelineName, ListenerId: listenerID}); err != nil {
+		return err
+	}
+	_, err := con.Rpc.StartPipeline(con.Context(), &clientpb.CtrlPipeline{Name: pipelineName, ListenerId: listenerID})
+	return err
+}
+
+func HealthPipelineCmd(cmd *cobra.Command, con *core.Console) error {
+	listenerID, _ := cmd.Flags().GetString("listener")
+	pipelines, err := con.Rpc.ListPipelines(con.Context(), &clientpb.Listener{Id: listenerID})
+	if err != nil {
+		return err
+	}
+	jobs, err := con.Rpc.ListJobs(con.Context(), &clientpb.Empty{})
+	if err != nil {
+		return err
+	}
+	running := map[string]struct{}{}
+	for _, job := range jobs.GetPipelines() {
+		running[job.GetListenerId()+":"+job.GetName()] = struct{}{}
+	}
+	total := 0
+	enabled := 0
+	live := 0
+	for _, pipeline := range pipelines.GetPipelines() {
+		total++
+		if pipeline.GetEnable() {
+			enabled++
+		}
+		if _, ok := running[pipeline.GetListenerId()+":"+pipeline.GetName()]; ok {
+			live++
+		}
+	}
+	tui.RenderKVWithOptions(map[string]interface{}{
+		"Pipelines": total,
+		"Enabled":   enabled,
+		"Running":   live,
+	}, []string{"Pipelines", "Enabled", "Running"}, tui.KVOptions{ShowHeader: true})
+	return nil
+}
+
+func UpdatePipelineCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	pipelineName, _, cached := resolvePipelineCtrlTarget(con, name)
+	if !cached {
+		return fmt.Errorf("pipeline %s is not cached; refresh client state before update", name)
+	}
+	current := con.Pipelines[name]
+	if current == nil {
+		return fmt.Errorf("pipeline %s not found", name)
+	}
+	updated := proto.Clone(current).(*clientpb.Pipeline)
+	if cmd.Flags().Changed("enable") {
+		enable, _ := cmd.Flags().GetBool("enable")
+		updated.Enable = enable
+	}
+	if cmd.Flags().Changed("disable") {
+		disable, _ := cmd.Flags().GetBool("disable")
+		if disable {
+			updated.Enable = false
+		}
+	}
+	if cmd.Flags().Changed("cert-name") {
+		certName, _ := cmd.Flags().GetString("cert-name")
+		updated.CertName = certName
+	}
+	if cmd.Flags().Changed("parser") {
+		parser, _ := cmd.Flags().GetString("parser")
+		updated.Parser = parser
+	}
+	if updated.Name == "" {
+		updated.Name = pipelineName
+	}
+	_, err := con.Rpc.SyncPipeline(con.Context(), updated)
+	return err
+}
+
+func findPipeline(con *core.Console, key string) (*clientpb.Pipeline, error) {
+	if con != nil && con.Pipelines != nil {
+		if pipeline, ok := con.Pipelines[key]; ok && pipeline != nil {
+			return pipeline, nil
+		}
+	}
+	listenerID, name, ok := strings.Cut(key, ":")
+	if !ok {
+		name = key
+		listenerID = ""
+	}
+	pipelines, err := con.Rpc.ListPipelines(con.Context(), &clientpb.Listener{Id: listenerID})
+	if err != nil {
+		return nil, err
+	}
+	for _, pipeline := range pipelines.GetPipelines() {
+		if pipeline.GetName() == name && (listenerID == "" || pipeline.GetListenerId() == listenerID) {
+			return pipeline, nil
+		}
+	}
+	return nil, errors.New("pipeline not found")
+}
+
+func printPipelineDetail(pipeline *clientpb.Pipeline) {
+	tlsEnabled := false
+	if pipeline.GetTls() != nil {
+		tlsEnabled = pipeline.GetTls().GetEnable()
+	}
+	detail := map[string]interface{}{
+		"Name":       pipeline.GetName(),
+		"ListenerID": pipeline.GetListenerId(),
+		"Type":       pipeline.GetType(),
+		"Enable":     pipeline.GetEnable(),
+		"IP":         pipeline.GetIp(),
+		"Parser":     pipeline.GetParser(),
+		"CertName":   pipeline.GetCertName(),
+		"TLS":        tlsEnabled,
+	}
+	tui.RenderKVWithOptions(detail, []string{"Name", "ListenerID", "Type", "Enable", "IP", "Parser", "CertName", "TLS"}, tui.KVOptions{ShowHeader: true})
 }
 
 func resolvePipelineCtrlTarget(con *core.Console, key string) (string, string, bool) {

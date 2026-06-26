@@ -39,6 +39,25 @@ listener
 job
 ~~~`,
 	}
+	jobInspectCmd := &cobra.Command{
+		Use:   "inspect [job]",
+		Short: "Inspect a running job",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return InspectJobCmd(cmd, con)
+		},
+	}
+	jobKillCmd := &cobra.Command{
+		Use:   "kill [job]",
+		Short: "Stop a running job",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return KillJobCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(jobInspectCmd, nil, common.AllPipelineCompleter(con))
+	common.BindArgCompletions(jobKillCmd, nil, common.AllPipelineCompleter(con))
+	jobCmd.AddCommand(jobInspectCmd, jobKillCmd)
 
 	pipelineCmd := &cobra.Command{
 		Use:   consts.CommandPipeline,
@@ -116,7 +135,61 @@ pipeline list listener_id
 
 	common.BindArgCompletions(deletePipeCmd, nil, common.AllPipelineCompleter(con))
 
-	pipelineCmd.AddCommand(startPipelineCmd, stopPipelineCmd, listPipelineCmd, deletePipeCmd)
+	inspectPipelineCmd := &cobra.Command{
+		Use:   "inspect [pipeline]",
+		Short: "Inspect a pipeline",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return InspectPipelineCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(inspectPipelineCmd, nil, common.AllPipelineCompleter(con))
+
+	restartPipelineCmd := &cobra.Command{
+		Use:   "restart [pipeline]",
+		Short: "Restart a pipeline",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return RestartPipelineCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(restartPipelineCmd, nil, common.AllPipelineCompleter(con))
+
+	updatePipelineCmd := &cobra.Command{
+		Use:   "update [pipeline]",
+		Short: "Update cached pipeline metadata",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return UpdatePipelineCmd(cmd, con)
+		},
+	}
+	common.BindFlag(updatePipelineCmd, func(f *pflag.FlagSet) {
+		f.Bool("enable", false, "enable pipeline")
+		f.Bool("disable", false, "disable pipeline")
+		f.String("cert-name", "", "certificate name")
+		f.String("parser", "", "pipeline parser")
+	})
+	common.BindArgCompletions(updatePipelineCmd, nil, common.AllPipelineCompleter(con))
+	common.BindFlagCompletions(updatePipelineCmd, func(comp carapace.ActionMap) {
+		comp["cert-name"] = common.CertNameCompleter(con)
+	})
+
+	healthPipelineCmd := &cobra.Command{
+		Use:   "health",
+		Short: "Show pipeline health summary",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return HealthPipelineCmd(cmd, con)
+		},
+	}
+	common.BindFlag(healthPipelineCmd, func(f *pflag.FlagSet) {
+		f.String("listener", "", "listener ID")
+	})
+	common.BindFlagCompletions(healthPipelineCmd, func(comp carapace.ActionMap) {
+		comp["listener"] = common.ListenerIDCompleter(con)
+	})
+
+	pipelineCmd.AddCommand(startPipelineCmd, stopPipelineCmd, listPipelineCmd, deletePipeCmd,
+		inspectPipelineCmd, restartPipelineCmd, updatePipelineCmd, healthPipelineCmd)
 
 	forwardCmd := &cobra.Command{
 		Use:   "forward",
@@ -200,7 +273,17 @@ listener retire listener-a --purge-config --purge-auth --yes
 		comp["timeout"] = carapace.ActionValues("5", "10", "30").Usage("retire timeout in seconds")
 	})
 
-	listenerCmd.AddCommand(forwardCmd, retireCmd)
+	inspectListenerCmd := &cobra.Command{
+		Use:   "inspect [listener_id]",
+		Short: "Inspect a listener",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return InspectListenerCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(inspectListenerCmd, nil, common.ListenerIDCompleter(con))
+
+	listenerCmd.AddCommand(forwardCmd, retireCmd, inspectListenerCmd)
 
 	return []*cobra.Command{listenerCmd, jobCmd, pipelineCmd}
 }

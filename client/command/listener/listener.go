@@ -1,6 +1,7 @@
 package listener
 
 import (
+	"errors"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/chainreactors/tui"
@@ -16,6 +17,25 @@ func ListenerCmd(cmd *cobra.Command, con *core.Console) error {
 	}
 	printListeners(con, listeners)
 	return nil
+}
+
+func InspectListenerCmd(cmd *cobra.Command, con *core.Console) error {
+	listenerID := cmd.Flags().Arg(0)
+	listeners, err := con.Rpc.GetListeners(con.Context(), &clientpb.Empty{})
+	if err != nil {
+		return err
+	}
+	for _, listener := range listeners.GetListeners() {
+		if listener.GetId() == listenerID {
+			tui.RenderKVWithOptions(map[string]interface{}{
+				"ID":     listener.GetId(),
+				"IP":     listener.GetIp(),
+				"Active": listener.GetActive(),
+			}, []string{"ID", "IP", "Active"}, tui.KVOptions{ShowHeader: true})
+			return nil
+		}
+	}
+	return errors.New("listener not found")
 }
 
 func printListeners(con *core.Console, listeners *clientpb.Listeners) {

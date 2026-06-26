@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	listenercmd "github.com/chainreactors/malice-network/client/command/listener"
 	"github.com/chainreactors/malice-network/client/command/testsupport"
@@ -199,5 +200,86 @@ func TestDeletePipelineCmdParsesScopedNameWithoutCache(t *testing.T) {
 	}
 	if req.Name != "pipe-e" || req.ListenerId != "listener-c" {
 		t.Fatalf("delete request = %#v, want scoped pipe-e/listener-c", req)
+	}
+}
+
+func TestRestartPipelineCmdStopsThenStartsScopedPipeline(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+
+	cmd := &cobra.Command{Use: "restart"}
+	if err := cmd.Flags().Parse([]string{"listener-a:pipe-a"}); err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if err := listenercmd.RestartPipelineCmd(cmd, h.Console); err != nil {
+		t.Fatalf("RestartPipelineCmd failed: %v", err)
+	}
+
+	calls := h.Recorder.Calls()
+	if len(calls) != 2 || calls[0].Method != "StopPipeline" || calls[1].Method != "StartPipeline" {
+		t.Fatalf("calls = %#v, want StopPipeline then StartPipeline", calls)
+	}
+	for _, call := range calls {
+		req := call.Request.(*clientpb.CtrlPipeline)
+		if req.Name != "pipe-a" || req.ListenerId != "listener-a" {
+			t.Fatalf("%s request = %#v", call.Method, req)
+		}
+	}
+}
+
+func TestUpdatePipelineCmdSyncsCachedPipeline(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+	h.Console.Pipelines["listener-a:pipe-a"] = &clientpb.Pipeline{
+		Name:       "pipe-a",
+		ListenerId: "listener-a",
+		Type:       consts.HTTPPipeline,
+		Enable:     false,
+		Parser:     "raw",
+	}
+
+	cmd := &cobra.Command{Use: "update"}
+	cmd.Flags().Bool("enable", false, "")
+	cmd.Flags().Bool("disable", false, "")
+	cmd.Flags().String("cert-name", "", "")
+	cmd.Flags().String("parser", "", "")
+	if err := cmd.Flags().Parse([]string{"listener-a:pipe-a"}); err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if err := cmd.Flags().Set("enable", "true"); err != nil {
+		t.Fatalf("Set enable failed: %v", err)
+	}
+	if err := cmd.Flags().Set("cert-name", "web-cert"); err != nil {
+		t.Fatalf("Set cert-name failed: %v", err)
+	}
+	if err := listenercmd.UpdatePipelineCmd(cmd, h.Console); err != nil {
+		t.Fatalf("UpdatePipelineCmd failed: %v", err)
+	}
+
+	req, _ := testsupport.MustSingleCall[*clientpb.Pipeline](t, h, "SyncPipeline")
+	if !req.Enable || req.CertName != "web-cert" || req.Name != "pipe-a" || req.ListenerId != "listener-a" {
+		t.Fatalf("sync pipeline = %#v", req)
+	}
+}
+
+func TestKillJobCmdStopsRunningPipeline(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+	h.Recorder.OnPipelines("ListJobs", func(context.Context, any) (*clientpb.Pipelines, error) {
+		return &clientpb.Pipelines{Pipelines: []*clientpb.Pipeline{{Name: "job-a", ListenerId: "listener-a"}}}, nil
+	})
+
+	cmd := &cobra.Command{Use: "kill"}
+	if err := cmd.Flags().Parse([]string{"listener-a:job-a"}); err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if err := listenercmd.KillJobCmd(cmd, h.Console); err != nil {
+		t.Fatalf("KillJobCmd failed: %v", err)
+	}
+
+	calls := h.Recorder.Calls()
+	if len(calls) != 2 || calls[0].Method != "ListJobs" || calls[1].Method != "StopPipeline" {
+		t.Fatalf("calls = %#v", calls)
+	}
+	req := calls[1].Request.(*clientpb.CtrlPipeline)
+	if req.Name != "job-a" || req.ListenerId != "listener-a" {
+		t.Fatalf("stop request = %#v", req)
 	}
 }

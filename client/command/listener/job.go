@@ -1,8 +1,10 @@
 package listener
 
 import (
+	"errors"
 	"github.com/chainreactors/malice-network/client/core"
 	"strconv"
+	"strings"
 
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/tui"
@@ -65,4 +67,45 @@ func ListJobsCmd(cmd *cobra.Command, con *core.Console) error {
 	tableModel.SetRows(rowEntries)
 	con.Log.Console(tableModel.View())
 	return nil
+}
+
+func InspectJobCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	pipeline, err := findJob(con, name)
+	if err != nil {
+		return err
+	}
+	printPipelineDetail(pipeline)
+	return nil
+}
+
+func KillJobCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	pipeline, err := findJob(con, name)
+	if err != nil {
+		return err
+	}
+	_, err = con.Rpc.StopPipeline(con.Context(), &clientpb.CtrlPipeline{
+		Name:       pipeline.GetName(),
+		ListenerId: pipeline.GetListenerId(),
+	})
+	return err
+}
+
+func findJob(con *core.Console, key string) (*clientpb.Pipeline, error) {
+	listenerID, name, ok := strings.Cut(key, ":")
+	if !ok {
+		name = key
+		listenerID = ""
+	}
+	jobs, err := con.Rpc.ListJobs(con.Context(), &clientpb.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	for _, pipeline := range jobs.GetPipelines() {
+		if pipeline.GetName() == name && (listenerID == "" || pipeline.GetListenerId() == listenerID) {
+			return pipeline, nil
+		}
+	}
+	return nil, errors.New("job not found")
 }
