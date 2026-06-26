@@ -364,6 +364,13 @@ func (k *Keys) IsWaiting() bool {
 	return k.waiting
 }
 
+// HasPendingInput returns true if there are unprocessed keys in the buffer.
+func (k *Keys) HasPendingInput() bool {
+	k.mutex.RLock()
+	defer k.mutex.RUnlock()
+	return len(k.buf) > 0
+}
+
 // IsEOF returns true if the input stream has reached the end.
 func (k *Keys) IsEOF() bool {
 	k.mutex.RLock()

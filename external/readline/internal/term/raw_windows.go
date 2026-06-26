@@ -38,12 +38,15 @@ func IsTerminal(fd int) bool {
 // restored.
 func MakeRaw(fd int) (*State, error) {
 	var st uint32
-	if err := windows.GetConsoleMode(windows.Handle(fd), &st); err != nil {
+	handle := windows.Handle(fd)
+	if err := windows.GetConsoleMode(handle, &st); err != nil {
 		return nil, err
 	}
 	raw := st &^ (windows.ENABLE_ECHO_INPUT | windows.ENABLE_PROCESSED_INPUT | windows.ENABLE_LINE_INPUT | windows.ENABLE_PROCESSED_OUTPUT)
-	if err := windows.SetConsoleMode(windows.Handle(fd), raw); err != nil {
-		return nil, err
+	if err := windows.SetConsoleMode(handle, raw|windows.ENABLE_VIRTUAL_TERMINAL_INPUT); err != nil {
+		if err := windows.SetConsoleMode(handle, raw); err != nil {
+			return nil, err
+		}
 	}
 	return &State{st}, nil
 }

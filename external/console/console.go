@@ -23,6 +23,11 @@ type Console struct {
 	printed       bool             // Used to adjust asynchronous messages too.
 	mutex         *sync.RWMutex    // Concurrency management.
 
+	pasteMu      sync.Mutex
+	pasteConfig  PasteReferenceConfig
+	pasteCounter int
+	pasteRefs    map[string]string
+
 	// Execution
 
 	// Leave an empty line before executing the command.

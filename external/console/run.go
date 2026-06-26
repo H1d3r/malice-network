@@ -45,7 +45,7 @@ func (c *Console) StartContext(ctx context.Context) error {
 		}
 
 		// Block and read user input.
-		line, err := c.shell.Readline()
+		line, err := c.Readline()
 
 		c.displayPostRun(line)
 
@@ -63,7 +63,8 @@ func (c *Console) StartContext(ctx context.Context) error {
 		menu = c.activeMenu()
 
 		// Parse the line with bash-syntax, removing comments.
-		args, err := c.parse(line)
+		resolvedLine := c.ResolvePasteReferences(line)
+		args, err := c.parse(resolvedLine)
 		if err != nil {
 			menu.ErrorHandler(ParseError{newError(err, "Parsing error")})
 			continue
