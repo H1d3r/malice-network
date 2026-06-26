@@ -196,6 +196,74 @@ func TestAcmeConfigCmdMergesExistingState(t *testing.T) {
 	}
 }
 
+func TestCertInspectDownloadsCertificate(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+	certPEM, keyPEM := pemFixtureStrings(t, time.Now().Add(-time.Hour), time.Now().Add(24*time.Hour))
+	h.Recorder.OnTLS("DownloadCertificate", func(_ context.Context, req any) (*clientpb.TLS, error) {
+		certReq := req.(*clientpb.Cert)
+		if certReq.Name != "demo-cert" {
+			t.Fatalf("cert name = %q, want demo-cert", certReq.Name)
+		}
+		return &clientpb.TLS{Cert: &clientpb.Cert{Name: certReq.Name, Cert: certPEM, Key: keyPEM}}, nil
+	})
+
+	if err := h.ExecuteClient(consts.CommandCert, "inspect", "demo-cert"); err != nil {
+		t.Fatalf("inspect failed: %v", err)
+	}
+	testsupport.MustSingleCall[*clientpb.Cert](t, h, "DownloadCertificate")
+}
+
+func TestCertVerifyRejectsExpiredCert(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+	certPEM, keyPEM := pemFixtureStrings(t, time.Now().Add(-48*time.Hour), time.Now().Add(-24*time.Hour))
+	h.Recorder.OnTLS("DownloadCertificate", func(_ context.Context, _ any) (*clientpb.TLS, error) {
+		return &clientpb.TLS{Cert: &clientpb.Cert{Name: "expired", Cert: certPEM, Key: keyPEM}}, nil
+	})
+
+	err := h.ExecuteClient(consts.CommandCert, "verify", "expired")
+	if err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("verify error = %v, want expired cert", err)
+	}
+}
+
+func TestCertRenewForwardsAcmeRequest(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+
+	if err := h.ExecuteClient(consts.CommandCert, "renew", "demo-cert", "--domain", "example.com", "--provider", "cloudflare"); err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+
+	req, _ := testsupport.MustSingleCall[*clientpb.AcmeRequest](t, h, "ObtainAcmeCert")
+	if req.Domain != "example.com" || req.Provider != "cloudflare" {
+		t.Fatalf("acme request = %#v", req)
+	}
+}
+
+func TestCertPruneDeletesExpiredCerts(t *testing.T) {
+	h := testsupport.NewClientHarness(t)
+	expiredPEM, _ := pemFixtureStrings(t, time.Now().Add(-48*time.Hour), time.Now().Add(-24*time.Hour))
+	validPEM, _ := pemFixtureStrings(t, time.Now().Add(-time.Hour), time.Now().Add(24*time.Hour))
+	h.Recorder.OnCerts("GetAllCertificates", func(_ context.Context, _ any) (*clientpb.Certs, error) {
+		return &clientpb.Certs{Certs: []*clientpb.TLS{
+			{Cert: &clientpb.Cert{Name: "expired", Cert: expiredPEM}},
+			{Cert: &clientpb.Cert{Name: "valid", Cert: validPEM}},
+		}}, nil
+	})
+
+	if err := h.ExecuteClient(consts.CommandCert, "prune", "--expired"); err != nil {
+		t.Fatalf("prune failed: %v", err)
+	}
+
+	calls := h.Recorder.Calls()
+	if len(calls) != 2 || calls[0].Method != "GetAllCertificates" || calls[1].Method != "DeleteCertificate" {
+		t.Fatalf("calls = %#v", calls)
+	}
+	req := calls[1].Request.(*clientpb.Cert)
+	if req.Name != "expired" {
+		t.Fatalf("deleted cert = %q, want expired", req.Name)
+	}
+}
+
 func writePEMFixture(t testing.TB) (string, string) {
 	t.Helper()
 
@@ -234,4 +302,30 @@ func writePEMFixture(t testing.TB) (string, string) {
 	}
 
 	return certPath, keyPath
+}
+
+func pemFixtureStrings(t testing.TB, notBefore, notAfter time.Time) (string, string) {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject: pkix.Name{
+			CommonName: "demo.example",
+		},
+		NotBefore:             notBefore,
+		NotAfter:              notAfter,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})),
+		string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}))
 }
