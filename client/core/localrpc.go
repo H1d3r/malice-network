@@ -2,13 +2,16 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/carapace-sh/carapace"
 	"github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/IoM-go/proto/services/localrpc"
 	"github.com/chainreactors/malice-network/helper/intermediate"
 	"github.com/kballard/go-shellquote"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"net"
 	"runtime/debug"
@@ -16,6 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+// CompletionLookup is injected by the command package at init time to avoid circular imports.
+// It returns a carapace.Action for a given cobra command and flag/arg identifier.
+var CompletionLookup func(cmd *cobra.Command, flag string, argIndex int) (carapace.Action, bool)
 
 var localRPCRequestSeq uint64
 
@@ -422,4 +429,136 @@ func (l *LocalRPC) Stop() error {
 
 	client.Log.Infof("Local gRPC server stopped\n")
 	return nil
+}
+
+// GetCompletions returns dynamic completion values for a specific flag or positional argument.
+func (s *LocalRPCServer) GetCompletions(ctx context.Context, req *localrpc.GetCompletionsRequest) (*localrpc.GetCompletionsResponse, error) {
+	client.Log.Debugf("LocalRPC: GetCompletions command=%q flag=%q arg_index=%d\n", req.Command, req.Flag, req.ArgIndex)
+
+	if req.SessionId != "" {
+		if err := switchSessionWithCallee(s.console, req.SessionId, consts.CalleeRPC); err != nil {
+			return &localrpc.GetCompletionsResponse{Error: err.Error()}, nil
+		}
+	}
+
+	cmd := findCommandByPath(s.console, req.Command)
+	if cmd == nil {
+		return &localrpc.GetCompletionsResponse{
+			Error:   fmt.Sprintf("command %q not found", req.Command),
+			Success: false,
+		}, nil
+	}
+
+	if CompletionLookup == nil {
+		return &localrpc.GetCompletionsResponse{
+			Error:   "completion registry not initialized",
+			Success: false,
+		}, nil
+	}
+
+	var action carapace.Action
+	var found bool
+
+	if req.Flag != "" {
+		action, found = CompletionLookup(cmd, req.Flag, -1)
+	} else {
+		action, found = CompletionLookup(cmd, "", int(req.ArgIndex))
+	}
+
+	if !found {
+		return &localrpc.GetCompletionsResponse{
+			Items:   []*localrpc.CompletionItem{},
+			Success: true,
+		}, nil
+	}
+
+	items, err := invokeCompletionAction(action, req.Current)
+	if err != nil {
+		return &localrpc.GetCompletionsResponse{Error: err.Error()}, nil
+	}
+
+	return &localrpc.GetCompletionsResponse{
+		Items:   items,
+		Success: true,
+	}, nil
+}
+
+func findCommandByPath(con *Console, commandPath string) *cobra.Command {
+	if commandPath == "" {
+		return nil
+	}
+	parts := strings.Fields(commandPath)
+
+	menus := []string{consts.ImplantMenu, consts.ClientMenu}
+	for _, menuName := range menus {
+		menu := con.App.Menu(menuName)
+		if menu == nil {
+			continue
+		}
+		cmd := menu.Command
+		matched := true
+		for _, part := range parts {
+			found := false
+			for _, sub := range cmd.Commands() {
+				if sub.Name() == part || contains(sub.Aliases, part) {
+					cmd = sub
+					found = true
+					break
+				}
+			}
+			if !found {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return cmd
+		}
+	}
+	return nil
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+type invokedValue struct {
+	Value       string `json:"value"`
+	Display     string `json:"display"`
+	Description string `json:"description,omitempty"`
+	Tag         string `json:"tag,omitempty"`
+}
+
+type invokedResult struct {
+	Values []invokedValue `json:"values"`
+}
+
+func invokeCompletionAction(action carapace.Action, current string) ([]*localrpc.CompletionItem, error) {
+	invoked := action.Invoke(carapace.Context{Value: current})
+
+	data, err := json.Marshal(invoked)
+	if err != nil {
+		return nil, fmt.Errorf("marshal invoked action: %w", err)
+	}
+
+	var result invokedResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal invoked action: %w", err)
+	}
+
+	items := make([]*localrpc.CompletionItem, 0, len(result.Values))
+	for _, v := range result.Values {
+		items = append(items, &localrpc.CompletionItem{
+			Value:       v.Value,
+			Display:     v.Display,
+			Description: v.Description,
+			Tag:         v.Tag,
+		})
+	}
+	return items, nil
 }

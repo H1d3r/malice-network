@@ -84,6 +84,16 @@ func BindFlagCompletions(cmd *cobra.Command, bind func(comp carapace.ActionMap))
 	bind(comps)
 
 	carapace.Gen(cmd).FlagCompletion(comps)
+	RegisterFlagCompletions(cmd, comps)
+
+	for flagName := range comps {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			if f.Annotations == nil {
+				f.Annotations = map[string][]string{}
+			}
+			f.Annotations["ui:hasCompletion"] = []string{"true"}
+		}
+	}
 }
 
 func BindArgCompletions(cmd *cobra.Command, anyAction *carapace.Action, actions ...carapace.Action) {
@@ -91,7 +101,5 @@ func BindArgCompletions(cmd *cobra.Command, anyAction *carapace.Action, actions 
 		carapace.Gen(cmd).PositionalAnyCompletion(*anyAction)
 	}
 	carapace.Gen(cmd).PositionalCompletion(actions...)
-	//cmd.PostRun = func(cmd *cobra.Command, args []string) {
-	//	carapace.Gen(cmd).PositionalCompletion(actions...)
-	//}
+	RegisterArgCompletions(cmd, anyAction, actions)
 }
