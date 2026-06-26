@@ -431,6 +431,22 @@ artifact show artifact_name --profile
 	})
 	common.BindArgCompletions(showArtifactCmd, nil, common.ArtifactCompleter(con))
 
+	inspectArtifactCmd := &cobra.Command{
+		Use:   "inspect [artifact_name]",
+		Short: "Inspect artifact metadata",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ArtifactShowCmd(cmd, con)
+		},
+		Annotations: map[string]string{
+			"static": "true",
+		},
+	}
+	common.BindFlag(inspectArtifactCmd, func(f *pflag.FlagSet) {
+		f.Bool("profile", false, "show profile")
+	})
+	common.BindArgCompletions(inspectArtifactCmd, nil, common.ArtifactCompleter(con))
+
 	downloadCmd := &cobra.Command{
 		Use:   consts.CommandArtifactDownload,
 		Short: "Download a build output file from the server",
@@ -535,7 +551,45 @@ artifact comment artifact_name ""
 		common.ArtifactCompleter(con),
 		carapace.ActionValues().Usage("artifact comment"))
 
-	artifactCmd.AddCommand(listArtifactCmd, showArtifactCmd, downloadCmd, uploadCmd, commentCommand, deleteCommand)
+	publishCommand := &cobra.Command{
+		Use:   "publish [artifact_name]",
+		Short: "Publish an artifact as website content",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ArtifactPublishCmd(cmd, con)
+		},
+	}
+	common.BindFlag(publishCommand, func(f *pflag.FlagSet) {
+		f.String("website", "", "website name")
+		f.String("path", "", "web path for the content")
+		f.String("format", "", "artifact download format")
+		f.String("RDI", "", "RDI conversion method")
+		f.String("type", "application/octet-stream", "content type")
+		f.String("auth", "", "HTTP Basic Auth for this path")
+		f.String("name", "", "display name for the content")
+		f.String("comment", "", "comment for the content")
+	})
+	_ = publishCommand.MarkFlagRequired("website")
+	common.BindArgCompletions(publishCommand, nil, common.ArtifactCompleter(con))
+	common.BindFlagCompletions(publishCommand, func(comp carapace.ActionMap) {
+		comp["website"] = common.WebsiteCompleter(con)
+		comp["format"] = common.ArtifactFormatCompleter()
+	})
+
+	pruneCommand := &cobra.Command{
+		Use:   "prune",
+		Short: "Prune artifacts by status or age",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ArtifactPruneCmd(cmd, con)
+		},
+	}
+	common.BindFlag(pruneCommand, func(f *pflag.FlagSet) {
+		f.Bool("failed", false, "delete non-completed artifacts")
+		f.String("older-than", "", "delete artifacts older than a duration, e.g. 720h")
+	})
+
+	artifactCmd.AddCommand(listArtifactCmd, showArtifactCmd, inspectArtifactCmd, downloadCmd, uploadCmd,
+		commentCommand, deleteCommand, publishCommand, pruneCommand)
 
 	return []*cobra.Command{profileCmd, buildCmd, artifactCmd}
 }

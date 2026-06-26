@@ -10,6 +10,7 @@ import (
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/client/command/common"
+	websitecmd "github.com/chainreactors/malice-network/client/command/website"
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/chainreactors/malice-network/helper/utils/fileutils"
 	output2 "github.com/chainreactors/malice-network/helper/utils/output"
@@ -137,6 +138,66 @@ func ArtifactShowCmd(cmd *cobra.Command, con *core.Console) error {
 		con.Log.Console(string(artifact.ProfileBytes))
 	}
 
+	return nil
+}
+
+func ArtifactPublishCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	websiteName, _ := cmd.Flags().GetString("website")
+	webPath, _ := cmd.Flags().GetString("path")
+	format, _ := cmd.Flags().GetString("format")
+	rdi, _ := cmd.Flags().GetString("RDI")
+	contentType, _ := cmd.Flags().GetString("type")
+	displayName, _ := cmd.Flags().GetString("name")
+	comment, _ := cmd.Flags().GetString("comment")
+	auth, _ := cmd.Flags().GetString("auth")
+	_, err := websitecmd.AddArtifactContent(con, name, websiteName, format, rdi, webPath, contentType, displayName, comment, auth)
+	if err != nil {
+		return err
+	}
+	con.Log.Infof("published artifact %s to website %s\n", name, websiteName)
+	return nil
+}
+
+func ArtifactPruneCmd(cmd *cobra.Command, con *core.Console) error {
+	failed, _ := cmd.Flags().GetBool("failed")
+	olderThan, _ := cmd.Flags().GetString("older-than")
+	if !failed && olderThan == "" {
+		return fmt.Errorf("specify --failed or --older-than")
+	}
+	var cutoff time.Time
+	if olderThan != "" {
+		d, err := time.ParseDuration(olderThan)
+		if err != nil {
+			return err
+		}
+		cutoff = time.Now().Add(-d)
+	}
+	artifacts, err := con.Rpc.ListArtifact(con.Context(), &clientpb.Empty{})
+	if err != nil {
+		return err
+	}
+	pruned := 0
+	for _, artifact := range artifacts.GetArtifacts() {
+		if artifact.GetName() == "" {
+			continue
+		}
+		matched := false
+		if failed && artifact.GetStatus() != "" && artifact.GetStatus() != consts.BuildStatusCompleted {
+			matched = true
+		}
+		if !cutoff.IsZero() && artifact.GetCreatedAt() > 0 && time.Unix(artifact.GetCreatedAt(), 0).Before(cutoff) {
+			matched = true
+		}
+		if !matched {
+			continue
+		}
+		if _, err := con.Rpc.DeleteArtifact(con.Context(), &clientpb.Artifact{Name: artifact.GetName()}); err != nil {
+			return err
+		}
+		pruned++
+	}
+	con.Log.Infof("pruned %d artifacts\n", pruned)
 	return nil
 }
 
