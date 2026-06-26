@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/carapace-sh/carapace"
+	"github.com/chainreactors/malice-network/client/command/common"
 	"github.com/chainreactors/malice-network/client/core"
 	"github.com/chainreactors/tui"
 	"github.com/charmbracelet/lipgloss"
@@ -27,8 +29,26 @@ func Commands(con *core.Console) []*cobra.Command {
 	searchCmd.Flags().StringP("type", "t", "", "filter by type: command, plugin")
 	searchCmd.Flags().StringP("group", "g", "", "filter by command group")
 	searchCmd.Flags().IntP("limit", "n", 20, "maximum results to return")
+	common.BindFlagCompletions(searchCmd, func(comp carapace.ActionMap) {
+		comp["type"] = carapace.ActionValues("command", "plugin").Usage("search result type")
+		comp["group"] = searchGroupCompleter(con)
+		comp["limit"] = carapace.ActionValues("10", "20", "50", "100").Usage("maximum results")
+	})
 
 	return []*cobra.Command{searchCmd}
+}
+
+func searchGroupCompleter(con *core.Console) carapace.Action {
+	return carapace.ActionCallback(func(c carapace.Context) carapace.Action {
+		if con == nil || con.SearchIndex == nil {
+			return carapace.ActionValues().Tag("search group")
+		}
+		categories, err := con.SearchIndex.Categories("")
+		if err != nil {
+			return carapace.ActionValues().Tag("search group")
+		}
+		return carapace.ActionValues(categories...).Tag("search group")
+	})
 }
 
 func searchRunE(con *core.Console) func(cmd *cobra.Command, args []string) error {

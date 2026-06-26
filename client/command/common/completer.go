@@ -173,11 +173,24 @@ func SessionTaskCompleter(con *core.Console) carapace.Action {
 			return carapace.ActionValuesDescribed(results...).Tag("session tasks")
 		}
 		for _, s := range sess.Tasks.Tasks {
-			results = append(results, fmt.Sprintf("%d", s.TaskId), "")
+			if s == nil {
+				continue
+			}
+			results = append(results, fmt.Sprintf("%d", s.TaskId), fmt.Sprintf("%s %s", s.Type, taskStatusLabel(s)))
 		}
 		return carapace.ActionValuesDescribed(results...).Tag("session tasks")
 	}
 	return carapace.ActionCallback(callback)
+}
+
+func taskStatusLabel(task *clientpb.Task) string {
+	if task.GetStatus() != 0 {
+		return "error"
+	}
+	if task.GetCur() != task.GetTotal() {
+		return fmt.Sprintf("running %d/%d", task.GetCur(), task.GetTotal())
+	}
+	return "complete"
 }
 
 func ResourceCompleter(con *core.Console) carapace.Action {

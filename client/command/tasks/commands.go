@@ -56,6 +56,7 @@ func Commands(con *core.Console) []*cobra.Command {
 		f.BoolP("file", "f", false, "output to file")
 		f.StringP("output", "o", "", "output file path")
 	})
+	common.BindArgCompletions(fetchTaskCmd, nil, common.SessionTaskCompleter(con))
 
 	fileCmd := &cobra.Command{
 		Use:   consts.CommandFiles,

@@ -164,8 +164,8 @@ func TestSearchTypeFilter(t *testing.T) {
 	si := testSearchIndex(t)
 	cmds := makeTestCommands()
 	pluginCmd := &cobra.Command{
-		Use:   "mimikatz",
-		Short: "Credential harvesting",
+		Use:         "mimikatz",
+		Short:       "Credential harvesting",
 		Annotations: map[string]string{"source": "mal"},
 	}
 	si.Rebuild(func() []*cobra.Command { return cmds }, func() []*cobra.Command { return []*cobra.Command{pluginCmd} })
@@ -194,6 +194,27 @@ func TestSearchCategoryFilter(t *testing.T) {
 	for _, r := range results {
 		if r.Category != "file" {
 			t.Errorf("expected category 'file', got %q for %s", r.Category, r.Name)
+		}
+	}
+}
+
+func TestSearchCategories(t *testing.T) {
+	si := testSearchIndex(t)
+	cmds := makeTestCommands()
+	si.Rebuild(func() []*cobra.Command { return cmds })
+
+	categories, err := si.Categories("")
+	if err != nil {
+		t.Fatalf("Categories: %v", err)
+	}
+
+	want := []string{"file", "manage", "pivot", "sys"}
+	if len(categories) != len(want) {
+		t.Fatalf("categories = %v, want %v", categories, want)
+	}
+	for i := range want {
+		if categories[i] != want[i] {
+			t.Fatalf("categories = %v, want %v", categories, want)
 		}
 	}
 }

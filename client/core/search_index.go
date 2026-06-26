@@ -165,6 +165,35 @@ func (si *SearchIndex) Search(query, typeFilter, category string, limit int) ([]
 	return results, rows.Err()
 }
 
+func (si *SearchIndex) Categories(typeFilter string) ([]string, error) {
+	si.mu.RLock()
+	defer si.mu.RUnlock()
+
+	query := "SELECT DISTINCT category FROM search_index WHERE category != ''"
+	args := []interface{}{}
+	if typeFilter != "" {
+		query += " AND type = ?"
+		args = append(args, typeFilter)
+	}
+	query += " ORDER BY category"
+
+	rows, err := si.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var categories []string
+	for rows.Next() {
+		var category string
+		if err := rows.Scan(&category); err != nil {
+			return nil, err
+		}
+		categories = append(categories, category)
+	}
+	return categories, rows.Err()
+}
+
 func buildFTSQuery(query string) string {
 	query = strings.TrimSpace(query)
 	if query == "" {
