@@ -66,14 +66,7 @@ website route add --artifact <artifact> --website <website> --path /payload.bin
 website route list <website>
 website route remove <content_id>
 website cert <website> --cert-name <cert_name>
-website export <website> -o website.json
-website import website.json --name cloned-site --listener listener-a
-website clone <source> <target> --listener listener-a --port 8080
 ```
 
 - `route` 子命令复用现有 website content RPC。
 - `cert` 是 `website tls` 的证书管理入口，可绑定已有证书、导入 inline cert/key 或禁用 TLS。
-- `export` 输出 website 元数据和 content 路由元数据。
-- `import` 和 `clone` 会创建 website 元数据。
-
-当前 `ListWebContent` 不返回 content bytes，因此 `export/import/clone` 不会还原文件内容。需要迁移内容时，应重新使用 `website route add` 上传文件或 artifact。

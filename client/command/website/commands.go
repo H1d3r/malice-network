@@ -453,53 +453,6 @@ website list-content web_test
 	common.BindArgCompletions(websiteRouteListCmd, nil, common.WebsiteCompleter(con))
 	websiteRouteCmd.AddCommand(websiteRouteAddCmd, websiteRouteRemoveCmd, websiteRouteListCmd)
 
-	websiteExportCmd := &cobra.Command{
-		Use:   "export [website_name]",
-		Short: "Export website metadata",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return ExportWebsiteCmd(cmd, con)
-		},
-	}
-	common.BindFlag(websiteExportCmd, func(f *pflag.FlagSet) {
-		f.StringP("output", "o", "", "output JSON file, or - for stdout")
-	})
-	common.BindArgCompletions(websiteExportCmd, nil, common.WebsiteCompleter(con))
-
-	websiteImportCmd := &cobra.Command{
-		Use:   "import [file]",
-		Short: "Import website metadata",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return ImportWebsiteCmd(cmd, con)
-		},
-	}
-	common.BindFlag(websiteImportCmd, func(f *pflag.FlagSet) {
-		f.String("name", "", "override imported website name")
-		f.String("listener", "", "override imported listener ID")
-	})
-	common.BindArgCompletions(websiteImportCmd, nil, carapace.ActionFiles("json").Usage("website export file"))
-	common.BindFlagCompletions(websiteImportCmd, func(comp carapace.ActionMap) {
-		comp["listener"] = common.ListenerIDCompleter(con)
-	})
-
-	websiteCloneCmd := &cobra.Command{
-		Use:   "clone [source] [target]",
-		Short: "Clone website metadata",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return CloneWebsiteCmd(cmd, con)
-		},
-	}
-	common.BindFlag(websiteCloneCmd, func(f *pflag.FlagSet) {
-		f.String("listener", "", "target listener ID")
-		f.Uint32("port", 0, "target website port")
-	})
-	common.BindArgCompletions(websiteCloneCmd, nil, common.WebsiteCompleter(con), carapace.ActionValues().Usage("target website name"))
-	common.BindFlagCompletions(websiteCloneCmd, func(comp carapace.ActionMap) {
-		comp["listener"] = common.ListenerIDCompleter(con)
-	})
-
 	// Enable wizard for website commands that need configuration
 	common.EnableWizardForCommands(websiteCmd, websiteTLSCmd, websiteCertCmd, websiteAddContentCmd, websiteAddArtifactCmd, websiteUpdateContentCmd, websiteUpdateContentMetadataCmd)
 
@@ -509,7 +462,7 @@ website list-content web_test
 	websiteCmd.AddCommand(websiteListCmd, websiteInspectCmd, websiteStartCmd, websiteStopCmd, websiteRestartCmd, websiteTLSCmd, websiteCertCmd,
 		websiteAddContentCmd, websiteAddArtifactCmd, websiteUpdateContentCmd,
 		websiteUpdateContentMetadataCmd, websiteRemoveContentCmd, websiteListContentCmd,
-		websiteRouteCmd, websiteExportCmd, websiteImportCmd, websiteCloneCmd)
+		websiteRouteCmd)
 
 	return []*cobra.Command{websiteCmd}
 }
