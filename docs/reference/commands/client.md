@@ -1442,7 +1442,7 @@ cert import [flags]
 
 ~~~
 // generate a imported cert to server
-cert import --cert cert_file_path --key key_file_path --ca-cert ca_cert_path
+cert import --name cert-name --cert cert_file_path --key key_file_path --ca-cert ca_cert_path --comment "production cert"
 ~~~
 
 **Options**
@@ -1450,7 +1450,9 @@ cert import --cert cert_file_path --key key_file_path --ca-cert ca_cert_path
 ```
       --ca-cert string   tls ca cert path
       --cert string      tls cert path
+      --comment string   certificate comment
       --key string       tls key path
+      --name string      certificate name
       --wizard           Start interactive wizard mode
 ```
 
@@ -1513,6 +1515,7 @@ cert update cert-name --cert cert_path --key key_path --type imported
 ```
       --ca-cert string   tls ca cert path
       --cert string      tls cert path
+      --comment string   certificate comment
       --key string       tls key path
       --type string      cert type
       --wizard           Start interactive wizard mode
@@ -1692,6 +1695,9 @@ website web_test --listener tcp_default --port 5003 --root /webtest
 
 // Register a website with TLS enabled
 website web_test --listener tcp_default --root /webtest --tls --cert /path/to/cert --key /path/to/key
+
+// Register a website with TLS enabled and save the cert
+website web_test --listener tcp_default --root /webtest --tls --cert /path/to/cert --key /path/to/key --save-cert --save-cert-name web_test_cert
 ~~~
 
 **Options**
@@ -1699,6 +1705,8 @@ website web_test --listener tcp_default --root /webtest --tls --cert /path/to/ce
 ```
       --auth string        HTTP Basic Auth for all paths (user:pass)
       --cert string        tls cert path
+      --cert-comment string
+                           comment for saved inline certificate
       --cert-name string   certificate name
       --host string        pipeline host, the default value is **0.0.0.0** (default "0.0.0.0")
       --ip string          external ip (default "ip")
@@ -1706,6 +1714,9 @@ website web_test --listener tcp_default --root /webtest --tls --cert /path/to/ce
   -l, --listener string    listener id
   -p, --port uint32        pipeline port, random port is selected from the range **10000-15000** 
       --root string        website root path (default "/")
+      --save-cert          save inline cert and key to certificate store
+      --save-cert-name string
+                           name for saved inline certificate
   -t, --tls                enable tls
       --wizard             Start interactive wizard mode
 ```
@@ -1716,8 +1727,10 @@ website web_test --listener tcp_default --root /webtest --tls --cert /path/to/ce
 * [website list](#website-list)	 - List websites
 * [website list-content](#website-list-content)	 - List content in a website
 * [website remove](#website-remove)	 - Remove content from a website
+* [website restart](#website-restart)	 - Restart a website
 * [website start](#website-start)	 - Start a website
 * [website stop](#website-stop)	 - Stop a website
+* [website tls](#website-tls)	 - Update website TLS settings
 * [website update](#website-update)	 - Update content in a website
 
 #### website add
@@ -1832,6 +1845,35 @@ website remove 123e4567-e89b-12d3-a456-426614174000
 
 * [website](#website)	 - Register a new website
 
+#### website restart
+
+Restart a website
+
+**Description**
+
+Stop and then start a website with the specified name
+
+```
+website restart [name] [flags]
+```
+
+**Examples**
+
+~~~
+// Restart a website
+website restart web_test --listener tcp_default
+~~~
+
+**Options**
+
+```
+      --listener string   listener ID
+```
+
+**SEE ALSO**
+
+* [website](#website)	 - Register a new website
+
 #### website start
 
 Start a website
@@ -1855,6 +1897,7 @@ website start web_test
 
 ```
       --cert-name string   certificate name
+      --listener string    listener ID
 ```
 
 **SEE ALSO**
@@ -1884,6 +1927,52 @@ website stop web_test --listener tcp_default
 
 ```
       --listener string   listener ID
+```
+
+**SEE ALSO**
+
+* [website](#website)	 - Register a new website
+
+#### website tls
+
+Update website TLS settings
+
+**Description**
+
+Switch a website between HTTP and HTTPS or replace its TLS certificate
+
+```
+website tls [name] [flags]
+```
+
+**Examples**
+
+~~~
+// Bind an existing certificate
+website tls web_test --listener tcp_default --cert-name web_cert
+
+// Use a temporary certificate
+website tls web_test --listener tcp_default --cert /path/to/cert --key /path/to/key
+
+// Use and save a new certificate
+website tls web_test --listener tcp_default --cert /path/to/cert --key /path/to/key --save-cert --save-cert-name web_cert
+
+// Disable TLS and serve HTTP only
+website tls web_test --listener tcp_default --disable
+~~~
+
+**Options**
+
+```
+      --cert string             tls cert path
+      --cert-comment string     comment for saved inline certificate
+      --cert-name string        existing certificate name
+      --disable                 disable TLS for this website
+      --key string              tls key path
+      --listener string         listener ID
+      --save-cert               save inline cert and key to certificate store
+      --save-cert-name string   name for saved inline certificate
+      --wizard                  Start interactive wizard mode
 ```
 
 **SEE ALSO**

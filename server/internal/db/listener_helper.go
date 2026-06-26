@@ -10,6 +10,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/chainreactors/malice-network/helper/certs"
 	"github.com/chainreactors/malice-network/helper/codenames"
@@ -57,8 +58,34 @@ func UpdatePipelineCert(certName string, pipeline *models.Pipeline) (*models.Pip
 	if err != nil {
 		return nil, err
 	}
+	pipeline.CertName = certName
+	if cert == nil {
+		if pipeline.PipelineParams == nil {
+			pipeline.PipelineParams = &implanttypes.PipelineParams{}
+		}
+		pipeline.Tls = &implanttypes.TlsConfig{Enable: false}
+		if err := Session().Save(pipeline).Error; err != nil {
+			return nil, err
+		}
+		return pipeline, nil
+	}
 	pipeline.Tls = implanttypes.FromTls(cert.ToProtobuf())
 	return pipeline, err
+}
+
+func SetPipelineTLS(pipeline *models.Pipeline, tls *clientpb.TLS, certName string) (*models.Pipeline, error) {
+	if pipeline == nil {
+		return nil, errors.New("pipeline cannot be nil")
+	}
+	if pipeline.PipelineParams == nil {
+		pipeline.PipelineParams = &implanttypes.PipelineParams{}
+	}
+	pipeline.CertName = certName
+	pipeline.Tls = implanttypes.FromTls(tls)
+	if err := Session().Save(pipeline).Error; err != nil {
+		return nil, err
+	}
+	return pipeline, nil
 }
 
 func SavePipeline(pipeline *models.Pipeline) (*models.Pipeline, error) {
@@ -160,12 +187,16 @@ func GetAllCertificates() (Certificates, error) {
 	return NewCertificateQuery().Find()
 }
 
-func UpdateCert(name, cert, key, ca string) error {
-	return NewCertificateQuery().WhereName(name).UpdateFields(map[string]interface{}{
+func UpdateCert(name, cert, key, ca string, comment ...string) error {
+	fields := map[string]interface{}{
 		"cert_pem":    cert,
 		"key_pem":     key,
 		"ca_cert_pem": ca,
-	})
+	}
+	if len(comment) > 0 {
+		fields["comment"] = comment[0]
+	}
+	return NewCertificateQuery().WhereName(name).UpdateFields(fields)
 }
 
 func isDuplicateCommonNameAndCAType(name string) bool {
@@ -184,23 +215,44 @@ func SaveCertificate(certificate *models.Certificate) error {
 	return nil
 }
 
+type SaveCertOptions struct {
+	Name    string
+	Comment string
+}
+
 func SaveCertFromTLS(tls *clientpb.TLS, pipelineName, listenerID string) (*models.Certificate, error) {
+	return SaveCertFromTLSWithOptions(tls, pipelineName, listenerID, SaveCertOptions{})
+}
+
+func SaveCertFromTLSWithOptions(tls *clientpb.TLS, pipelineName, listenerID string, opts SaveCertOptions) (*models.Certificate, error) {
+	if tls == nil || tls.Cert == nil || tls.Cert.Cert == "" || tls.Cert.Key == "" {
+		return nil, errors.New("certificate and key are required")
+	}
+	name := strings.TrimSpace(opts.Name)
+	if name == "" {
+		name = strings.TrimSpace(tls.Cert.Name)
+	}
+	comment := opts.Comment
+	if comment == "" {
+		comment = tls.Cert.Comment
+	}
 	certModel := &models.Certificate{
 		CertPEM: tls.Cert.Cert,
 		KeyPEM:  tls.Cert.Key,
+		Comment: comment,
 	}
 	if tls.Acme {
-		certModel.Name = tls.Domain
+		certModel.Name = firstNonEmpty(name, tls.Domain)
 		certModel.Domain = tls.Domain
 		certModel.Type = certs.Acme
 	} else if tls.Ca != nil && tls.Ca.Key != "" {
-		certModel.Name = codenames.GetCodename()
+		certModel.Name = firstNonEmpty(name, codenames.GetCodename())
 		certModel.Type = certs.SelfSigned
 		certModel.CACertPEM = tls.Ca.Cert
 		certModel.CAKeyPEM = tls.Ca.Key
 	} else {
-		certModel.Name = codenames.GetCodename()
-		certModel.Type = certs.Imported
+		certModel.Name = firstNonEmpty(name, codenames.GetCodename())
+		certModel.Type = firstNonEmpty(tls.Cert.Type, certs.Imported)
 		if tls.Ca != nil {
 			certModel.CACertPEM = tls.Ca.Cert
 		}
@@ -227,6 +279,15 @@ func SaveCertFromTLS(tls *clientpb.TLS, pipelineName, listenerID string) (*model
 	}
 
 	return certModel, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // ============================================

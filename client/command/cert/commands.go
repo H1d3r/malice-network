@@ -34,12 +34,17 @@ cert import --cert cert_file_path --key key_file_path --ca-cert ca_cert_path
 	}
 
 	common.BindFlag(importCmd, common.ImportSet)
+	common.BindFlag(importCmd, func(f *pflag.FlagSet) {
+		f.String("name", "", "certificate name")
+		f.String("comment", "", "certificate comment")
+	})
 	_ = importCmd.MarkFlagRequired("cert")
 	_ = importCmd.MarkFlagRequired("key")
 	common.BindFlagCompletions(importCmd, func(comp carapace.ActionMap) {
 		comp["cert"] = carapace.ActionFiles().Usage("path to the cert file")
 		comp["key"] = carapace.ActionFiles().Usage("path to the key file")
 		comp["ca-cert"] = carapace.ActionFiles().Usage("path to the ca cert file")
+		comp["name"] = carapace.ActionValues().Usage("certificate name")
 	})
 
 	selfSignCmd := &cobra.Command{
@@ -127,6 +132,7 @@ cert update cert-name --cert cert_path --key key_path --type imported
 
 	common.BindFlag(updateCmd, common.ImportSet, func(f *pflag.FlagSet) {
 		f.String("type", "", "cert type")
+		f.String("comment", "", "certificate comment")
 	})
 
 	common.BindArgCompletions(updateCmd, nil,
@@ -159,10 +165,72 @@ cert download cert-name -o cert_path
 	common.BindFlag(downloadCmd, func(f *pflag.FlagSet) {
 		f.StringP("output", "o", "", "cert save path")
 	})
+
+	inspectCmd := &cobra.Command{
+		Use:   "inspect [cert_name]",
+		Short: "Inspect a certificate",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return InspectCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(inspectCmd, nil, common.CertNameCompleter(con))
+
+	verifyCmd := &cobra.Command{
+		Use:   "verify [cert_name]",
+		Short: "Verify certificate validity and key pairing",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return VerifyCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(verifyCmd, nil, common.CertNameCompleter(con))
+
+	renewCmd := &cobra.Command{
+		Use:   "renew [cert_name]",
+		Short: "Renew an ACME certificate",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return RenewCmd(cmd, con)
+		},
+	}
+	common.BindFlag(renewCmd, func(f *pflag.FlagSet) {
+		f.String("domain", "", "ACME domain override")
+		f.String("provider", "", "ACME provider override")
+		f.String("email", "", "ACME account email override")
+		f.String("ca-url", "", "ACME CA directory URL override")
+	})
+	common.BindArgCompletions(renewCmd, nil, common.CertNameCompleter(con))
+
+	listRefsCmd := &cobra.Command{
+		Use:   "list-refs [cert_name]",
+		Short: "List pipelines and websites referencing a certificate",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ListRefsCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(listRefsCmd, nil, common.CertNameCompleter(con))
+
+	pruneExpiredCmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Prune expired certificates",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			expiredOnly, _ := cmd.Flags().GetBool("expired")
+			if !expiredOnly {
+				return cmd.Help()
+			}
+			return PruneExpiredCmd(cmd, con)
+		},
+	}
+	common.BindFlag(pruneExpiredCmd, func(f *pflag.FlagSet) {
+		f.Bool("expired", false, "delete expired certificates")
+	})
 	// Enable wizard for cert commands that need configuration
 	common.EnableWizardForCommands(importCmd, selfSignCmd, updateCmd)
 
-	certCmd.AddCommand(importCmd, selfSignCmd, acmeCmd, acmeConfigCmd, delCmd, updateCmd, downloadCmd)
+	certCmd.AddCommand(importCmd, selfSignCmd, acmeCmd, acmeConfigCmd, delCmd, updateCmd, downloadCmd,
+		inspectCmd, verifyCmd, renewCmd, listRefsCmd, pruneExpiredCmd)
 	return []*cobra.Command{
 		certCmd,
 	}

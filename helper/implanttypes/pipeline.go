@@ -51,15 +51,21 @@ func FromCert(cert *clientpb.Cert) *CertConfig {
 		return nil
 	}
 	return &CertConfig{
-		Cert: cert.Cert,
-		Key:  cert.Key,
+		Name:    cert.Name,
+		Type:    cert.Type,
+		Cert:    cert.Cert,
+		Key:     cert.Key,
+		Comment: cert.Comment,
 	}
 }
 
 type CertConfig struct {
-	Enable bool   `json:"enable" yaml:"enable" config:"enable"`
-	Cert   string `json:"cert" yaml:"cert" config:"cert"`
-	Key    string `json:"key" yaml:"key" config:"key"`
+	Enable  bool   `json:"enable" yaml:"enable" config:"enable"`
+	Name    string `json:"name" yaml:"name" config:"name"`
+	Type    string `json:"type" yaml:"type" config:"type"`
+	Cert    string `json:"cert" yaml:"cert" config:"cert"`
+	Key     string `json:"key" yaml:"key" config:"key"`
+	Comment string `json:"comment" yaml:"comment" config:"comment"`
 }
 
 func (cert *CertConfig) ToProtobuf() *clientpb.Cert {
@@ -67,8 +73,11 @@ func (cert *CertConfig) ToProtobuf() *clientpb.Cert {
 		return nil
 	}
 	return &clientpb.Cert{
-		Cert: cert.Cert,
-		Key:  cert.Key,
+		Name:    cert.Name,
+		Type:    cert.Type,
+		Cert:    cert.Cert,
+		Key:     cert.Key,
+		Comment: cert.Comment,
 	}
 }
 

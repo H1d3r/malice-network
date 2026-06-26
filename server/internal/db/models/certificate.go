@@ -24,6 +24,7 @@ type Certificate struct {
 	KeyPEM    string    // 私钥内容 PEM
 	CACertPEM string    // CA 证书内容 PEM
 	CAKeyPEM  string    // CA 私钥内容 PEM
+	Comment   string    // 备注
 }
 
 // BeforeCreate - GORM hook 自动设置ID和创建时间
@@ -55,10 +56,11 @@ func (c *Certificate) ToProtobuf() *clientpb.TLS {
 	return &clientpb.TLS{
 		Enable: true,
 		Cert: &clientpb.Cert{
-			Name: c.Name,
-			Type: c.Type,
-			Cert: c.CertPEM,
-			Key:  c.KeyPEM,
+			Name:    c.Name,
+			Type:    c.Type,
+			Cert:    c.CertPEM,
+			Key:     c.KeyPEM,
+			Comment: c.Comment,
 		},
 		Ca: &clientpb.Cert{
 			Cert: c.CACertPEM,

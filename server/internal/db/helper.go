@@ -464,7 +464,7 @@ func ListPipelinesByListener(listenerID string) (Pipelines, error) {
 
 // ListWebsitesByListener returns website pipelines for a listener
 func ListWebsitesByListener(listenerID string) (Pipelines, error) {
-	query := NewPipelineQuery().WhereType(consts.WebsitePipeline)
+	query := NewPipelineQuery().WhereType(consts.WebsitePipeline).WithCert()
 	if listenerID != "" {
 		query = query.WhereListenerID(listenerID)
 	}

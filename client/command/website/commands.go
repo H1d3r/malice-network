@@ -37,12 +37,18 @@ website web_test --listener tcp_default --port 5003 --root /webtest
 
 // Register a website with TLS enabled
 website web_test --listener tcp_default --root /webtest --tls --cert /path/to/cert --key /path/to/key
+
+// Register a website with TLS enabled and save the cert
+website web_test --listener tcp_default --root /webtest --tls --cert /path/to/cert --key /path/to/key --save-cert --save-cert-name web_test_cert
 ~~~`,
 	}
 
 	common.BindFlag(websiteCmd, common.TlsCertFlagSet, common.PipelineFlagSet, func(f *pflag.FlagSet) {
 		f.String("root", "/", "website root path")
 		f.String("auth", "", "HTTP Basic Auth for all paths (user:pass)")
+		f.Bool("save-cert", false, "save inline cert and key to certificate store")
+		f.String("save-cert-name", "", "name for saved inline certificate")
+		f.String("cert-comment", "", "comment for saved inline certificate")
 	})
 
 	common.BindFlagCompletions(websiteCmd, func(comp carapace.ActionMap) {
@@ -53,6 +59,7 @@ website web_test --listener tcp_default --root /webtest --tls --cert /path/to/ce
 		comp["key"] = carapace.ActionFiles().Usage("path to the key file")
 		comp["tls"] = carapace.ActionValues().Usage("enable tls")
 		comp["cert-name"] = common.CertNameCompleter(con)
+		comp["save-cert-name"] = carapace.ActionValues().Usage("saved certificate name")
 	})
 
 	common.BindArgCompletions(websiteCmd, nil, carapace.ActionValues().Usage("website name"))
@@ -68,6 +75,16 @@ website web_test --listener tcp_default --root /webtest --tls --cert /path/to/ce
 website list [listener]
 ~~~`,
 	}
+
+	websiteInspectCmd := &cobra.Command{
+		Use:   "inspect [website_name]",
+		Short: "Inspect a website",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return InspectWebsiteCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(websiteInspectCmd, nil, common.WebsiteCompleter(con))
 
 	websiteStartCmd := &cobra.Command{
 		Use:   consts.CommandPipelineStart + " [name]",
@@ -93,6 +110,99 @@ website start web_test
 		comp["listener"] = common.ListenerIDCompleter(con)
 		comp["cert-name"] = common.CertNameCompleter(con)
 
+	})
+
+	websiteRestartCmd := &cobra.Command{
+		Use:   "restart [name]",
+		Short: "Restart a website",
+		Args:  cobra.ExactArgs(1),
+		Long:  "Stop and then start a website with the specified name",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return RestartWebsitePipelineCmd(cmd, con)
+		},
+		Example: `~~~
+// Restart a website
+website restart web_test --listener tcp_default
+~~~`,
+	}
+
+	common.BindArgCompletions(websiteRestartCmd, nil, common.WebsiteCompleter(con))
+	common.BindFlag(websiteRestartCmd, func(f *pflag.FlagSet) {
+		f.String("listener", "", "listener ID")
+	})
+
+	common.BindFlagCompletions(websiteRestartCmd, func(comp carapace.ActionMap) {
+		comp["listener"] = common.ListenerIDCompleter(con)
+	})
+
+	websiteTLSCmd := &cobra.Command{
+		Use:   "tls [name]",
+		Short: "Update website TLS settings",
+		Args:  cobra.ExactArgs(1),
+		Long:  "Switch a website between HTTP and HTTPS or replace its TLS certificate",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return WebsiteTLSCmd(cmd, con)
+		},
+		Example: `~~~
+// Bind an existing certificate
+website tls web_test --listener tcp_default --cert-name web_cert
+
+// Use a temporary certificate
+website tls web_test --listener tcp_default --cert /path/to/cert --key /path/to/key
+
+// Use and save a new certificate
+website tls web_test --listener tcp_default --cert /path/to/cert --key /path/to/key --save-cert --save-cert-name web_cert
+
+// Disable TLS and serve HTTP only
+website tls web_test --listener tcp_default --disable
+~~~`,
+	}
+
+	common.BindArgCompletions(websiteTLSCmd, nil, common.WebsiteCompleter(con))
+	common.BindFlag(websiteTLSCmd, func(f *pflag.FlagSet) {
+		f.String("listener", "", "listener ID")
+		f.Bool("disable", false, "disable TLS for this website")
+		f.String("cert-name", "", "existing certificate name")
+		f.String("cert", "", "tls cert path")
+		f.String("key", "", "tls key path")
+		f.Bool("save-cert", false, "save inline cert and key to certificate store")
+		f.String("save-cert-name", "", "name for saved inline certificate")
+		f.String("cert-comment", "", "comment for saved inline certificate")
+	})
+
+	common.BindFlagCompletions(websiteTLSCmd, func(comp carapace.ActionMap) {
+		comp["listener"] = common.ListenerIDCompleter(con)
+		comp["cert-name"] = common.CertNameCompleter(con)
+		comp["cert"] = carapace.ActionFiles().Usage("path to the cert file")
+		comp["key"] = carapace.ActionFiles().Usage("path to the key file")
+		comp["save-cert-name"] = carapace.ActionValues().Usage("saved certificate name")
+	})
+
+	websiteCertCmd := &cobra.Command{
+		Use:   "cert [name]",
+		Short: "Bind or disable a website certificate",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return WebsiteCertCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(websiteCertCmd, nil, common.WebsiteCompleter(con))
+	common.BindFlag(websiteCertCmd, func(f *pflag.FlagSet) {
+		f.String("listener", "", "listener ID")
+		f.Bool("disable", false, "disable TLS for this website")
+		f.String("cert-name", "", "existing certificate name")
+		f.String("cert", "", "tls cert path")
+		f.String("key", "", "tls key path")
+		f.Bool("save-cert", false, "save inline cert and key to certificate store")
+		f.String("save-cert-name", "", "name for saved inline certificate")
+		f.String("cert-comment", "", "comment for saved inline certificate")
+	})
+	common.BindFlagCompletions(websiteCertCmd, func(comp carapace.ActionMap) {
+		comp["listener"] = common.ListenerIDCompleter(con)
+		comp["cert-name"] = common.CertNameCompleter(con)
+		comp["cert"] = carapace.ActionFiles().Usage("path to the cert file")
+		comp["key"] = carapace.ActionFiles().Usage("path to the key file")
+		comp["save-cert-name"] = carapace.ActionValues().Usage("saved certificate name")
 	})
 
 	websiteStopCmd := &cobra.Command{
@@ -290,15 +400,116 @@ website list-content web_test
 	common.BindArgCompletions(websiteListContentCmd, nil,
 		common.WebsiteCompleter(con))
 
+	websiteRouteCmd := &cobra.Command{
+		Use:   "route",
+		Short: "Manage website routes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	websiteRouteAddCmd := &cobra.Command{
+		Use:   "add [file_path]",
+		Short: "Add a website route",
+		Args:  validateWebsiteAddArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return AddWebContentCmd(cmd, con)
+		},
+	}
+	common.BindFlag(websiteRouteAddCmd, func(f *pflag.FlagSet) {
+		f.String("website", "", "website name (required)")
+		f.String("path", "", "web path for the content (defaults to filename)")
+		f.String("type", "raw", "content type of the file")
+		f.String("auth", "", "HTTP Basic Auth for this path (user:pass), \"none\" to skip website default")
+		f.String("name", "", "display name for the content")
+		f.String("comment", "", "comment for the content")
+		f.String("artifact", "", "artifact name to add instead of a local file")
+		f.String("format", "", "artifact download format; shellcode is an alias for raw")
+		f.String("RDI", "", "RDI conversion method")
+	})
+	websiteRouteAddCmd.MarkFlagRequired("website")
+	common.BindArgCompletions(websiteRouteAddCmd, nil, carapace.ActionFiles().Usage("content file path"))
+	common.BindFlagCompletions(websiteRouteAddCmd, func(comp carapace.ActionMap) {
+		comp["website"] = common.WebsiteCompleter(con)
+		comp["artifact"] = common.ArtifactCompleter(con)
+		comp["format"] = artifactContentFormatCompleter()
+	})
+	websiteRouteRemoveCmd := &cobra.Command{
+		Use:   "remove [content_id]",
+		Short: "Remove a website route",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return RemoveWebContentCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(websiteRouteRemoveCmd, nil, common.WebContentCompleter(con))
+	websiteRouteListCmd := &cobra.Command{
+		Use:   "list [website_name]",
+		Short: "List website routes",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ListWebContentCmd(cmd, con)
+		},
+	}
+	common.BindArgCompletions(websiteRouteListCmd, nil, common.WebsiteCompleter(con))
+	websiteRouteCmd.AddCommand(websiteRouteAddCmd, websiteRouteRemoveCmd, websiteRouteListCmd)
+
+	websiteExportCmd := &cobra.Command{
+		Use:   "export [website_name]",
+		Short: "Export website metadata",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ExportWebsiteCmd(cmd, con)
+		},
+	}
+	common.BindFlag(websiteExportCmd, func(f *pflag.FlagSet) {
+		f.StringP("output", "o", "", "output JSON file, or - for stdout")
+	})
+	common.BindArgCompletions(websiteExportCmd, nil, common.WebsiteCompleter(con))
+
+	websiteImportCmd := &cobra.Command{
+		Use:   "import [file]",
+		Short: "Import website metadata",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ImportWebsiteCmd(cmd, con)
+		},
+	}
+	common.BindFlag(websiteImportCmd, func(f *pflag.FlagSet) {
+		f.String("name", "", "override imported website name")
+		f.String("listener", "", "override imported listener ID")
+	})
+	common.BindArgCompletions(websiteImportCmd, nil, carapace.ActionFiles("json").Usage("website export file"))
+	common.BindFlagCompletions(websiteImportCmd, func(comp carapace.ActionMap) {
+		comp["listener"] = common.ListenerIDCompleter(con)
+	})
+
+	websiteCloneCmd := &cobra.Command{
+		Use:   "clone [source] [target]",
+		Short: "Clone website metadata",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return CloneWebsiteCmd(cmd, con)
+		},
+	}
+	common.BindFlag(websiteCloneCmd, func(f *pflag.FlagSet) {
+		f.String("listener", "", "target listener ID")
+		f.Uint32("port", 0, "target website port")
+	})
+	common.BindArgCompletions(websiteCloneCmd, nil, common.WebsiteCompleter(con), carapace.ActionValues().Usage("target website name"))
+	common.BindFlagCompletions(websiteCloneCmd, func(comp carapace.ActionMap) {
+		comp["listener"] = common.ListenerIDCompleter(con)
+	})
+
 	// Enable wizard for website commands that need configuration
-	common.EnableWizardForCommands(websiteCmd, websiteAddContentCmd, websiteAddArtifactCmd, websiteUpdateContentCmd, websiteUpdateContentMetadataCmd)
+	common.EnableWizardForCommands(websiteCmd, websiteTLSCmd, websiteCertCmd, websiteAddContentCmd, websiteAddArtifactCmd, websiteUpdateContentCmd, websiteUpdateContentMetadataCmd)
 
 	// Register wizard providers for dynamic options
 	registerWizardProviders(websiteCmd, con)
 
-	websiteCmd.AddCommand(websiteListCmd, websiteStartCmd, websiteStopCmd,
+	websiteCmd.AddCommand(websiteListCmd, websiteInspectCmd, websiteStartCmd, websiteStopCmd, websiteRestartCmd, websiteTLSCmd, websiteCertCmd,
 		websiteAddContentCmd, websiteAddArtifactCmd, websiteUpdateContentCmd,
-		websiteUpdateContentMetadataCmd, websiteRemoveContentCmd, websiteListContentCmd)
+		websiteUpdateContentMetadataCmd, websiteRemoveContentCmd, websiteListContentCmd,
+		websiteRouteCmd, websiteExportCmd, websiteImportCmd, websiteCloneCmd)
 
 	return []*cobra.Command{websiteCmd}
 }
@@ -361,6 +572,7 @@ func Register(con *core.Console) {
 	con.RegisterServerFunc("website_new", NewWebsite, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("website_start", StartWebsite, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("website_stop", StopWebsite, &mals.Helper{Group: intermediate.ListenerGroup})
+	con.RegisterServerFunc("website_restart", RestartWebsite, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("webcontent_add", AddWebContent, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("webcontent_add_artifact", AddArtifactContent, &mals.Helper{Group: intermediate.ListenerGroup})
 	con.RegisterServerFunc("webcontent_update", UpdateWebContent, &mals.Helper{Group: intermediate.ListenerGroup})

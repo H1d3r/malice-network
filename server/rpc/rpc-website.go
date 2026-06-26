@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/chainreactors/IoM-go/consts"
@@ -17,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"os"
 	"path"
+	"strings"
 )
 
 func resolveWebsite(name, listenerID string) (*models.Pipeline, error) {
@@ -24,7 +26,7 @@ func resolveWebsite(name, listenerID string) (*models.Pipeline, error) {
 		return nil, fmt.Errorf("website name required")
 	}
 
-	query := db.NewPipelineQuery().WhereName(name).WhereType(consts.WebsitePipeline)
+	query := db.NewPipelineQuery().WhereName(name).WhereType(consts.WebsitePipeline).WithCert()
 	if listenerID != "" {
 		query = query.WhereListenerID(listenerID)
 	}
@@ -324,17 +326,24 @@ func (rpc *Server) StartWebsite(ctx context.Context, req *clientpb.CtrlPipeline)
 	if err != nil {
 		return nil, err
 	}
-	if req.CertName != "" {
-		_, err := db.FindCertificate(req.CertName)
+	certName := req.GetCertName()
+	if certName == "" && req.GetPipeline() != nil {
+		certName = req.GetPipeline().GetCertName()
+	}
+	if certName != "" {
+		_, err := db.FindCertificate(certName)
 		if err != nil {
 			return nil, err
 		}
-		webpipe, err = db.UpdatePipelineCert(req.CertName, webpipe)
+		webpipe, err = db.UpdatePipelineCert(certName, webpipe)
 		if err != nil {
 			return nil, err
 		}
 	} else if req.Pipeline != nil && req.Pipeline.Tls != nil {
-		webpipe.Tls.Enable = req.Pipeline.Tls.Enable
+		webpipe, err = db.SetPipelineTLS(webpipe, req.Pipeline.Tls, req.Pipeline.CertName)
+		if err != nil {
+			return nil, err
+		}
 	}
 	listener, err := core.Listeners.Get(webpipe.ListenerId)
 	if err != nil {
@@ -388,6 +397,126 @@ func (rpc *Server) StartWebsite(ctx context.Context, req *clientpb.CtrlPipeline)
 		logs.Log.Infof("artifact %s amounts at %s", artifact.Name, path.Join(webpb.URL(), output.Encode(artifact.Name)))
 	}
 	return &clientpb.Empty{}, nil
+}
+
+func (rpc *Server) UpdateWebsiteTLS(ctx context.Context, req *clientpb.PipelineTLSUpdate) (*clientpb.Pipeline, error) {
+	if req == nil {
+		return nil, types.ErrMissingRequestField
+	}
+	listenerID, err := resolveWebsiteTLSListenerID(req)
+	if err != nil {
+		return nil, err
+	}
+
+	website, job, err := getWebsiteRuntime(req.Name, listenerID)
+	if err != nil {
+		return nil, err
+	}
+
+	updated, err := applyWebsiteTLSUpdate(website, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if job != nil {
+		if _, err := rpc.StopWebsite(ctx, &clientpb.CtrlPipeline{Name: updated.Name, ListenerId: updated.ListenerId}); err != nil {
+			return nil, err
+		}
+		if _, err := rpc.StartWebsite(ctx, &clientpb.CtrlPipeline{Name: updated.Name, ListenerId: updated.ListenerId}); err != nil {
+			return nil, err
+		}
+	}
+	updated, err = resolveWebsite(updated.Name, updated.ListenerId)
+	if err != nil {
+		return nil, err
+	}
+
+	pb := updated.ToProtobuf()
+	if err := MapContents(pb); err != nil {
+		return nil, err
+	}
+	return pb, nil
+}
+
+func resolveWebsiteTLSListenerID(req *clientpb.PipelineTLSUpdate) (string, error) {
+	if req.GetListenerId() != "" {
+		return req.GetListenerId(), nil
+	}
+	if req.GetName() == "" {
+		return "", fmt.Errorf("website name required")
+	}
+	websites, err := db.NewPipelineQuery().WhereName(req.GetName()).WhereType(consts.WebsitePipeline).Find()
+	if err != nil {
+		return "", err
+	}
+	switch len(websites) {
+	case 0:
+		return "", types.ErrNotFoundPipeline
+	case 1:
+		return websites[0].ListenerId, nil
+	default:
+		return "", fmt.Errorf("multiple websites named '%s' found across listeners, please specify listener_id", req.GetName())
+	}
+}
+
+func applyWebsiteTLSUpdate(website *models.Pipeline, req *clientpb.PipelineTLSUpdate) (*models.Pipeline, error) {
+	if website == nil {
+		return nil, types.ErrNotFoundPipeline
+	}
+	switch req.GetMode() {
+	case clientpb.TLSUpdateMode_TLS_UPDATE_MODE_DISABLE:
+		return db.SetPipelineTLS(website, &clientpb.TLS{Enable: false}, "")
+	case clientpb.TLSUpdateMode_TLS_UPDATE_MODE_EXISTING_CERT:
+		certName := strings.TrimSpace(req.GetCertName())
+		if certName == "" {
+			return nil, fmt.Errorf("cert_name is required")
+		}
+		cert, err := db.FindCertificate(certName)
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig := cert.ToProtobuf()
+		if tlsConfig == nil || tlsConfig.Cert == nil || tlsConfig.Cert.Cert == "" || tlsConfig.Cert.Key == "" {
+			return nil, fmt.Errorf("certificate %s is invalid", certName)
+		}
+		return db.UpdatePipelineCert(certName, website)
+	case clientpb.TLSUpdateMode_TLS_UPDATE_MODE_INLINE_CERT:
+		return applyInlineWebsiteTLS(website, req)
+	default:
+		return nil, fmt.Errorf("tls update mode is required")
+	}
+}
+
+func applyInlineWebsiteTLS(website *models.Pipeline, req *clientpb.PipelineTLSUpdate) (*models.Pipeline, error) {
+	tlsConfig := req.GetTls()
+	if tlsConfig == nil || tlsConfig.Cert == nil || tlsConfig.Cert.Cert == "" || tlsConfig.Cert.Key == "" {
+		return nil, fmt.Errorf("cert and key are required")
+	}
+	if _, err := tls.X509KeyPair([]byte(tlsConfig.Cert.Cert), []byte(tlsConfig.Cert.Key)); err != nil {
+		return nil, fmt.Errorf("invalid certificate key pair: %w", err)
+	}
+	tlsConfig.Enable = true
+	if req.GetSaveCert() {
+		saveName := strings.TrimSpace(req.GetSaveCertName())
+		if saveName == "" {
+			return nil, fmt.Errorf("save_cert_name is required when save_cert is enabled")
+		}
+		certModel, err := db.SaveCertFromTLSWithOptions(tlsConfig, "", "", db.SaveCertOptions{
+			Name:    saveName,
+			Comment: req.GetCertComment(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		certTLS := certModel.ToProtobuf()
+		if certTLS == nil {
+			return nil, fmt.Errorf("saved certificate %s is invalid", certModel.Name)
+		}
+		return db.UpdatePipelineCert(certModel.Name, website)
+	}
+	tlsConfig.Cert.Name = ""
+	tlsConfig.Cert.Comment = req.GetCertComment()
+	return db.SetPipelineTLS(website, tlsConfig, "")
 }
 
 func (rpc *Server) StopWebsite(ctx context.Context, req *clientpb.CtrlPipeline) (*clientpb.Empty, error) {

@@ -114,7 +114,7 @@ func (rpc *Server) UpdateCertificate(ctx context.Context, req *clientpb.TLS) (*c
 		caPEM = req.Ca.Cert
 	}
 
-	err := db.UpdateCert(req.Cert.Name, req.Cert.Cert, req.Cert.Key, caPEM)
+	err := db.UpdateCert(req.Cert.Name, req.Cert.Cert, req.Cert.Key, caPEM, req.Cert.Comment)
 	if err != nil {
 		return nil, err
 	}

@@ -2,8 +2,16 @@ package website
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	iomclient "github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/consts"
@@ -86,6 +94,11 @@ func (r *websiteTestRPC) StopWebsite(ctx context.Context, in *clientpb.CtrlPipel
 func (r *websiteTestRPC) StartWebsite(ctx context.Context, in *clientpb.CtrlPipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
 	r.record("StartWebsite", in)
 	return &clientpb.Empty{}, nil
+}
+
+func (r *websiteTestRPC) UpdateWebsiteTLS(ctx context.Context, in *clientpb.PipelineTLSUpdate, opts ...grpc.CallOption) (*clientpb.Pipeline, error) {
+	r.record("UpdateWebsiteTLS", in)
+	return &clientpb.Pipeline{Name: in.Name, ListenerId: in.ListenerId}, nil
 }
 
 func TestAddWebContentDirectUsesScopedWebsiteCacheKey(t *testing.T) {
@@ -286,6 +299,85 @@ func TestStartWebsitePipelineCmdUsesScopedWebsiteCacheKey(t *testing.T) {
 	}
 }
 
+func TestRestartWebsitePipelineCmdUsesScopedWebsiteCacheKey(t *testing.T) {
+	rpc := &websiteTestRPC{}
+	con := newWebsiteTestConsole(rpc)
+	con.Pipelines["listener-r:site-shared"] = scopedWebsitePipeline("site-shared", "listener-r")
+
+	cmd := newParsedWebsiteTestCmd(t, []string{"listener-r:site-shared"})
+	cmd.Flags().String("listener", "", "")
+	if err := RestartWebsitePipelineCmd(cmd, con); err != nil {
+		t.Fatalf("RestartWebsitePipelineCmd failed: %v", err)
+	}
+	if len(rpc.calls) != 2 {
+		t.Fatalf("call count = %d, want 2", len(rpc.calls))
+	}
+	stopReq := rpc.calls[0].request.(*clientpb.CtrlPipeline)
+	startReq := rpc.calls[1].request.(*clientpb.CtrlPipeline)
+	if rpc.calls[0].method != "StopWebsite" || stopReq.Name != "site-shared" || stopReq.ListenerId != "listener-r" {
+		t.Fatalf("stop call = %s %#v, want scoped stop", rpc.calls[0].method, stopReq)
+	}
+	if rpc.calls[1].method != "StartWebsite" || startReq.Name != "site-shared" || startReq.ListenerId != "listener-r" {
+		t.Fatalf("start call = %s %#v, want scoped start", rpc.calls[1].method, startReq)
+	}
+}
+
+func TestWebsiteTLSCmdBindsExistingCert(t *testing.T) {
+	rpc := &websiteTestRPC{}
+	con := newWebsiteTestConsole(rpc)
+
+	cmd := newWebsiteTLSParsedCmd(t, []string{"site-a", "--listener", "listener-a", "--cert-name", "cert-a"})
+	if err := WebsiteTLSCmd(cmd, con); err != nil {
+		t.Fatalf("WebsiteTLSCmd failed: %v", err)
+	}
+	req := onlyWebsiteCall[*clientpb.PipelineTLSUpdate](t, rpc, "UpdateWebsiteTLS")
+	if req.Name != "site-a" || req.ListenerId != "listener-a" || req.CertName != "cert-a" || req.Mode != clientpb.TLSUpdateMode_TLS_UPDATE_MODE_EXISTING_CERT {
+		t.Fatalf("request = %#v, want existing cert update", req)
+	}
+}
+
+func TestWebsiteTLSCmdSavesInlineCert(t *testing.T) {
+	rpc := &websiteTestRPC{}
+	con := newWebsiteTestConsole(rpc)
+	certPath, keyPath := writeWebsitePEMFixture(t)
+
+	cmd := newWebsiteTLSParsedCmd(t, []string{
+		"site-a",
+		"--listener", "listener-a",
+		"--cert", certPath,
+		"--key", keyPath,
+		"--save-cert",
+		"--save-cert-name", "site-a-cert",
+		"--cert-comment", "rotated",
+	})
+	if err := WebsiteTLSCmd(cmd, con); err != nil {
+		t.Fatalf("WebsiteTLSCmd failed: %v", err)
+	}
+	req := onlyWebsiteCall[*clientpb.PipelineTLSUpdate](t, rpc, "UpdateWebsiteTLS")
+	if req.Mode != clientpb.TLSUpdateMode_TLS_UPDATE_MODE_INLINE_CERT || !req.SaveCert || req.SaveCertName != "site-a-cert" || req.CertComment != "rotated" {
+		t.Fatalf("request = %#v, want saved inline cert update", req)
+	}
+	if req.Tls == nil || req.Tls.Cert == nil || req.Tls.Cert.Cert == "" || req.Tls.Cert.Key == "" {
+		t.Fatalf("request TLS = %#v, want inline cert and key", req.Tls)
+	}
+}
+
+func TestWebsiteTLSCmdRejectsSaveCertWithoutName(t *testing.T) {
+	rpc := &websiteTestRPC{}
+	con := newWebsiteTestConsole(rpc)
+	certPath, keyPath := writeWebsitePEMFixture(t)
+
+	cmd := newWebsiteTLSParsedCmd(t, []string{
+		"site-a",
+		"--cert", certPath,
+		"--key", keyPath,
+		"--save-cert",
+	})
+	if err := WebsiteTLSCmd(cmd, con); err == nil {
+		t.Fatal("WebsiteTLSCmd should reject --save-cert without --save-cert-name")
+	}
+}
+
 func TestResolveWebsiteTargetParsesScopedValueWithoutCache(t *testing.T) {
 	name, listenerID, cached := resolveWebsiteTarget(nil, "listener-z:site-z")
 	if name != "site-z" || listenerID != "listener-z" || cached {
@@ -328,4 +420,55 @@ func newParsedWebsiteTestCmd(t testing.TB, args []string) *cobra.Command {
 		t.Fatalf("Parse flags failed: %v", err)
 	}
 	return cmd
+}
+
+func newWebsiteTLSParsedCmd(t testing.TB, args []string) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{}
+	cmd.Flags().String("listener", "", "")
+	cmd.Flags().Bool("disable", false, "")
+	cmd.Flags().String("cert-name", "", "")
+	cmd.Flags().String("cert", "", "")
+	cmd.Flags().String("key", "", "")
+	cmd.Flags().Bool("save-cert", false, "")
+	cmd.Flags().String("save-cert-name", "", "")
+	cmd.Flags().String("cert-comment", "", "")
+	if err := cmd.Flags().Parse(args); err != nil {
+		t.Fatalf("Parse flags failed: %v", err)
+	}
+	return cmd
+}
+
+func writeWebsitePEMFixture(t testing.TB) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:   "website.example",
+			Organization: []string{"Example Org"},
+		},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	keyPath := filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o600); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	return certPath, keyPath
 }

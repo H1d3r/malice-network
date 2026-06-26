@@ -105,6 +105,48 @@ func TestStartWebsiteStopsExistingWebsiteBeforeRestart(t *testing.T) {
 	}
 }
 
+func TestWebsiteTLSUpdateSavesCertAndRestartsRunningWebsite(t *testing.T) {
+	h := testsupport.NewControlPlaneHarness(t)
+	site := h.NewWebsitePipeline("site-tls-update", 18092, "/tls")
+	h.SeedWebsite(t, site, true)
+	clientHarness := testsupport.NewClientHarness(t, h)
+	certPath, keyPath := writeWebsitePEMFixture(t)
+
+	before := len(h.ControlHistory())
+	tlsCmd := mustWebsiteSubcommand(t, mustWebsiteRoot(t, Commands(clientHarness.Console)), "tls")
+	parseWebsiteArgs(t, tlsCmd,
+		"site-tls-update",
+		"--listener", h.ListenerID(),
+		"--cert", certPath,
+		"--key", keyPath,
+		"--save-cert",
+		"--save-cert-name", "site-tls-update-cert",
+		"--cert-comment", "rotated cert",
+	)
+	if err := WebsiteTLSCmd(tlsCmd, clientHarness.Console); err != nil {
+		t.Fatalf("WebsiteTLSCmd failed: %v", err)
+	}
+
+	testsupport.WaitForCondition(t, 5*time.Second, func() bool {
+		return len(h.ControlHistory()) >= before+2
+	}, "website tls update controller history")
+
+	history := h.ControlHistory()[before:]
+	if history[0].Ctrl != consts.CtrlWebsiteStop || history[1].Ctrl != consts.CtrlWebsiteStart {
+		t.Fatalf("unexpected website ctrl sequence: %s then %s", history[0].Ctrl, history[1].Ctrl)
+	}
+	website, err := h.GetWebsite("site-tls-update")
+	if err != nil {
+		t.Fatalf("GetWebsite failed: %v", err)
+	}
+	if website.CertName != "site-tls-update-cert" || website.GetTls() == nil || !website.GetTls().Enable {
+		t.Fatalf("website TLS = cert %q tls %#v, want saved cert binding", website.CertName, website.GetTls())
+	}
+	if website.GetTls().GetCert().GetComment() != "rotated cert" {
+		t.Fatalf("cert comment = %q, want rotated cert", website.GetTls().GetCert().GetComment())
+	}
+}
+
 func TestWebContentLifecycleIntegration(t *testing.T) {
 	h := testsupport.NewControlPlaneHarness(t)
 	site := h.NewWebsitePipeline("site-content", 18082, "/content")

@@ -2,8 +2,15 @@ package rpc
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
@@ -201,6 +208,151 @@ func TestWebsiteHandlersRejectNilRequest(t *testing.T) {
 	if _, err := server.StartWebsite(context.Background(), nil); err == nil || !strings.Contains(err.Error(), types.ErrMissingRequestField.Error()) {
 		t.Fatalf("StartWebsite(nil) error = %v, want %v", err, types.ErrMissingRequestField)
 	}
+	if _, err := server.UpdateWebsiteTLS(context.Background(), nil); err == nil || !strings.Contains(err.Error(), types.ErrMissingRequestField.Error()) {
+		t.Fatalf("UpdateWebsiteTLS(nil) error = %v, want %v", err, types.ErrMissingRequestField)
+	}
+}
+
+func TestUpdateWebsiteTLSBindsExistingCertificate(t *testing.T) {
+	newRPCTestEnv(t)
+	server := &Server{}
+	certPEM, keyPEM := websitePEMFixture(t)
+	if err := db.SaveCertificate(&models.Certificate{
+		Name:    "cert-a",
+		Type:    "imported",
+		CertPEM: certPEM,
+		KeyPEM:  keyPEM,
+		Comment: "existing cert",
+	}); err != nil {
+		t.Fatalf("SaveCertificate failed: %v", err)
+	}
+	seedWebsitePipelineForTLSTest(t, "site-tls-existing")
+
+	updated, err := server.UpdateWebsiteTLS(context.Background(), &clientpb.PipelineTLSUpdate{
+		Name:       "site-tls-existing",
+		ListenerId: "listener-a",
+		Mode:       clientpb.TLSUpdateMode_TLS_UPDATE_MODE_EXISTING_CERT,
+		CertName:   "cert-a",
+	})
+	if err != nil {
+		t.Fatalf("UpdateWebsiteTLS failed: %v", err)
+	}
+	if updated.CertName != "cert-a" || updated.GetTls() == nil || !updated.GetTls().Enable || updated.GetTls().GetCert().GetComment() != "existing cert" {
+		t.Fatalf("updated pipeline = %#v, want bound cert-a with TLS enabled", updated)
+	}
+}
+
+func TestUpdateWebsiteTLSInlineSaveCreatesCertificateAndBinds(t *testing.T) {
+	newRPCTestEnv(t)
+	server := &Server{}
+	certPEM, keyPEM := websitePEMFixture(t)
+	seedWebsitePipelineForTLSTest(t, "site-tls-save")
+
+	updated, err := server.UpdateWebsiteTLS(context.Background(), &clientpb.PipelineTLSUpdate{
+		Name:         "site-tls-save",
+		ListenerId:   "listener-a",
+		Mode:         clientpb.TLSUpdateMode_TLS_UPDATE_MODE_INLINE_CERT,
+		Tls:          &clientpb.TLS{Cert: &clientpb.Cert{Cert: certPEM, Key: keyPEM}},
+		SaveCert:     true,
+		SaveCertName: "site-saved-cert",
+		CertComment:  "saved from website",
+	})
+	if err != nil {
+		t.Fatalf("UpdateWebsiteTLS failed: %v", err)
+	}
+	if updated.CertName != "site-saved-cert" || updated.GetTls() == nil || !updated.GetTls().Enable {
+		t.Fatalf("updated pipeline = %#v, want saved cert binding", updated)
+	}
+	saved, err := db.FindCertificate("site-saved-cert")
+	if err != nil {
+		t.Fatalf("FindCertificate failed: %v", err)
+	}
+	if saved.Comment != "saved from website" {
+		t.Fatalf("saved comment = %q, want saved from website", saved.Comment)
+	}
+}
+
+func TestUpdateWebsiteTLSDisableClearsTLS(t *testing.T) {
+	newRPCTestEnv(t)
+	server := &Server{}
+	certPEM, keyPEM := websitePEMFixture(t)
+	if err := db.SaveCertificate(&models.Certificate{Name: "cert-disable", Type: "imported", CertPEM: certPEM, KeyPEM: keyPEM}); err != nil {
+		t.Fatalf("SaveCertificate failed: %v", err)
+	}
+	seedWebsitePipelineForTLSTest(t, "site-tls-disable")
+	model, err := db.FindPipelineByListener("site-tls-disable", "listener-a")
+	if err != nil {
+		t.Fatalf("FindPipelineByListener failed: %v", err)
+	}
+	if _, err := db.SetPipelineTLS(model, (&models.Certificate{Name: "cert-disable", Type: "imported", CertPEM: certPEM, KeyPEM: keyPEM}).ToProtobuf(), "cert-disable"); err != nil {
+		t.Fatalf("SetPipelineTLS failed: %v", err)
+	}
+
+	updated, err := server.UpdateWebsiteTLS(context.Background(), &clientpb.PipelineTLSUpdate{
+		Name:       "site-tls-disable",
+		ListenerId: "listener-a",
+		Mode:       clientpb.TLSUpdateMode_TLS_UPDATE_MODE_DISABLE,
+	})
+	if err != nil {
+		t.Fatalf("UpdateWebsiteTLS failed: %v", err)
+	}
+	if updated.CertName != "" || updated.GetTls().GetEnable() {
+		t.Fatalf("updated pipeline = cert %q tls %#v, want TLS disabled", updated.CertName, updated.GetTls())
+	}
+	reloaded, err := db.FindPipelineByListener("site-tls-disable", "listener-a")
+	if err != nil {
+		t.Fatalf("FindPipelineByListener after update failed: %v", err)
+	}
+	if reloaded.CertName != "" || reloaded.Tls.Enable {
+		t.Fatalf("reloaded pipeline = cert %q tls %#v, want TLS disabled", reloaded.CertName, reloaded.Tls)
+	}
+}
+
+func seedWebsitePipelineForTLSTest(t testing.TB, name string) {
+	t.Helper()
+	if _, err := db.SavePipeline(models.FromPipelinePb(&clientpb.Pipeline{
+		Name:       name,
+		ListenerId: "listener-a",
+		Type:       consts.WebsitePipeline,
+		Tls:        &clientpb.TLS{},
+		Body: &clientpb.Pipeline_Web{
+			Web: &clientpb.Website{
+				Name:       name,
+				ListenerId: "listener-a",
+				Root:       "/",
+				Port:       8080,
+			},
+		},
+	})); err != nil {
+		t.Fatalf("SavePipeline failed: %v", err)
+	}
+}
+
+func websitePEMFixture(t testing.TB) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:   "website.example",
+			Organization: []string{"Example Org"},
+		},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	return string(certPEM), string(keyPEM)
 }
 
 func TestUpdateWebsiteContentMetadataReturnsUpdatedListFields(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/chainreactors/IoM-go/consts"
+	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/malice-network/helper/implanttypes"
 	"github.com/chainreactors/malice-network/server/internal/db/models"
 )
@@ -341,7 +342,7 @@ func TestUpdateCert(t *testing.T) {
 		KeyPEM:  "old-key",
 	})
 
-	if err := UpdateCert("cert-upd-1", "new-cert", "new-key", "new-ca"); err != nil {
+	if err := UpdateCert("cert-upd-1", "new-cert", "new-key", "new-ca", "new-comment"); err != nil {
 		t.Fatalf("UpdateCert failed: %v", err)
 	}
 
@@ -354,6 +355,53 @@ func TestUpdateCert(t *testing.T) {
 	}
 	if found.CACertPEM != "new-ca" {
 		t.Errorf("expected CACertPEM 'new-ca', got %q", found.CACertPEM)
+	}
+	if found.Comment != "new-comment" {
+		t.Errorf("expected Comment 'new-comment', got %q", found.Comment)
+	}
+}
+
+func TestSaveCertFromTLSWithOptionsUsesNameAndComment(t *testing.T) {
+	initTestDB(t)
+
+	cert, err := SaveCertFromTLSWithOptions(&clientpb.TLS{
+		Cert: &clientpb.Cert{
+			Cert: "cert-pem",
+			Key:  "key-pem",
+		},
+	}, "", "", SaveCertOptions{Name: "site-cert", Comment: "from website"})
+	if err != nil {
+		t.Fatalf("SaveCertFromTLSWithOptions failed: %v", err)
+	}
+	if cert.Name != "site-cert" || cert.Comment != "from website" || cert.Type != "imported" {
+		t.Fatalf("cert = %#v, want named imported cert with comment", cert)
+	}
+}
+
+func TestUpdatePipelineCertClearsTLSState(t *testing.T) {
+	initTestDB(t)
+
+	pipeline := newTestPipeline("clear-cert", "ls-1")
+	pipeline.CertName = "old-cert"
+	pipeline.Tls = &implanttypes.TlsConfig{Enable: true}
+	if _, err := SavePipeline(pipeline); err != nil {
+		t.Fatalf("SavePipeline failed: %v", err)
+	}
+
+	updated, err := UpdatePipelineCert("", pipeline)
+	if err != nil {
+		t.Fatalf("UpdatePipelineCert clear failed: %v", err)
+	}
+	if updated.CertName != "" || updated.Tls == nil || updated.Tls.Enable {
+		t.Fatalf("updated pipeline = cert %q tls %#v, want cleared TLS", updated.CertName, updated.Tls)
+	}
+
+	reloaded, err := FindPipelineByListener("clear-cert", "ls-1")
+	if err != nil {
+		t.Fatalf("FindPipelineByListener failed: %v", err)
+	}
+	if reloaded.CertName != "" || reloaded.Tls.Enable {
+		t.Fatalf("reloaded pipeline = cert %q tls %#v, want cleared TLS", reloaded.CertName, reloaded.Tls)
 	}
 }
 

@@ -1,6 +1,8 @@
 package website
 
 import (
+	"crypto/tls"
+	"fmt"
 	"github.com/chainreactors/malice-network/client/core"
 	"strconv"
 
@@ -25,12 +27,30 @@ func NewWebsiteCmd(cmd *cobra.Command, con *core.Console) error {
 	if err != nil {
 		return err
 	}
-	return NewWebsite(con, name, root, host, port, listenerID, certName, tls, auth)
+	if err := validateNewWebsiteTLS(certName, tls); err != nil {
+		return err
+	}
+	if err := NewWebsite(con, name, root, host, port, listenerID, certName, tls, auth); err != nil {
+		return err
+	}
+	saveCert, _ := cmd.Flags().GetBool("save-cert")
+	if saveCert {
+		update, err := buildWebsiteTLSUpdateFromFlags(cmd, name, listenerID)
+		if err != nil {
+			return err
+		}
+		_, err = con.Rpc.UpdateWebsiteTLS(con.Context(), update)
+		return err
+	}
+	return nil
 }
 
 // NewWebsite
 func NewWebsite(con *core.Console, websiteName, root, host string, port uint32, listenerId, certName string, tls *clientpb.TLS, auth ...string) error {
 	var err error
+	if err := validateNewWebsiteTLS(certName, tls); err != nil {
+		return err
+	}
 	if root == "" {
 		root = "/"
 	}
@@ -70,6 +90,22 @@ func NewWebsite(con *core.Console, websiteName, root, host string, port uint32, 
 		return err
 	}
 	con.Log.Importantf("Website %s created on port %d\n", websiteName, port)
+	return nil
+}
+
+func validateNewWebsiteTLS(certName string, tlsConfig *clientpb.TLS) error {
+	if tlsConfig == nil || !tlsConfig.Enable {
+		return nil
+	}
+	if certName != "" || tlsConfig.Acme {
+		return nil
+	}
+	if tlsConfig.Cert == nil || tlsConfig.Cert.Cert == "" || tlsConfig.Cert.Key == "" {
+		return fmt.Errorf("tls requires --cert-name or both --cert and --key")
+	}
+	if _, err := tls.X509KeyPair([]byte(tlsConfig.Cert.Cert), []byte(tlsConfig.Cert.Key)); err != nil {
+		return fmt.Errorf("invalid certificate key pair: %w", err)
+	}
 	return nil
 }
 
@@ -134,6 +170,114 @@ func stopWebsite(con *core.Console, name, listenerID string) error {
 		return err
 	}
 	return nil
+}
+
+func RestartWebsitePipelineCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	listenerID, _ := cmd.Flags().GetString("listener")
+	return restartWebsite(con, name, listenerID)
+}
+
+func RestartWebsite(con *core.Console, name string) error {
+	return restartWebsite(con, name, "")
+}
+
+func restartWebsite(con *core.Console, name, listenerID string) error {
+	pipelineName, resolvedListenerID, _ := resolveWebsiteTarget(con, name)
+	if listenerID == "" {
+		listenerID = resolvedListenerID
+	}
+	if err := stopWebsite(con, pipelineName, listenerID); err != nil {
+		return err
+	}
+	_, err := con.Rpc.StartWebsite(con.Context(), &clientpb.CtrlPipeline{
+		Name:       pipelineName,
+		ListenerId: listenerID,
+	})
+	return err
+}
+
+func WebsiteTLSCmd(cmd *cobra.Command, con *core.Console) error {
+	name := cmd.Flags().Arg(0)
+	listenerID, _ := cmd.Flags().GetString("listener")
+	update, err := buildWebsiteTLSUpdateFromFlags(cmd, name, listenerID)
+	if err != nil {
+		return err
+	}
+	_, err = con.Rpc.UpdateWebsiteTLS(con.Context(), update)
+	return err
+}
+
+func buildWebsiteTLSUpdateFromFlags(cmd *cobra.Command, name, listenerID string) (*clientpb.PipelineTLSUpdate, error) {
+	disable, _ := cmd.Flags().GetBool("disable")
+	certName, _ := cmd.Flags().GetString("cert-name")
+	certPath, _ := cmd.Flags().GetString("cert")
+	keyPath, _ := cmd.Flags().GetString("key")
+	saveCert, _ := cmd.Flags().GetBool("save-cert")
+	saveCertName, _ := cmd.Flags().GetString("save-cert-name")
+	certComment, _ := cmd.Flags().GetString("cert-comment")
+
+	sources := 0
+	if disable {
+		sources++
+	}
+	if certName != "" {
+		sources++
+	}
+	if certPath != "" || keyPath != "" {
+		sources++
+	}
+	if sources != 1 {
+		return nil, fmt.Errorf("specify exactly one TLS mode: --disable, --cert-name, or --cert/--key")
+	}
+	if saveCert && certName != "" {
+		return nil, fmt.Errorf("--save-cert can only be used with --cert and --key")
+	}
+	if saveCert && saveCertName == "" {
+		return nil, fmt.Errorf("--save-cert-name is required when --save-cert is set")
+	}
+	update := &clientpb.PipelineTLSUpdate{
+		Name:         name,
+		ListenerId:   listenerID,
+		SaveCert:     saveCert,
+		SaveCertName: saveCertName,
+		CertComment:  certComment,
+	}
+	if disable {
+		update.Mode = clientpb.TLSUpdateMode_TLS_UPDATE_MODE_DISABLE
+		return update, nil
+	}
+	if certName != "" {
+		update.Mode = clientpb.TLSUpdateMode_TLS_UPDATE_MODE_EXISTING_CERT
+		update.CertName = certName
+		return update, nil
+	}
+	if certPath == "" || keyPath == "" {
+		return nil, fmt.Errorf("cert and key must be provided together")
+	}
+	certPEM, err := cryptography.ProcessPEM(certPath)
+	if err != nil {
+		return nil, err
+	}
+	keyPEM, err := cryptography.ProcessPEM(keyPath)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM)); err != nil {
+		return nil, fmt.Errorf("invalid certificate key pair: %w", err)
+	}
+	update.Mode = clientpb.TLSUpdateMode_TLS_UPDATE_MODE_INLINE_CERT
+	update.Tls = &clientpb.TLS{
+		Enable: true,
+		Cert: &clientpb.Cert{
+			Cert:    certPEM,
+			Key:     keyPEM,
+			Type:    "imported",
+			Name:    saveCertName,
+			Comment: certComment,
+		},
+	}
+	return update, nil
 }
 
 func ListWebsitesCmd(cmd *cobra.Command, con *core.Console) error {

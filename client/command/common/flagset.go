@@ -354,6 +354,8 @@ func ParseImportCertFlags(cmd *cobra.Command) (*clientpb.TLS, error) {
 	certPath, _ := cmd.Flags().GetString("cert")
 	keyPath, _ := cmd.Flags().GetString("key")
 	caPath, _ := cmd.Flags().GetString("ca-cert")
+	certName := optionalStringFlag(cmd, "name")
+	comment := optionalStringFlag(cmd, "comment")
 
 	certPath = strings.TrimSpace(certPath)
 	keyPath = strings.TrimSpace(keyPath)
@@ -374,8 +376,10 @@ func ParseImportCertFlags(cmd *cobra.Command) (*clientpb.TLS, error) {
 
 	tls := &clientpb.TLS{
 		Cert: &clientpb.Cert{
-			Cert: cert,
-			Key:  key,
+			Name:    certName,
+			Cert:    cert,
+			Key:     key,
+			Comment: comment,
 		},
 	}
 	if caPath != "" {
@@ -386,6 +390,14 @@ func ParseImportCertFlags(cmd *cobra.Command) (*clientpb.TLS, error) {
 		tls.Ca = &clientpb.Cert{Cert: ca}
 	}
 	return tls, nil
+}
+
+func optionalStringFlag(cmd *cobra.Command, name string) string {
+	if cmd.Flags().Lookup(name) == nil {
+		return ""
+	}
+	value, _ := cmd.Flags().GetString(name)
+	return value
 }
 
 func AcmeFlagSet(f *pflag.FlagSet) {

@@ -240,6 +240,8 @@ http --listener listener --host 127.0.0.1 --port 8083
 也可以在IoM的client端中使用命令添加一个website pipeline：
 ```bash
 website web-test --listener listener --port 5080 --root /web
+website web-test --listener listener --port 5443 --root /web --tls --cert-name cert-name
+website web-test --listener listener --port 5443 --root /web --tls --cert cert.crt --key cert.key --save-cert --save-cert-name web-test-cert --cert-comment "website tls cert"
 ```
 
 ![image-20250712011724926](../assets/website_new.png)
@@ -250,6 +252,28 @@ website add /path/to/file --website web-test --path /path --name payload --comme
 website update <content_id> --name payload-v2 --comment "rotated payload"
 website add --artifact artifact-name --website web-test --format shellcode --path /payload.bin
 ```
+
+website 创建后可以独立管理运行态和 TLS 配置：
+
+```bash
+website start web-test --listener listener
+website stop web-test --listener listener
+website restart web-test --listener listener
+
+# 切换到已有证书
+website tls web-test --listener listener --cert-name cert-name
+
+# 使用临时证书，不写入证书库
+website tls web-test --listener listener --cert cert.crt --key cert.key
+
+# 使用新证书并保存到证书库
+website tls web-test --listener listener --cert cert.crt --key cert.key --save-cert --save-cert-name web-test-cert --cert-comment "rotated cert"
+
+# 关闭 TLS，切回纯 HTTP
+website tls web-test --listener listener --disable
+```
+
+`website tls` 会更新 website 的持久化 TLS 配置；如果 website 正在运行，服务端会先停止再启动，使新配置立即生效。
 
 ![image-20250712015526853](../assets/web-content-add.png)
 
@@ -343,7 +367,7 @@ gui则是在certificates界面点击Generate Self-signed Certificate按钮后，
 若您需要服务端存储您的已有证书，可以用该命令将证书上传至服务端。
 
 ```bash
-cert import --cert cert.crt --key key.crt--ca-cert ca.crt
+cert import --name cert-name --cert cert.crt --key key.crt --ca-cert ca.crt --comment "production cert"
 ```
 
  ![image-20250709211824315](../assets/cert_imported.png)
@@ -353,6 +377,7 @@ gui则是在certificates界面点击Imported Certificate按钮后，证书上传
 
 ```bash
 pipeline start tcp --cert-name cert-name
+website tls web-test --cert-name cert-name
 ```
 
 ![image-20250709213539835](../assets/cert_pipeline_start.png)
