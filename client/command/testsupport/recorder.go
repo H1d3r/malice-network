@@ -34,6 +34,7 @@ type RecorderRPC struct {
 	taskResponders            map[string]func(context.Context, any) (*clientpb.Task, error)
 	emptyResponders           map[string]func(context.Context, any) (*clientpb.Empty, error)
 	artifactResponders        map[string]func(context.Context, any) (*clientpb.Artifact, error)
+	artifactsResponders       map[string]func(context.Context, any) (*clientpb.Artifacts, error)
 	buildConfigResponders     map[string]func(context.Context, any) (*clientpb.BuildConfig, error)
 	contextResponders         map[string]func(context.Context, any) (*clientpb.Context, error)
 	taskContextResponders     map[string]func(context.Context, any) (*clientpb.TaskContext, error)
@@ -49,6 +50,7 @@ type RecorderRPC struct {
 	pipelinesResponders       map[string]func(context.Context, any) (*clientpb.Pipelines, error)
 	webContentResponders      map[string]func(context.Context, any) (*clientpb.WebContent, error)
 	webContentsResponders     map[string]func(context.Context, any) (*clientpb.WebContents, error)
+	pipelineResponders        map[string]func(context.Context, any) (*clientpb.Pipeline, error)
 	licenseResponders         map[string]func(context.Context, any) (*clientpb.LicenseInfo, error)
 	contextsResponders        map[string]func(context.Context, any) (*clientpb.Contexts, error)
 	certsResponders           map[string]func(context.Context, any) (*clientpb.Certs, error)
@@ -62,6 +64,7 @@ func NewRecorderRPC() *RecorderRPC {
 		taskResponders:            map[string]func(context.Context, any) (*clientpb.Task, error){},
 		emptyResponders:           map[string]func(context.Context, any) (*clientpb.Empty, error){},
 		artifactResponders:        map[string]func(context.Context, any) (*clientpb.Artifact, error){},
+		artifactsResponders:       map[string]func(context.Context, any) (*clientpb.Artifacts, error){},
 		buildConfigResponders:     map[string]func(context.Context, any) (*clientpb.BuildConfig, error){},
 		contextResponders:         map[string]func(context.Context, any) (*clientpb.Context, error){},
 		taskContextResponders:     map[string]func(context.Context, any) (*clientpb.TaskContext, error){},
@@ -77,6 +80,7 @@ func NewRecorderRPC() *RecorderRPC {
 		pipelinesResponders:       map[string]func(context.Context, any) (*clientpb.Pipelines, error){},
 		webContentResponders:      map[string]func(context.Context, any) (*clientpb.WebContent, error){},
 		webContentsResponders:     map[string]func(context.Context, any) (*clientpb.WebContents, error){},
+		pipelineResponders:        map[string]func(context.Context, any) (*clientpb.Pipeline, error){},
 		licenseResponders:         map[string]func(context.Context, any) (*clientpb.LicenseInfo, error){},
 		contextsResponders:        map[string]func(context.Context, any) (*clientpb.Contexts, error){},
 		certsResponders:           map[string]func(context.Context, any) (*clientpb.Certs, error){},
@@ -126,6 +130,10 @@ func (r *RecorderRPC) OnEmpty(method string, fn func(context.Context, any) (*cli
 
 func (r *RecorderRPC) OnArtifact(method string, fn func(context.Context, any) (*clientpb.Artifact, error)) {
 	r.artifactResponders[method] = fn
+}
+
+func (r *RecorderRPC) OnArtifacts(method string, fn func(context.Context, any) (*clientpb.Artifacts, error)) {
+	r.artifactsResponders[method] = fn
 }
 
 func (r *RecorderRPC) OnBuildConfig(method string, fn func(context.Context, any) (*clientpb.BuildConfig, error)) {
@@ -178,6 +186,10 @@ func (r *RecorderRPC) OnForwardListenerStatuses(method string, fn func(context.C
 
 func (r *RecorderRPC) OnPipelines(method string, fn func(context.Context, any) (*clientpb.Pipelines, error)) {
 	r.pipelinesResponders[method] = fn
+}
+
+func (r *RecorderRPC) OnPipeline(method string, fn func(context.Context, any) (*clientpb.Pipeline, error)) {
+	r.pipelineResponders[method] = fn
 }
 
 func (r *RecorderRPC) OnWebContent(method string, fn func(context.Context, any) (*clientpb.WebContent, error)) {
@@ -486,6 +498,22 @@ func (r *RecorderRPC) StopPipeline(ctx context.Context, in *clientpb.CtrlPipelin
 	return r.emptyResponse(ctx, "StopPipeline", in)
 }
 
+func (r *RecorderRPC) ListPipelines(ctx context.Context, in *clientpb.Listener, opts ...grpc.CallOption) (*clientpb.Pipelines, error) {
+	r.recordPrimary(ctx, "ListPipelines", in)
+	if responder, ok := r.pipelinesResponders["ListPipelines"]; ok {
+		return responder(ctx, in)
+	}
+	return &clientpb.Pipelines{}, nil
+}
+
+func (r *RecorderRPC) RegisterPipeline(ctx context.Context, in *clientpb.Pipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "RegisterPipeline", in)
+}
+
+func (r *RecorderRPC) SyncPipeline(ctx context.Context, in *clientpb.Pipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "SyncPipeline", in)
+}
+
 func (r *RecorderRPC) DeletePipeline(ctx context.Context, in *clientpb.CtrlPipeline, opts ...grpc.CallOption) (*clientpb.Empty, error) {
 	return r.emptyResponse(ctx, "DeletePipeline", in)
 }
@@ -512,6 +540,18 @@ func (r *RecorderRPC) ListWebsites(ctx context.Context, in *clientpb.Listener, o
 		return responder(ctx, in)
 	}
 	return &clientpb.Pipelines{}, nil
+}
+
+func (r *RecorderRPC) UpdateWebsiteTLS(ctx context.Context, in *clientpb.PipelineTLSUpdate, opts ...grpc.CallOption) (*clientpb.Pipeline, error) {
+	r.recordPrimary(ctx, "UpdateWebsiteTLS", in)
+	if responder, ok := r.pipelineResponders["UpdateWebsiteTLS"]; ok {
+		return responder(ctx, in)
+	}
+	return &clientpb.Pipeline{
+		Name:       in.GetName(),
+		ListenerId: in.GetListenerId(),
+		CertName:   in.GetCertName(),
+	}, nil
 }
 
 func (r *RecorderRPC) AddWebsiteContent(ctx context.Context, in *clientpb.Website, opts ...grpc.CallOption) (*clientpb.WebContent, error) {
@@ -798,6 +838,14 @@ func (r *RecorderRPC) SyncBuild(ctx context.Context, in *clientpb.BuildConfig, o
 	return r.artifactResponse(ctx, "SyncBuild", in)
 }
 
+func (r *RecorderRPC) ListArtifact(ctx context.Context, in *clientpb.Empty, opts ...grpc.CallOption) (*clientpb.Artifacts, error) {
+	r.recordPrimary(ctx, "ListArtifact", in)
+	if responder, ok := r.artifactsResponders["ListArtifact"]; ok {
+		return responder(ctx, in)
+	}
+	return &clientpb.Artifacts{}, nil
+}
+
 func (r *RecorderRPC) CheckSource(ctx context.Context, in *clientpb.BuildConfig, opts ...grpc.CallOption) (*clientpb.BuildConfig, error) {
 	r.recordPrimary(ctx, "CheckSource", in)
 	if responder, ok := r.buildConfigResponders["CheckSource"]; ok {
@@ -819,6 +867,10 @@ func (r *RecorderRPC) DownloadArtifact(ctx context.Context, in *clientpb.Artifac
 
 func (r *RecorderRPC) UpdateArtifact(ctx context.Context, in *clientpb.Artifact, opts ...grpc.CallOption) (*clientpb.Artifact, error) {
 	return r.artifactResponse(ctx, "UpdateArtifact", in)
+}
+
+func (r *RecorderRPC) DeleteArtifact(ctx context.Context, in *clientpb.Artifact, opts ...grpc.CallOption) (*clientpb.Empty, error) {
+	return r.emptyResponse(ctx, "DeleteArtifact", in)
 }
 
 func (r *RecorderRPC) taskResponse(ctx context.Context, method string, request any) (*clientpb.Task, error) {
