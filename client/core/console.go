@@ -18,7 +18,7 @@ import (
 	"github.com/chainreactors/IoM-go/proto/client/clientpb"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/malice-network/client/repl"
-	"github.com/reeflective/console"
+	"github.com/chainreactors/tui/console"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
 	"golang.org/x/term"

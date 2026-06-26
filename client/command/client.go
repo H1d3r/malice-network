@@ -6,7 +6,7 @@ import (
 	"github.com/chainreactors/malice-network/client/command/ai"
 	"github.com/chainreactors/malice-network/client/command/audit"
 	"github.com/chainreactors/malice-network/client/core"
-	"github.com/reeflective/console"
+	"github.com/chainreactors/tui/console"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

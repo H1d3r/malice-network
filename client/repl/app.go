@@ -5,7 +5,7 @@ import (
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/mattn/go-tty"
 	"github.com/muesli/termenv"
-	"github.com/reeflective/console"
+	"github.com/chainreactors/tui/console"
 	"os"
 )
 

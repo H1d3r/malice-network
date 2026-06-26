@@ -10,7 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/mcptest"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/reeflective/console"
+	"github.com/chainreactors/tui/console"
 	"github.com/spf13/cobra"
 )
 

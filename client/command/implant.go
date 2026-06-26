@@ -7,7 +7,7 @@ import (
 	"github.com/chainreactors/IoM-go/client"
 	"github.com/chainreactors/IoM-go/consts"
 	"github.com/chainreactors/tui"
-	"github.com/reeflective/console"
+	"github.com/chainreactors/tui/console"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

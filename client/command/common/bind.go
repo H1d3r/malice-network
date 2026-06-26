@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/carapace-sh/carapace"
-	"github.com/reeflective/console"
+	"github.com/chainreactors/tui/console"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

@@ -37,7 +37,7 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/ncruces/go-sqlite3 v0.9.0
 	github.com/nikoksr/notify v0.41.0
-	github.com/reeflective/console v0.0.0-00010101000000-000000000000
+	github.com/chainreactors/tui/console v0.0.0-00010101000000-000000000000
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
 	github.com/soheilhy/cmux v0.1.5
@@ -191,7 +191,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/reeflective/readline v1.1.3 // indirect
+	github.com/chainreactors/tui/readline v1.1.3 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/saferwall/pe v1.5.6 // indirect
@@ -245,7 +245,7 @@ replace (
 	github.com/chainreactors/proxyclient => github.com/chainreactors/proxyclient v1.0.3
 	github.com/chainreactors/rem => ./external/rem
 	github.com/chainreactors/tui => ./external/tui
-	github.com/reeflective/console => ./external/console
-	github.com/reeflective/readline => ./external/readline
+	github.com/chainreactors/tui/console => ./external/tui/console
+	github.com/chainreactors/tui/readline => ./external/tui/readline
 	github.com/wabzsy/gonut => ./external/gonut
 )
