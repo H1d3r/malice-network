@@ -9,11 +9,12 @@ require (
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/chainreactors/mals v0.0.0-20250717185731-227f71a931fa
-	github.com/chainreactors/parsers v0.0.0-20250225073555-ab576124d61f
 	github.com/chainreactors/rem v0.3.0
 	github.com/chainreactors/tui v0.1.1
-	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
+	github.com/chainreactors/tui/console v0.0.0-00010101000000-000000000000
+	github.com/chainreactors/utils v0.0.0-20260626175554-d3e25e531450
 	github.com/chainreactors/utils/cert v0.0.0-20260624181253-2b3d0b35862f
+	github.com/chainreactors/utils/parsers v0.0.0-20260629054935-23a3e0a235f9
 	github.com/chainreactors/utils/pty v0.0.0-20260620140628-4a3715583ae7
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v0.8.0
@@ -37,7 +38,6 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/ncruces/go-sqlite3 v0.9.0
 	github.com/nikoksr/notify v0.41.0
-	github.com/chainreactors/tui/console v0.0.0-00010101000000-000000000000
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
 	github.com/soheilhy/cmux v0.1.5
@@ -108,8 +108,8 @@ require (
 	github.com/cbroglie/mustache v1.4.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f // indirect
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0 // indirect
+	github.com/chainreactors/tui/readline v1.1.3 // indirect
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
@@ -192,7 +192,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/chainreactors/tui/readline v1.1.3 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/saferwall/pe v1.5.6 // indirect

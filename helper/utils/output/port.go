@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/chainreactors/IoM-go/consts"
-	"github.com/chainreactors/parsers"
+	"github.com/chainreactors/utils/parsers"
 	"strings"
 )
 
